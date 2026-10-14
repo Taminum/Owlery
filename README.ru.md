@@ -35,4 +35,4 @@ docker compose up -d --build        # http://localhost:8088
 ```
 Логин `owner`, пароль в `secrets/owner_password`. В составе две «игрушечные» панели Remnawave для пробы мастера подключения.
 
-Лицензия: [MIT](LICENSE). Данные GeoIP/ASN: DB-IP Lite, CC BY 4.0.
+Лицензия: [PolyForm Strict 1.0.0](LICENSE): код можно читать и использовать в некоммерческих целях, но нельзя распространять, изменять и делать производные работы. Данные GeoIP/ASN: DB-IP Lite, CC BY 4.0.
