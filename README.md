@@ -96,5 +96,5 @@ Without Docker: a Postgres, `go run ./cmd/api` (needs `DATABASE_URL`, `MASTER_KE
 
 ## License
 
-[PolyForm Strict 1.0.0](LICENSE): the source is open to read and to use for non-commercial purposes (including running it for yourself), but you may not distribute it, modify it, or build derivative works. The bundled GeoIP and ASN data are the free DB-IP Lite databases, licensed
+[PolyForm Noncommercial 1.0.0](LICENSE): free to use, change, fork and share for any non-commercial purpose; commercial use needs the author's permission. The bundled GeoIP and ASN data are the free DB-IP Lite databases, licensed
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); attribution: IP geolocation by [DB-IP](https://db-ip.com).
