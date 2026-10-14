@@ -1,0 +1,47 @@
+# RemnaScope REST API v1 (proposed)
+
+All routes `/api/v1`, authenticated except login and health; JSON errors `{code,message,details?,request_id}`.
+All list endpoints paginate with `cursor` and `limit` and enforce panel RBAC.
+
+## Panel connections
+- `POST /panels/probe` body `{base_url,api_token,requested_capabilities}`; no persistence; returns `{reachable,tls_ok,authenticated,api_version?,capabilities,nodes_preview?,checks:[{name,status,latency_ms,error_code?}]}`; heavily rate limited and SSRF protected.
+- `POST /panels` body `{name,base_url,api_token,sync_options,retention_days}`; encrypt token, create panel; returns metadata only.
+- `GET /panels`, `GET /panels/{id}`, `PATCH /panels/{id}` (never expose secret).
+- `POST /panels/{id}/test` re-probes stored secret server-side.
+- `PUT /panels/{id}/token` body `{api_token}`; rotate encrypted secret; audit.
+- `POST /panels/{id}/sync` manual sync; rate limited.
+- `POST /panels/{id}/disable`; `DELETE /panels/{id}` requires explicit data-retention choice and confirmation.
+
+## Data and analytics
+- `GET /overview?panel_ids=...&node_ids=...&from=...&to=...`
+- `GET /connections?...&cursor=...`
+- `GET /destinations?...&group_by=host|ip|service`
+- `GET /traffic/samples?...` returns `source`, `unit`, `granularity`, `coverage`.
+- `GET /users?...`, `GET /users/{id}`, `GET /nodes?...`, `GET /nodes/{id}`
+- `GET /exports/connections?...` asynchronous for large ranges, audited.
+
+## Agent
+- `POST /agents/enroll` admin creates one-time enrollment token bound to panel+node.
+- `WSS /ingest/v1` agent authenticates and submits `{agent_id,batch_id,events:[...],sequence_range}`.
+- Server returns `{batch_id,ack_sequence,accepted,rejected}` only after durable commit.
+- `GET /agents` scoped status, lag, last seen, spool usage and gaps.
+
+## Contract rules
+- `panel_ids` must be a subset of actor's authorized panels.
+- `GET` endpoints never return panel API token, agent credential or raw auth header.
+- All metrics include `metric_kind` (`connection_count` or `bytes`), `source`, and time coverage.
+- Use generated OpenAPI spec and typed TS client; do not silently change contracts.
+- Remnawave upstream endpoints are adapter implementation details and require verification against installed version.
+
+## As built in M1
+Implemented under `/api/v1` (JSON errors `{code,message,request_id,details?}`; every route except health and login needs
+a session, every non-GET also `X-CSRF-Token`):
+- Auth: `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`, `POST /auth/password`.
+- Scope for filters: `GET /scope` (panels and nodes the caller may filter by). Overview: `GET /overview`.
+- Panels: `POST /panels/probe`, `POST/GET /panels`, `GET/PATCH/DELETE /panels/{id}`, `POST /panels/{id}/test`,
+  `PUT /panels/{id}/token`, `POST /panels/{id}/sync`, `POST /panels/{id}/disable|enable`, `GET /panels/{id}/nodes|users|sync-runs`.
+- Accounts (owner): `GET/POST /accounts`, `PATCH /accounts/{id}` (disable, password), `PUT /accounts/{id}/memberships`.
+- Audit: `GET /audit?panel_id=&before=`.
+Differences from the proposal: `DELETE` takes `{confirm, retention: "purge"|"archive"}`; `POST /panels` re-probes and
+answers 422 `probe_failed` or `partial_capabilities` (confirm with `allow_partial`); agents, `/traffic/samples`,
+`/destinations`, `/connections` and exports are M2-M3.
