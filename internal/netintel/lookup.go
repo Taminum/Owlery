@@ -308,7 +308,7 @@ func (t *Tool) rdap(ctx context.Context, ip netip.Addr) (*RDAPInfo, error) {
 	if t.Fetch == nil {
 		return nil, fmt.Errorf("unavailable")
 	}
-	resp, err := t.Fetch.Get(ctx, "https://rdap.org/ip/"+ip.String(), nil)
+	resp, err := t.rdapGet(ctx, "https://rdap.org/ip/"+ip.String())
 	if err != nil {
 		return nil, err
 	}

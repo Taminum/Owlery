@@ -29,7 +29,14 @@ sensor, and each figure says where it came from. If a source is not connected, t
 
 ![Overview with demo data](docs/screenshots/overview.png)
 
-Screenshots are taken from the bundled demo stack (synthetic data). More: [nodes](docs/screenshots/nodes.png), [panels](docs/screenshots/panels.png).
+Screenshots come from the dev stack with invented data (`cmd/demodata`).
+
+| | |
+|---|---|
+| ![Sites](docs/screenshots/sites.png) **Sites** | ![Domains and services](docs/screenshots/domains.png) **Domains and services** |
+| ![AmneziaWG](docs/screenshots/awg.png) **AmneziaWG** | ![Network intelligence](docs/screenshots/intel.png) **Network intelligence** |
+
+Also: [nodes](docs/screenshots/nodes.png), [panels](docs/screenshots/panels.png).
 
 ## Quick start (production)
 
@@ -81,6 +88,8 @@ cd apps/web && npm ci && npm run lint && npm test && npm run build
 Database tests need an admin connection to any Postgres, e.g. `TEST_DATABASE_URL=postgres://postgres:pw@127.0.0.1:55432/postgres`;
 each test gets its own database and they are skipped without it. Run Go tests as `./cmd/... ./internal/...`, not
 `./...`, because a local `apps/web/node_modules` can contain stray Go files.
+
+To fill the analyzer pages with invented traffic (a dev database only, never a real one): `go run ./cmd/demodata -dev-database` with `DATABASE_URL` set; then `node apps/web/scripts/readme-shots.mjs` retakes the screenshots.
 
 Without Docker: a Postgres, `go run ./cmd/api` (needs `DATABASE_URL`, `MASTER_KEY_FILE`) and
 `cd apps/web && npm run dev` (http://localhost:5173, `/api` proxied to :8080).

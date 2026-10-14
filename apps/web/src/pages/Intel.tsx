@@ -32,9 +32,9 @@ const errText = (code?: string) => {
   const key = `intel.err.${code}` as MsgKey
   try {
     const s = t(key)
-    if (s !== key) return s
+    if (s && s !== key) return s
   } catch { /* unknown code */ }
-  return t('intel.err.other', { code: code ?? '?' })
+  return code ? t('intel.err.other', { code }) : t('intel.err.unavailable')
 }
 
 const when = (iso: string) => new Date(iso).toLocaleString('ru-RU')

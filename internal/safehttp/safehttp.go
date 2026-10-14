@@ -41,6 +41,9 @@ const (
 type Error struct {
 	Code string
 	msg  string
+	// Location is the redirect target when Code is redirect_blocked. It is for callers that decide for
+	// themselves to follow one more hop; it is never shown to operators.
+	Location string
 }
 
 func (e *Error) Error() string { return e.msg }
@@ -393,7 +396,9 @@ func (c *Client) Get(ctx context.Context, rawURL string, header http.Header) (*R
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
-		return nil, newErr(CodeRedirect, "the server answered with a redirect, which is never followed")
+		e := newErr(CodeRedirect, "the server answered with a redirect, which is never followed")
+		e.Location = resp.Header.Get("Location")
+		return nil, e
 	}
 	if resp.ContentLength > c.pol.MaxBody {
 		return nil, newErr(CodeTooLarge, "response is larger than the allowed limit")
