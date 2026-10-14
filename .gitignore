@@ -1,9 +1,13 @@
 node_modules/
-dist/
-.env
-.env.*
+/dist/
+apps/web/dist/
+/.env
+/.env.*
 !.env.example
 *.log
 .DS_Store
-secrets/
+/secrets/
 _internal/
+deploy/**/.env
+deploy/**/secrets/
+!internal/**/testdata/*.log

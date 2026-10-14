@@ -1,0 +1,120 @@
+2026/10/09 23:04:49.013480 from 198.51.100.1:47650 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:05:35.498625 from 198.51.100.2:39332 accepted tcp:h7e6940.example.test:443 [Steal -> DIRECT] email: 4
+2026/10/09 23:05:51.358722 from 198.51.100.1:28148 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:06:07.029661 from 198.51.100.1:21532 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:06:37.953856 from 198.51.100.1:43620 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:07:35.529148 from 198.51.100.2:53354 accepted tcp:h7e6940.example.test:443 [Steal -> DIRECT] email: 4
+2026/10/09 23:07:40.114405 from 198.51.100.1:50510 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:07:55.776816 from 198.51.100.1:63254 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:08:27.013807 from 198.51.100.1:50692 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:09:03.917560 from DNS accepted udp:192.0.2.1:53 [xray.system.00000000-0000-4000-8000-000000000000 >> DIRECT]
+2026/10/09 23:09:03.928838 from 198.51.100.3:53959 accepted tcp:hfa569e.example.test:443 [Steal >> DIRECT] email: 3
+2026/10/09 23:09:03.928853 from 198.51.100.3:53964 accepted tcp:hfa569e.example.test:443 [Steal >> DIRECT] email: 3
+2026/10/09 23:09:03.928855 from 198.51.100.3:53962 accepted tcp:hfa569e.example.test:443 [Steal >> DIRECT] email: 3
+2026/10/09 23:09:29.469339 from 198.51.100.1:15276 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:09:35.500817 from 198.51.100.2:47712 accepted tcp:h7e6940.example.test:443 [Steal -> DIRECT] email: 4
+2026/10/09 23:09:45.142596 from 198.51.100.1:23872 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:10:16.375963 from 198.51.100.1:59768 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:11:18.631069 from 198.51.100.1:37214 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:11:34.304111 from 198.51.100.1:18466 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:11:35.526291 from 198.51.100.2:50058 accepted tcp:h7e6940.example.test:443 [Steal -> DIRECT] email: 4
+2026/10/09 23:12:05.562949 from 198.51.100.1:42918 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:13:07.981038 from 198.51.100.1:26086 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:13:23.780127 from 198.51.100.1:14502 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:13:35.527832 from 198.51.100.2:52616 accepted tcp:h7e6940.example.test:443 [Steal -> DIRECT] email: 4
+2026/10/09 23:13:55.101006 from 198.51.100.1:58102 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:14:03.913607 from DNS accepted udp:192.0.2.1:53 [xray.system.00000000-0000-4000-8000-000000000000 >> DIRECT]
+2026/10/09 23:14:03.925333 from 198.51.100.3:55257 accepted tcp:hfa569e.example.test:443 [Steal >> DIRECT] email: 3
+2026/10/09 23:14:03.925342 from 198.51.100.3:55260 accepted tcp:hfa569e.example.test:443 [Steal >> DIRECT] email: 3
+2026/10/09 23:14:03.925345 from 198.51.100.3:55255 accepted tcp:hfa569e.example.test:443 [Steal >> DIRECT] email: 3
+2026/10/09 23:14:57.364462 from 198.51.100.1:36300 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:15:13.031052 from 198.51.100.1:46676 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:15:35.502304 from 198.51.100.2:36062 accepted tcp:h7e6940.example.test:443 [Steal -> DIRECT] email: 4
+2026/10/09 23:15:44.161897 from 198.51.100.1:51548 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:16:46.349562 from 198.51.100.1:18690 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:17:02.183664 from 198.51.100.1:53548 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:17:33.653023 from 198.51.100.1:52094 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:17:35.527675 from 198.51.100.2:54772 accepted tcp:h7e6940.example.test:443 [Steal -> DIRECT] email: 4
+2026/10/09 23:18:35.995225 from 198.51.100.1:58578 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:18:51.663221 from 198.51.100.1:22666 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:19:03.711768 from DNS accepted udp:192.0.2.1:53 [xray.system.00000000-0000-4000-8000-000000000000 >> DIRECT]
+2026/10/09 23:19:03.722879 from 198.51.100.3:56605 accepted tcp:hfa569e.example.test:443 [Steal >> DIRECT] email: 3
+2026/10/09 23:19:03.722888 from 198.51.100.3:56608 accepted tcp:hfa569e.example.test:443 [Steal >> DIRECT] email: 3
+2026/10/09 23:19:03.722890 from 198.51.100.3:56607 accepted tcp:hfa569e.example.test:443 [Steal >> DIRECT] email: 3
+2026/10/09 23:19:22.696065 from 198.51.100.1:46484 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:19:35.515780 from 198.51.100.2:43704 accepted tcp:h7e6940.example.test:443 [Steal -> DIRECT] email: 4
+2026/10/09 23:20:24.753866 from 198.51.100.1:39314 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:20:40.403061 from 198.51.100.1:11644 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:21:11.629410 from 198.51.100.1:33104 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:21:35.500035 from 198.51.100.2:45238 accepted tcp:h7e6940.example.test:443 [Steal -> DIRECT] email: 4
+2026/10/09 23:22:13.695233 from 198.51.100.1:25030 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:22:29.251752 from 198.51.100.1:52020 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:23:00.283999 from 198.51.100.1:14818 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:23:35.512059 from 198.51.100.2:37462 accepted tcp:h7e6940.example.test:443 [Steal -> DIRECT] email: 4
+2026/10/09 23:24:02.340157 from 198.51.100.1:38422 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:24:03.859652 from DNS accepted udp:192.0.2.1:53 [xray.system.00000000-0000-4000-8000-000000000000 >> DIRECT]
+2026/10/09 23:24:03.870799 from 198.51.100.3:57942 accepted tcp:hfa569e.example.test:443 [Steal >> DIRECT] email: 3
+2026/10/09 23:24:03.870809 from 198.51.100.3:57940 accepted tcp:hfa569e.example.test:443 [Steal >> DIRECT] email: 3
+2026/10/09 23:24:03.870810 from 198.51.100.3:57944 accepted tcp:hfa569e.example.test:443 [Steal >> DIRECT] email: 3
+2026/10/09 23:24:18.132732 from 198.51.100.1:28460 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:24:49.293640 from 198.51.100.1:33818 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:25:35.518859 from 198.51.100.2:56156 accepted tcp:h7e6940.example.test:443 [Steal -> DIRECT] email: 4
+2026/10/09 23:25:52.107129 from 198.51.100.1:60420 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:26:07.804115 from 198.51.100.1:47558 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:26:39.116241 from 198.51.100.1:50536 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:27:35.494503 from 198.51.100.2:37778 accepted tcp:h7e6940.example.test:443 [Steal -> DIRECT] email: 4
+2026/10/09 23:27:41.681792 from 198.51.100.1:55548 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:27:57.455656 from 198.51.100.1:64202 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:28:28.584145 from 198.51.100.1:33182 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:29:03.682692 from DNS accepted udp:192.0.2.1:53 [xray.system.00000000-0000-4000-8000-000000000000 >> DIRECT]
+2026/10/09 23:29:03.693844 from 198.51.100.3:59205 accepted tcp:hfa569e.example.test:443 [Steal >> DIRECT] email: 3
+2026/10/09 23:29:03.693854 from 198.51.100.3:59204 accepted tcp:hfa569e.example.test:443 [Steal >> DIRECT] email: 3
+2026/10/09 23:29:03.693856 from 198.51.100.3:59207 accepted tcp:hfa569e.example.test:443 [Steal >> DIRECT] email: 3
+2026/10/09 23:29:31.159471 from 198.51.100.1:18378 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:29:35.494091 from 198.51.100.2:46916 accepted tcp:h7e6940.example.test:443 [Steal -> DIRECT] email: 4
+2026/10/09 23:29:46.813334 from 198.51.100.1:17276 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:30:18.050689 from 198.51.100.1:36290 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:31:20.513341 from 198.51.100.1:32764 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:31:35.498364 from 198.51.100.2:41678 accepted tcp:h7e6940.example.test:443 [Steal -> DIRECT] email: 4
+2026/10/09 23:31:36.183122 from 198.51.100.1:37534 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:32:07.648153 from 198.51.100.1:60686 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:33:09.977207 from 198.51.100.1:50250 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:33:25.775866 from 198.51.100.1:34520 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:33:35.497794 from 198.51.100.2:57508 accepted tcp:h7e6940.example.test:443 [Steal -> DIRECT] email: 4
+2026/10/09 23:33:56.880823 from 198.51.100.1:29368 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:34:03.666439 from DNS accepted udp:192.0.2.1:53 [xray.system.00000000-0000-4000-8000-000000000000 >> DIRECT]
+2026/10/09 23:34:03.679034 from 198.51.100.3:60733 accepted tcp:hfa569e.example.test:443 [Steal >> DIRECT] email: 3
+2026/10/09 23:34:03.679048 from 198.51.100.3:60735 accepted tcp:hfa569e.example.test:443 [Steal >> DIRECT] email: 3
+2026/10/09 23:34:03.679050 from 198.51.100.3:60730 accepted tcp:hfa569e.example.test:443 [Steal >> DIRECT] email: 3
+2026/10/09 23:34:58.830494 from 198.51.100.1:38814 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 23:35:14.496504 from 198.51.100.1:55558 accepted tcp:h85e23c.example.test:443 [Steal -> DIRECT] email: 2
+2026/10/09 05:20:04.844521 from tcp:198.51.100.2:54118 accepted udp:192.0.2.2:21116 [Steal >> DIRECT] email: 4
+2026/10/09 05:20:43.129409 from tcp:198.51.100.2:42052 accepted udp:192.0.2.3:9001 [Steal >> DIRECT] email: 4
+2026/10/09 05:20:43.479522 from tcp:198.51.100.2:42144 accepted udp:192.0.2.3:9001 [Steal >> DIRECT] email: 4
+2026/10/09 05:20:56.683260 from tcp:198.51.100.2:57066 accepted udp:192.0.2.3:9001 [Steal >> DIRECT] email: 4
+2026/10/09 05:20:59.029217 from tcp:198.51.100.2:57252 accepted udp:192.0.2.3:9001 [Steal >> DIRECT] email: 4
+2026/10/09 05:21:07.866877 from tcp:198.51.100.2:57856 accepted udp:192.0.2.2:21116 [Steal >> DIRECT] email: 4
+2026/10/09 05:21:12.587937 from tcp:198.51.100.2:57962 accepted udp:192.0.2.3:9001 [Steal >> DIRECT] email: 4
+2026/10/09 05:21:16.999785 from tcp:198.51.100.2:45612 accepted udp:192.0.2.4:123 [Steal >> DIRECT] email: 4
+2026/10/09 05:21:20.026322 from tcp:198.51.100.2:45670 accepted udp:192.0.2.5:123 [Steal >> DIRECT] email: 4
+2026/10/09 05:21:30.694459 from tcp:198.51.100.2:42428 accepted udp:192.0.2.6:123 [Steal >> DIRECT] email: 4
+2026/10/09 05:20:30.992827 from 198.51.100.4:33928 accepted tcp:[2001:db8::e1e]:443 [Steal >> DIRECT] email: 2
+2026/10/09 05:20:41.487808 from 198.51.100.4:16214 accepted tcp:[2001:db8::e1e]:443 [Steal >> DIRECT] email: 2
+2026/10/09 05:20:41.492792 from 198.51.100.4:16226 accepted tcp:[2001:db8::e1e]:443 [Steal >> DIRECT] email: 2
+2026/10/09 05:20:51.931614 from 198.51.100.4:48742 accepted tcp:[2001:db8::e1e]:443 [Steal >> DIRECT] email: 2
+2026/10/09 05:21:12.880114 from 198.51.100.4:47688 accepted tcp:[2001:db8::e1e]:443 [Steal >> DIRECT] email: 2
+2026/10/09 05:21:18.486789 from 198.51.100.4:29504 accepted tcp:[2001:db8::e1e]:443 [Steal >> DIRECT] email: 2
+2026/10/09 05:21:28.859207 from 198.51.100.4:23778 accepted tcp:[2001:db8::e1e]:443 [Steal >> DIRECT] email: 2
+2026/10/09 05:21:39.216000 from 198.51.100.4:19064 accepted tcp:[2001:db8::e1e]:443 [Steal >> DIRECT] email: 2
+2026/10/09 05:21:49.594732 from 198.51.100.4:30790 accepted tcp:[2001:db8::e1e]:443 [Steal >> DIRECT] email: 2
+2026/10/09 05:21:49.612982 from 198.51.100.4:30804 accepted tcp:[2001:db8::e1e]:443 [Steal >> DIRECT] email: 2
+2026/10/09 08:15:49.381487 from DNS accepted udp:192.0.2.1:53 [xray.system.00000000-0000-4000-8000-000000000000 >> DIRECT]
+2026/10/09 08:21:57.689399 from DNS accepted udp:192.0.2.1:53 [xray.system.00000000-0000-4000-8000-000000000000 >> DIRECT]
+2026/10/09 08:26:57.673348 from DNS accepted udp:192.0.2.1:53 [xray.system.00000000-0000-4000-8000-000000000000 >> DIRECT]
+2026/10/09 08:31:57.659340 from DNS accepted udp:192.0.2.1:53 [xray.system.00000000-0000-4000-8000-000000000000 >> DIRECT]
+2026/10/09 08:36:57.819836 from DNS accepted udp:192.0.2.1:53 [xray.system.00000000-0000-4000-8000-000000000000 >> DIRECT]
+2026/10/09 08:41:57.625382 from DNS accepted udp:192.0.2.1:53 [xray.system.00000000-0000-4000-8000-000000000000 >> DIRECT]
+2026/10/09 08:46:57.606309 from DNS accepted udp:192.0.2.1:53 [xray.system.00000000-0000-4000-8000-000000000000 >> DIRECT]
+2026/10/09 08:51:57.591835 from DNS accepted udp:192.0.2.1:53 [xray.system.00000000-0000-4000-8000-000000000000 >> DIRECT]
+2026/10/09 08:56:57.579524 from DNS accepted udp:192.0.2.1:53 [xray.system.00000000-0000-4000-8000-000000000000 >> DIRECT]
+2026/10/09 09:01:57.560579 from DNS accepted udp:192.0.2.1:53 [xray.system.00000000-0000-4000-8000-000000000000 >> DIRECT]
