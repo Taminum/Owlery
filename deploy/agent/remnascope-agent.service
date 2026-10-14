@@ -1,0 +1,42 @@
+# RemnaScope agent for a Remnawave node. Read-only: it follows the Xray access log and ships it.
+# See docs/AGENT.md for the full, reviewed procedure. Nothing here changes Docker or Remnawave.
+[Unit]
+Description=RemnaScope log agent (read-only)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+User=remnascope
+Group=remnascope
+# The log lives inside the remnanode container. The agent runs this exact command through sudo;
+# the sudoers rule in docs/AGENT.md allows that one command and nothing else.
+ExecStart=/usr/local/bin/remnascope-agent \
+  -server wss://SCOPE_HOST/ingest/v1 \
+  -token-file /etc/remnascope/agent.token \
+  -state-dir /var/lib/remnascope-agent \
+  -spool-max-mb 256 \
+  -exec "/usr/bin/sudo -n /usr/bin/docker exec remnanode tail -n 0 -F /var/log/xray/current"
+Restart=always
+RestartSec=5
+
+# Sandbox. NoNewPrivileges stays off only because sudo is setuid; everything else is closed.
+NoNewPrivileges=no
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+StateDirectory=remnascope-agent
+StateDirectoryMode=0700
+ReadOnlyPaths=/etc/remnascope
+MemoryMax=256M
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,42 @@
+# RemnaScope agent for the AmneziaWG containers. Read-only: it runs one fixed helper (through one exact
+# sudoers rule) and reports public facts: names, public keys, tunnel addresses, counters, handshakes.
+# It is a second copy of the agent beside the log agent, with its own credential and state.
+# See docs/AWG_COLLECTOR.md for the reviewed installation procedure.
+[Unit]
+Description=RemnaScope AmneziaWG agent (read-only)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+User=remnascope
+Group=remnascope
+ExecStart=/usr/local/bin/remnascope-agent-awg \
+  -server wss://scope.example.com/ingest/v1 \
+  -token-file /etc/remnascope/awg.token \
+  -state-dir /var/lib/remnascope-awg \
+  -awg-every 60s \
+  -awg-exec "/usr/bin/sudo -n /usr/local/sbin/remnascope-awg-snapshot"
+Restart=always
+RestartSec=5
+
+# Sandbox, same as the log agent. NoNewPrivileges stays off only because sudo is setuid.
+NoNewPrivileges=no
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+StateDirectory=remnascope-awg
+StateDirectoryMode=0700
+ReadOnlyPaths=/etc/remnascope
+MemoryMax=128M
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target

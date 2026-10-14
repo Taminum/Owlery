@@ -1,0 +1,57 @@
+#!/bin/sh
+# remnascope-awg-snapshot: prints PUBLIC facts about the AmneziaWG interfaces on this host, one fact
+# per line, tab-separated. The RemnaScope agent runs it through one exact sudoers rule.
+#
+#   I <container> <interface> <port> <parameter names, comma separated> <container start, unix seconds>
+#   P <container> <public key> <latest handshake unix> <rx bytes> <tx bytes> <allowed ips, comma separated>
+#   N <container> <public key> <client name>
+#   T <container> <when the Amnezia panel last wrote its client table, unix seconds>
+#   L <container> <public key> <what the panel recorded: received, sent, latest handshake, creation date, as text>
+#
+# It only READS. It never prints a private key, a preshared key or a client endpoint: counters, handshakes
+# and allowed-ips come from `awg show` sub-commands that do not include them, the parameter names are
+# names without values, and the client table is searched for five fields only: id, name, and the three
+# the Amnezia panel keeps about a client's past (received, sent, latest handshake). Keys are never among them.
+# Edit CONTAINERS if the containers are named differently.
+set -u
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+DOCKER="${DOCKER:-/usr/bin/docker}"
+CONTAINERS="${CONTAINERS:-amnezia-awg2 amnezia-awg3}"
+MANAGE_CONF="${MANAGE_CONF:-/etc/remnascope/awg-manage.conf}"
+# Containers the management helper may change (read from its config, never executed).
+MANAGED=$(sed -n 's/^MANAGED="\(.*\)"$/\1/p' "$MANAGE_CONF" 2>/dev/null | head -1)
+
+for c in $CONTAINERS; do
+  "$DOCKER" inspect -f '{{.State.Running}}' "$c" 2>/dev/null | grep -qx true || continue
+  started=$(date -d "$("$DOCKER" inspect -f '{{.State.StartedAt}}' "$c" 2>/dev/null)" +%s 2>/dev/null || echo 0)
+  for i in $("$DOCKER" exec "$c" awg show interfaces 2>/dev/null); do
+    port=$("$DOCKER" exec "$c" awg show "$i" listen-port 2>/dev/null)
+    fields=$("$DOCKER" exec "$c" grep -oE '^[A-Za-z0-9]+ *=' "/opt/amnezia/awg/$i.conf" 2>/dev/null \
+      | tr -d ' =' | grep -vxE 'PrivateKey|PresharedKey|PublicKey|Address|AllowedIPs|ListenPort|DNS|MTU|Endpoint|PersistentKeepalive' \
+      | sort -u | paste -sd, -)
+    printf 'I\t%s\t%s\t%s\t%s\t%s\n' "$c" "$i" "$port" "$fields" "$started"
+    case " $MANAGED " in *" $c "*) printf 'M\t%s\n' "$c" ;; esac
+    {
+      "$DOCKER" exec "$c" awg show "$i" latest-handshakes 2>/dev/null | sed 's/^/H\t/'
+      "$DOCKER" exec "$c" awg show "$i" transfer 2>/dev/null | sed 's/^/T\t/'
+      "$DOCKER" exec "$c" awg show "$i" allowed-ips 2>/dev/null | sed 's/^/A\t/'
+    } | awk -F'\t' -v c="$c" '
+      $1=="H" { h[$2]=$3; k[$2]=1 }
+      $1=="T" { r[$2]=$3; t[$2]=$4; k[$2]=1 }
+      $1=="A" { a[$2]=$3; k[$2]=1 }
+      END { for (p in k) { x=a[p]; gsub(/ +/, ",", x); printf "P\t%s\t%s\t%d\t%d\t%d\t%s\n", c, p, h[p]+0, r[p]+0, t[p]+0, x } }'
+    mt=$("$DOCKER" exec "$c" stat -c %Y /opt/amnezia/awg/clientsTable 2>/dev/null || echo 0)
+    printf 'T\t%s\t%s\n' "$c" "$mt"
+    "$DOCKER" exec "$c" grep -oE '"(clientId|clientName|dataReceived|dataSent|latestHandshake|creationDate)": *"[^"]*"' /opt/amnezia/awg/clientsTable 2>/dev/null \
+      | sed -E 's/^"(clientId|clientName|dataReceived|dataSent|latestHandshake|creationDate)": *"([^"]*)"$/\1\t\2/' | tr -d '\r' \
+      | awk -F'\t' -v c="$c" '
+          function flush() { if (id != "") { printf "N\t%s\t%s\t%s\n", c, id, nm; if (dr != "" || ds != "" || lh != "" || cd != "") printf "L\t%s\t%s\t%s\t%s\t%s\t%s\n", c, id, dr, ds, lh, cd } }
+          $1=="clientId" { flush(); id=$2; nm=""; dr=""; ds=""; lh=""; cd="" }
+          $1=="clientName" { gsub(/\t/, " ", $2); nm=$2 }
+          $1=="dataReceived" { dr=$2 }
+          $1=="dataSent" { ds=$2 }
+          $1=="latestHandshake" { lh=$2 }
+          $1=="creationDate" { cd=$2 }
+          END { flush() }'
+  done
+done

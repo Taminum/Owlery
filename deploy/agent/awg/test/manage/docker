@@ -1,0 +1,14 @@
+#!/bin/bash
+# A stand-in for `docker` for test-manage.sh: runs what is asked inside a sandbox directory that plays the
+# part of one AmneziaWG container (its /opt/amnezia/awg and a fake `awg`).
+S="${SANDBOX:?}"
+case "$1" in
+  inspect) echo true ;;
+  exec)
+    shift
+    [ "$1" = -i ] && shift
+    shift   # the container name
+    args=()
+    for a in "$@"; do args+=("${a//\/opt\/amnezia\/awg/$S/awg}"); done
+    PATH="$S/bin:$PATH" exec "${args[@]}" ;;
+esac

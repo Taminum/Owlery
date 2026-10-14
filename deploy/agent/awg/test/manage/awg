@@ -1,0 +1,21 @@
+#!/bin/bash
+# A fake `awg`: keeps the live peers in $SANDBOX/peers (public key <TAB> allowed ips).
+S="${SANDBOX:?}"
+touch "$S/peers"
+case "$1" in
+  genkey) head -c 32 /dev/urandom | base64 | tr -d '\n'; echo ;;
+  pubkey) read -r k; printf '%s' "$k" | sha256sum | cut -c1-32 | tr -d '\n' | base64; echo ;;
+  show)
+    case "$3" in
+      peers) cut -f1 "$S/peers" ;;
+      allowed-ips) cat "$S/peers" ;;
+      interfaces) echo awg0 ;;
+    esac ;;
+  set)
+    [ -n "$FAIL_SET" ] && exit 1
+    key=$4; shift 4
+    if [ "$1" = remove ]; then grep -vF "$key" "$S/peers" > "$S/peers.new"; mv "$S/peers.new" "$S/peers"; exit 0; fi
+    ips=""
+    while [ $# -gt 0 ]; do case "$1" in allowed-ips) ips=$2; shift 2 ;; preshared-key) cat "$2" >/dev/null; shift 2 ;; *) shift ;; esac; done
+    printf '%s\t%s\n' "$key" "$ips" >> "$S/peers" ;;
+esac

@@ -1,0 +1,3 @@
+#!/bin/sh
+# stand-in for the sensor: prints the arguments it was started with
+echo "ARGS $*"

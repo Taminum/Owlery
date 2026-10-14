@@ -1,0 +1,6 @@
+#!/bin/sh
+# stand-in for docker: one running container with pid 4242
+case "$*" in
+  *State.Running*) echo true ;;
+  *State.Pid*) echo 4242 ;;
+esac

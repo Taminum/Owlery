@@ -1,0 +1,40 @@
+# RemnaScope traffic sensor for one AmneziaWG container (template: remnascope-awg-sensor@<container>.service).
+# It watches packet HEADERS on the container's awg0 interface and reports, once a minute, per flow: which device,
+# where to, how many bytes each way, and a name when the traffic says one in the open (TLS server name, HTTP Host,
+# DNS answer). It keeps no packet and writes nothing to disk. See docs/AWG_COLLECTOR.md.
+#
+# It starts as root only to open a packet socket inside the container's network namespace; the sensor then gives
+# root up for good (user nobody, no new privileges) and talks to the agent over a Unix socket.
+[Unit]
+Description=RemnaScope AmneziaWG traffic sensor for %i (read-only)
+After=docker.service remnascope-awg.service
+Wants=remnascope-awg.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/remnascope-awg-sensor-run %i
+Environment=DOCKER_CONFIG=/tmp
+Restart=always
+RestartSec=10
+
+User=root
+# the agent's group: enough to reach its socket without any broader file access
+SupplementaryGroups=remnascope
+# NoNewPrivileges is not set here on purpose: it stops the sensor from changing its user. The sensor itself sets it,
+# right after it has given root up (cmd/awgsensor), which is the moment it matters.
+CapabilityBoundingSet=CAP_NET_RAW CAP_SYS_ADMIN CAP_SYS_PTRACE CAP_SETUID CAP_SETGID
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_PACKET AF_NETLINK
+LockPersonality=true
+MemoryDenyWriteExecute=true
+MemoryMax=192M
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target

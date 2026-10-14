@@ -1,0 +1,114 @@
+#!/bin/sh
+# remnascope-awg-manage: add or revoke one AmneziaWG device in a container that is listed as managed.
+# The RemnaScope agent runs it through one sudoers rule; it is the ONLY thing that can change an
+# AmneziaWG server on this host, and it accepts exactly these calls:
+#
+#   remnascope-awg-manage add    <container> <device name>
+#   remnascope-awg-manage revoke <container> <public key>
+#
+# Every argument is validated here, again, whatever the caller did. Containers that are not named in
+# MANAGED (in /etc/remnascope/awg-manage.conf) are refused. Nothing is ever deleted except the one
+# [Peer] block of the revoked device; a dated copy of the config is made before every change.
+#
+# Output, on stdout: a first line "RESULT<TAB>ok<TAB><public key><TAB><tunnel address>" or
+# "RESULT<TAB>error<TAB><code>". After "ok" for add, a blank line and the device's client config follow.
+# That config holds the device's private key. It is printed once and kept nowhere on this host.
+set -u
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+DOCKER="${DOCKER:-/usr/bin/docker}"
+MANAGE_CONF="${MANAGE_CONF:-/etc/remnascope/awg-manage.conf}"
+LOCKFILE="${LOCKFILE:-/run/lock/remnascope-awg-manage.lock}"
+DIR=/opt/amnezia/awg
+IFACE=awg0
+
+fail() { printf 'RESULT\terror\t%s\n' "$1"; exit 0; }
+conf_value() { sed -n "s/^$1=\"\(.*\)\"\$/\1/p" "$MANAGE_CONF" 2>/dev/null | head -1; }
+
+op="${1:-}"; container="${2:-}"; arg="${3:-}"
+[ $# -eq 3 ] || fail bad_arguments
+MANAGED=$(conf_value MANAGED)
+ENDPOINT_HOST=$(conf_value ENDPOINT_HOST)
+DNS=$(conf_value DNS)
+[ -n "$DNS" ] || DNS="1.1.1.1, 1.0.0.1"
+printf '%s' "$container" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$' || fail bad_container
+case " $MANAGED " in *" $container "*) ;; *) fail not_managed ;; esac
+printf '%s' "$ENDPOINT_HOST" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9.:-]{0,100}$' || fail no_endpoint
+case "$op" in
+  add)    printf '%s' "$arg" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9 ._()-]{0,39}$' || fail bad_name ;;
+  revoke) printf '%s' "$arg" | grep -Eq '^[A-Za-z0-9+/]{43}=$' || fail bad_key ;;
+  *) fail bad_operation ;;
+esac
+
+( : >> "$LOCKFILE" ) 2>/dev/null || fail no_lock
+exec 9>"$LOCKFILE"
+"${FLOCK:-flock}" -n 9 || fail busy
+"$DOCKER" inspect -f '{{.State.Running}}' "$container" 2>/dev/null | grep -qx true || fail container_not_running
+
+dx()  { "$DOCKER" exec "$container" "$@"; }
+dxi() { "$DOCKER" exec -i "$container" "$@"; }
+
+conf=$(dx cat "$DIR/$IFACE.conf" 2>/dev/null) || fail conf_unreadable
+[ -n "$conf" ] || fail conf_unreadable
+ts=$(date +%Y%m%d_%H%M%S)
+backup() { dx cp "$DIR/$IFACE.conf" "$DIR/$IFACE.conf.bak.remnascope.$ts" 2>/dev/null || fail backup_failed; }
+
+if [ "$op" = add ]; then
+  name="$arg"
+  addr=$(printf '%s\n' "$conf" | sed -n 's/^Address *= *//p' | head -1 | cut -d, -f1 | tr -d ' ')
+  case "$addr" in */24) ;; *) fail unsupported_subnet ;; esac
+  base=${addr%.*}; server=${addr%/*}
+  used=$( { printf '%s\n' "$conf" | sed -n 's/^AllowedIPs *= *//p' | tr ',' '\n'
+            dx awg show "$IFACE" allowed-ips 2>/dev/null | cut -f2 | tr ' ' '\n'; } | sed 's#/.*##' | tr -d ' ')
+  ip=""; n=2
+  while [ "$n" -le 254 ]; do
+    cand="$base.$n"
+    if [ "$cand" != "$server" ] && ! printf '%s\n' "$used" | grep -qxF "$cand"; then ip=$cand; break; fi
+    n=$((n + 1))
+  done
+  [ -n "$ip" ] || fail no_free_address
+
+  priv=$(dx awg genkey 2>/dev/null | tr -d '\r\n ')
+  pub=$(printf '%s' "$priv" | dxi awg pubkey 2>/dev/null | tr -d '\r\n ')
+  psk=$(dx cat "$DIR/wireguard_psk.key" 2>/dev/null | tr -d '\r\n ')
+  spub=$(dx cat "$DIR/wireguard_server_public_key.key" 2>/dev/null | tr -d '\r\n ')
+  port=$(printf '%s\n' "$conf" | sed -n 's/^ListenPort *= *//p' | head -1 | tr -d ' ')
+  for k in "$priv" "$pub" "$psk" "$spub"; do
+    printf '%s' "$k" | grep -Eq '^[A-Za-z0-9+/]{43}=$' || fail key_generation_failed
+  done
+  printf '%s' "$port" | grep -Eq '^[0-9]{2,5}$' || fail no_port
+
+  backup
+  printf '%s' "$psk" | dxi awg set "$IFACE" peer "$pub" preshared-key /dev/stdin allowed-ips "$ip/32" >/dev/null 2>&1 || fail apply_failed
+  printf '\n# remnascope: %s\n[Peer]\nPublicKey = %s\nPresharedKey = %s\nAllowedIPs = %s/32\n' "$name" "$pub" "$psk" "$ip" \
+    | dxi sh -c "cat >> $DIR/$IFACE.conf" >/dev/null 2>&1 || { dx awg set "$IFACE" peer "$pub" remove >/dev/null 2>&1; fail persist_failed; }
+  dx awg show "$IFACE" peers 2>/dev/null | grep -qxF "$pub" || fail not_applied
+
+  mtu=$(printf '%s\n' "$conf" | sed -n 's/^# *MTU *= *//p' | head -1 | tr -d ' ')
+  params=$(printf '%s\n' "$conf" | awk '
+    /^\[/ { sec = $0; next }
+    sec == "[Interface]" && /^[A-Za-z0-9]+ *=/ { split($0, kv, /[ ]*=[ ]*/); if (kv[1] != "PrivateKey" && kv[1] != "Address" && kv[1] != "ListenPort") print }')
+  printf 'RESULT\tok\t%s\t%s\n\n' "$pub" "$ip"
+  printf '[Interface]\nPrivateKey = %s\nAddress = %s/32\nDNS = %s\n' "$priv" "$ip" "$DNS"
+  [ -n "$mtu" ] && printf 'MTU = %s\n' "$mtu"
+  [ -n "$params" ] && printf '%s\n' "$params"
+  printf '\n[Peer]\nPublicKey = %s\nPresharedKey = %s\nAllowedIPs = 0.0.0.0/0, ::/0\nEndpoint = %s:%s\nPersistentKeepalive = 25\n' "$spub" "$psk" "$ENDPOINT_HOST" "$port"
+  exit 0
+fi
+
+# revoke
+key="$arg"
+live=$(dx awg show "$IFACE" peers 2>/dev/null | grep -cxF "$key")
+inconf=$(printf '%s\n' "$conf" | tr -d ' \t' | grep -cxF "PublicKey=$key")
+[ "$live" -gt 0 ] || [ "$inconf" -gt 0 ] || fail not_found
+backup
+[ "$live" -gt 0 ] && { dx awg set "$IFACE" peer "$key" remove >/dev/null 2>&1 || fail apply_failed; }
+if [ "$inconf" -gt 0 ]; then
+  new=$(printf '%s\n' "$conf" | awk -v k="$key" 'BEGIN { RS = ""; ORS = "\n\n" }
+    { n = split($0, L, "\n"); drop = 0
+      for (i = 1; i <= n; i++) { t = L[i]; gsub(/[ \t]/, "", t); if (t == "PublicKey=" k) drop = 1 }
+      if (!drop) print }')
+  printf '%s' "$new" | grep -q '^\[Interface\]' || fail rewrite_failed
+  printf '%s\n' "$new" | dxi sh -c "cat > $DIR/$IFACE.conf.new && mv $DIR/$IFACE.conf.new $DIR/$IFACE.conf" >/dev/null 2>&1 || fail persist_failed
+fi
+dx awg show "$IFACE" peers 2>/dev/null | grep -qxF "$key" && fail not_removed
+printf 'RESULT\tok\t%s\t\n' "$key"

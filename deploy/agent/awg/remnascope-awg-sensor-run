@@ -1,0 +1,24 @@
+#!/bin/sh
+# remnascope-awg-sensor-run <container>: starts the traffic sensor for one AmneziaWG container and stays in its place
+# (the sensor becomes this process). It is started by systemd (remnascope-awg-sensor@<container>.service) as root with a
+# narrow sandbox, and the sensor reports to the agent over a Unix socket.
+#
+# It only starts the sensor for containers named in SENSE in /etc/remnascope/awg-manage.conf, and only with fixed
+# arguments. The sensor needs root for one thing, opening a packet socket in the container's network namespace; it
+# gives root up for good right after that (see cmd/awgsensor).
+set -u
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+DOCKER="${DOCKER:-/usr/bin/docker}"
+MANAGE_CONF="${MANAGE_CONF:-/etc/remnascope/awg-manage.conf}"
+SENSOR="${SENSOR:-/usr/local/sbin/remnascope-awg-sensor}"
+SOCKET="${SOCKET:-/run/remnascope-awg/sensor.sock}"
+
+[ $# -eq 1 ] || { echo "usage: $0 <container>" >&2; exit 2; }
+container="$1"
+printf '%s' "$container" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$' || { echo "bad container name" >&2; exit 2; }
+SENSE=$(sed -n 's/^SENSE="\(.*\)"$/\1/p' "$MANAGE_CONF" 2>/dev/null | head -1)
+case " $SENSE " in *" $container "*) ;; *) echo "container is not in SENSE" >&2; exit 3 ;; esac
+"$DOCKER" inspect -f '{{.State.Running}}' "$container" 2>/dev/null | grep -qx true || { echo "container is not running" >&2; exit 4; }
+pid=$("$DOCKER" inspect -f '{{.State.Pid}}' "$container" 2>/dev/null)
+printf '%s' "$pid" | grep -Eq '^[0-9]+$' && [ "$pid" -gt 1 ] || { echo "no process id" >&2; exit 4; }
+exec "$SENSOR" -pid "$pid" -container "$container" -iface awg0 -interval 60s -out "$SOCKET"

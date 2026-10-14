@@ -1,0 +1,25 @@
+#!/bin/sh
+# A stand-in for `docker`, used only by test.sh: answers like a host with one AmneziaWG container.
+here=$(dirname "$0")
+case "$1" in
+  inspect) case "$*" in *StartedAt*) echo 2026-10-07T06:10:19.847505091Z ;; *) echo true ;; esac ;;
+  exec)
+    shift 2   # drop "exec <container>"
+    if [ "$1" = awg ]; then
+      if [ "$3" = interfaces ]; then
+        echo awg0
+      else
+        case "$4" in
+          listen-port) echo 49587 ;;
+          latest-handshakes) printf 'AAAA1111111111111111111111111111111111111=\t1760400000\nBBBB2222222222222222222222222222222222222=\t0\n' ;;
+          transfer) printf 'AAAA1111111111111111111111111111111111111=\t1000\t2000\nBBBB2222222222222222222222222222222222222=\t0\t0\n' ;;
+          allowed-ips) printf 'AAAA1111111111111111111111111111111111111=\t10.8.1.2/32\nBBBB2222222222222222222222222222222222222=\t10.8.1.18/32 fd00::2/128\n' ;;
+        esac
+      fi
+    elif [ "$1" = stat ]; then
+      echo 1759400700
+    elif [ "$1" = grep ]; then
+      for last; do :; done
+      exec grep "$2" "$3" "$here/fixture/$(basename "$last")"
+    fi ;;
+esac
