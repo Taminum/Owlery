@@ -1,0 +1,109 @@
+# Local development preview. Everything is bound to loopback.
+#
+#   ./deploy/init-dev-secrets.ps1     (or deploy/init-dev-secrets.sh)   once, creates ./secrets
+#   docker compose up -d --build
+#
+# The `mockpanel` service pretends to be two Remnawave panels so the connection wizard can be
+# exercised without real tokens. It is for development only and must not exist in production.
+# SEED_DEMO adds two synthetic demo panels for the same reason.
+name: remnascope
+
+secrets:
+  master_key:      { file: ./secrets/master_key }
+  owner_password:  { file: ./secrets/owner_password }
+  mock_home_token: { file: ./secrets/mock_home_token }
+  mock_work_token: { file: ./secrets/mock_work_token }
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: remnascope
+      POSTGRES_USER: remnascope
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-remnascope_dev_only}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U remnascope -d remnascope"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  mockpanel:
+    build:
+      context: .
+      dockerfile: deploy/api.Dockerfile
+      target: mockpanel
+    command:
+      - -certs=/certs
+      - -home-token-file=/run/secrets/mock_home_token
+      - -work-token-file=/run/secrets/mock_work_token
+    secrets: [mock_home_token, mock_work_token]
+    volumes:
+      - certs:/certs          # ca.pem only: shared with the API, read-only there
+      - mockstate:/state      # the CA key stays private to this container
+    networks:
+      default:
+        aliases: [mock-home.demo.test, mock-work.demo.test]
+    healthcheck:
+      test: ["CMD", "/mockpanel", "-check", "/certs/ca.pem"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: deploy/api.Dockerfile
+      target: api
+    environment:
+      LISTEN_ADDR: ":8080"
+      DATABASE_URL: postgres://remnascope:${POSTGRES_PASSWORD:-remnascope_dev_only}@postgres:5432/remnascope?sslmode=disable
+      MASTER_KEY_FILE: /run/secrets/master_key
+      # The preview is served over plain http on localhost, so the session cookie cannot be Secure here.
+      # Production must keep the default (true).
+      COOKIE_SECURE: "false"
+      TRUSTED_PROXIES: 172.16.0.0/12,192.168.0.0/16,10.0.0.0/8
+      SEED_DEMO: "true"
+      BOOTSTRAP_OWNER: owner
+      BOOTSTRAP_PASSWORD_FILE: /run/secrets/owner_password
+      # Admin-approved internal targets for the mock panels (exact host names) and their CA.
+      ALLOW_PRIVATE_HOSTS: mock-home.demo.test,mock-work.demo.test
+      ALLOWED_PORTS: 443,8443,8444
+      TRUSTED_CA_FILE: /certs/ca.pem
+    secrets: [master_key, owner_password]
+    volumes:
+      - certs:/certs:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mockpanel:
+        condition: service_healthy
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/web.Dockerfile
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8088}:8080"
+    depends_on:
+      - api
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  certs:
+  mockstate:

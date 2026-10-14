@@ -1,0 +1,77 @@
+# Production stack for RemnaScope. No demo data, no mock panels, nothing published but 80/443.
+# Images come from ghcr.io (or API_IMAGE / WEB_IMAGE in .env, e.g. images you built yourself). See docs/INSTALL.md.
+name: remnascope
+
+secrets:
+  master_key:     { file: ./secrets/master_key }
+  owner_password: { file: ./secrets/owner_password }
+  gemini_api_key: { file: ./secrets/gemini_api_key }   # empty until the owner puts a key in it (docs/AUTOCLASSIFY.md)
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: remnascope
+      POSTGRES_USER: remnascope
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run deploy/prod/init-secrets.sh}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U remnascope -d remnascope"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy: { resources: { limits: { memory: 512M } } }
+    restart: unless-stopped
+
+  api:
+    image: ${API_IMAGE:-ghcr.io/taminum/remnascope-api}:${RELEASE:-latest}
+    environment:
+      LISTEN_ADDR: ":8080"
+      DATABASE_URL: postgres://remnascope:${POSTGRES_PASSWORD}@postgres:5432/remnascope?sslmode=disable
+      MASTER_KEY_FILE: /run/secrets/master_key
+      TRUSTED_PROXIES: 172.16.0.0/12,192.168.0.0/16,10.0.0.0/8
+      BOOTSTRAP_OWNER: owner
+      BOOTSTRAP_PASSWORD_FILE: /run/secrets/owner_password
+      GEMINI_API_KEY_FILE: /run/secrets/gemini_api_key
+      # COOKIE_SECURE, SEED_DEMO, ALLOW_PRIVATE_HOSTS stay unset: secure cookies, no demo, no private targets.
+    secrets: [master_key, owner_password, gemini_api_key]
+    depends_on: { postgres: { condition: service_healthy } }
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    deploy: { resources: { limits: { memory: 256M } } }
+    restart: unless-stopped
+
+  web:
+    image: ${WEB_IMAGE:-ghcr.io/taminum/remnascope-web}:${RELEASE:-latest}
+    depends_on: [api]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    deploy: { resources: { limits: { memory: 64M } } }
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2.9-alpine
+    environment:
+      SCOPE_HOST: ${SCOPE_HOST:?set SCOPE_HOST in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [web]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    deploy: { resources: { limits: { memory: 128M } } }
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  caddy-data:
+  caddy-config:
