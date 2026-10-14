@@ -20,7 +20,7 @@ const PAGES = [
 
 await mkdir(out, { recursive: true })
 const browser = await launch()
-const { ctx, page } = await newPage(browser, { width: 1440, height: 900 })
+const { ctx, page } = await newPage(browser, { width: 1920, height: 1080 })
 await login(page, base)
 for (const [name, url] of PAGES) {
   await page.goto(`${base}${url}`, { waitUntil: 'networkidle' })
