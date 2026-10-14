@@ -87,7 +87,7 @@ describe('AmneziaWG page', () => {
     expect(row.getByText('давно не было')).toBeInTheDocument() // seen before: not "never"
     expect(row.getAllByText(/↓ (7|8)\d/).length).toBeGreaterThan(0) // its total, shown directly (not on hover)
     expect(screen.getByText(/Счётчики самого сервера идут с/)).toBeInTheDocument()
-    expect(screen.getByText(/Период 2–7 октября в итог не вошёл/)).toBeInTheDocument() // the one honest caveat about the total
+    expect(screen.getByText(/считает RemnaScope по счётчикам сервера/)).toBeInTheDocument() // the one honest caveat about the total
   })
 
   it('lets the owner remove a device that is gone, and only such a device', async () => {

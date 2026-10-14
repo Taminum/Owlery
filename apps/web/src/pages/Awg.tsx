@@ -23,7 +23,7 @@ interface Peer {
 }
 interface Instance {
   id: string; container: string; interface: string; port?: number; variant?: string; mode: string
-  last_report: string; report_fresh: boolean; counters_since: string | null; peers: Peer[]
+  last_report: string; report_fresh: boolean; counters_since: string | null; legacy_at?: string | null; peers: Peer[]
 }
 interface AwgResponse { instances: Instance[]; period: string }
 interface Series { bucket_seconds: number; from: string; to: string; points: { ts: string; download: number; upload: number }[] }
@@ -162,7 +162,7 @@ export default function Awg() {
           </div>
           <div className="mt-3 space-y-1 text-xs leading-5 text-muted">
             <p>{in_.counters_since ? t('awg.since.server', { when: day(in_.counters_since) }) : t('awg.since.serverUnknown')}</p>
-            <p>{t('awg.since.total')}</p>
+            <p>{in_.legacy_at ? t('awg.since.total', { legacy: day(in_.legacy_at) }) : t('awg.since.totalOwn')}</p>
           </div>
         </Card>
       ))}

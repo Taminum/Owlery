@@ -141,7 +141,7 @@ func main() {
 			rx[i] += grow * int64(4-i) / 2
 			tx[i] += grow * int64(i+1) / 3
 			hs := at.Add(-time.Duration(rng.Intn(600)) * time.Second).Unix()
-			if i == 3 && h < 6 {
+			if i == 3 && h < 0 {
 				hs = 0
 			}
 			peers = append(peers, ingestproto.AWGPeer{Key: keys[i], Name: names[i], IP: fmt.Sprintf("10.8.1.%d/32", i+2), RX: rx[i], TX: tx[i], Handshake: hs})
