@@ -11,3 +11,4 @@ _internal/
 deploy/**/.env
 deploy/**/secrets/
 !internal/**/testdata/*.log
+deploy/backup/
