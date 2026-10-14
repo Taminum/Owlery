@@ -37,7 +37,7 @@ You need a Linux server with Docker, a DNS name pointing at it, and ports 80/443
 
 ```bash
 git clone https://github.com/Taminum/RemnaScope.git && cd RemnaScope/deploy/prod
-sudo ./init-secrets.sh scope.example.com v0.1.0     # host name, release tag; creates secrets and .env, prints nothing
+sudo ./init-secrets.sh scope.example.com v0.1.1     # host name, release tag; creates secrets and .env, prints nothing
 sudo docker compose -f compose.prod.yml up -d       # pulls ghcr.io/taminum/remnascope-{api,web}
 sudo cat secrets/owner_password                     # sign in at https://scope.example.com as "owner"
 ```

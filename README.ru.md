@@ -19,7 +19,7 @@
 Нужны сервер с Docker, доменное имя, свободные порты 80 и 443.
 ```bash
 git clone https://github.com/Taminum/RemnaScope.git && cd RemnaScope/deploy/prod
-sudo ./init-secrets.sh scope.example.com v0.1.0
+sudo ./init-secrets.sh scope.example.com v0.1.1
 sudo docker compose -f compose.prod.yml up -d
 sudo cat secrets/owner_password        # вход: https://scope.example.com, логин owner
 ```
