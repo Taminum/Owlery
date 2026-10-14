@@ -1,0 +1,6 @@
+{"response":[
+ {"uuid":"3f1c0a52-0000-4a00-8000-00000000a001","id":1,"name":"node-alpha","address":"alpha.example.test","port":2222,"isConnected":true,"isDisabled":false,"isConnecting":false,"lastStatusChange":"2026-10-01T08:00:00.000Z","countryCode":"NL","usersOnline":4,"versions":{"xray":"26.3.27","node":"3.4.1"},"tags":["main"],"configProfile":{"activeConfigProfileUuid":null,"activeInbounds":[]},"someFutureField":{"nested":true}},
+ {"uuid":"3f1c0a52-0000-4a00-8000-00000000a002","id":2,"name":"node-beta","address":"beta.example.test","port":2222,"isConnected":false,"isDisabled":false,"lastStatusChange":null,"countryCode":"DE","usersOnline":0,"versions":null},
+ {"uuid":"3f1c0a52-0000-4a00-8000-00000000a003","name":"node-gamma","isDisabled":true},
+ {"name":"row-without-uuid","isConnected":true}
+]}

@@ -1,0 +1,5 @@
+{"response":{"total":5,"users":[
+ {"id":1,"shortUuid":"aaaa1111","username":"alice","status":"ACTIVE","vlessUuid":"00000000-0000-4000-8000-0000000000a1","trafficLimitBytes":0,"userTraffic":{"usedTrafficBytes":1024}},
+ {"id":2,"shortUuid":"bbbb2222","username":"bob","status":"DISABLED"},
+ {"shortUuid":"cccc3333","username":"no-identity-user","status":"ACTIVE"}
+]}}
