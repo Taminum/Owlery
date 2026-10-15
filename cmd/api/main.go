@@ -19,6 +19,7 @@ import (
 	"github.com/Taminum/RemnaScope/internal/asn"
 	"github.com/Taminum/RemnaScope/internal/auth"
 	"github.com/Taminum/RemnaScope/internal/autoclassify"
+	"github.com/Taminum/RemnaScope/internal/awglimits"
 	"github.com/Taminum/RemnaScope/internal/awgops"
 	"github.com/Taminum/RemnaScope/internal/config"
 	"github.com/Taminum/RemnaScope/internal/demo"
@@ -187,6 +188,7 @@ func serve(log *slog.Logger) error {
 	}
 	go alerts.Run(ctx, st, time.Minute, log)
 	go secChecker.Run(ctx)
+	go (&awglimits.Worker{Store: st, Ops: srv.AWGOps, Log: log}).Run(ctx)
 	go dnsWorker.Run(ctx)
 	go probe.Run(ctx, st, time.Minute, log)
 	go func() {
