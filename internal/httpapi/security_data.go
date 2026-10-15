@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Taminum/RemnaScope/internal/auth"
+	"github.com/Taminum/RemnaScope/internal/secchecks"
 	"github.com/Taminum/RemnaScope/internal/secproto"
 	"github.com/Taminum/RemnaScope/internal/store"
 )
@@ -182,4 +185,69 @@ func (s *Server) secEvents(w http.ResponseWriter, r *http.Request, a auth.Actor,
 		evs = evs[:limit]
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": evs, "more": more})
+}
+
+var eventTypeRe = regexp.MustCompile(`^[a-z0-9_.]{1,64}$`)
+
+// secJournal is the journal of every server the caller can see, newest first, filtered and paged with a
+// (time, id) cursor.
+func (s *Server) secJournal(w http.ResponseWriter, r *http.Request, a auth.Actor, _ store.Session) {
+	q := r.URL.Query()
+	bad := func(code, msg string) { s.writeErr(w, r, http.StatusBadRequest, code, msg) }
+	f := store.JournalFilter{VPSID: q.Get("vps_id"), Category: q.Get("category"), Type: q.Get("type"), Severity: q.Get("severity"), Query: strings.TrimSpace(q.Get("q")), BeforeID: q.Get("before_id"), Limit: 50}
+	if x := q.Get("limit"); x != "" {
+		n, err := strconv.Atoi(x)
+		if err != nil || n < 1 || n > 200 {
+			bad("invalid_limit", "limit must be 1 to 200")
+			return
+		}
+		f.Limit = n
+	}
+	if f.Category != "" && !secproto.ValidEventCategory(f.Category) {
+		bad("invalid_category", "unknown category")
+		return
+	}
+	if f.Severity != "" && f.Severity != "info" && f.Severity != "warning" && f.Severity != "critical" {
+		bad("invalid_severity", "severity must be info, warning or critical")
+		return
+	}
+	if f.Type != "" && !eventTypeRe.MatchString(f.Type) {
+		bad("invalid_type", "invalid event type")
+		return
+	}
+	if len([]rune(f.Query)) > 100 {
+		bad("invalid_query", "search is at most 100 characters")
+		return
+	}
+	for name, dst := range map[string]**time.Time{"from": &f.From, "to": &f.To, "before_ts": &f.BeforeTS} {
+		if x := q.Get(name); x != "" {
+			t, err := time.Parse(time.RFC3339Nano, x)
+			if err != nil {
+				bad("invalid_time", name+" must be RFC 3339")
+				return
+			}
+			*dst = &t
+		}
+	}
+	f.Limit++
+	evs, err := s.Store.Journal(r.Context(), a.Scope(), f)
+	if err != nil {
+		s.writeErr(w, r, http.StatusInternalServerError, "internal", "internal error")
+		return
+	}
+	more := len(evs) > f.Limit-1
+	if more {
+		evs = evs[:f.Limit-1]
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": evs, "more": more})
+}
+
+// secSettings reports the fixed parameters of the module, so the screen never has to guess them.
+func (s *Server) secSettings(w http.ResponseWriter, r *http.Request, a auth.Actor, _ store.Session) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"agent_interval_seconds": 30, "stale_after_seconds": int(secproto.StaleAfter / time.Second),
+		"port_check_minutes": int(secchecks.PortEvery / time.Minute), "tls_check_hours": int(secchecks.TLSEvery / time.Hour),
+		"tls_warn_days": []int{30, 14, 7, 3}, "retention_days": int(store.SecurityRetention / (24 * time.Hour)),
+		"vantage": vantageOut(), "discovery_scan": "off",
+	})
 }
