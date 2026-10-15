@@ -56,7 +56,13 @@ func (s *Store) ApplyConditions(ctx context.Context, kinds []string, conds []Con
 			subjects[c.Kind] = append(subjects[c.Kind], c.Subject)
 		}
 		for _, k := range kinds {
-			tag, e := tx.Exec(ctx, `UPDATE alerts SET resolved_at=$3 WHERE kind=$1 AND resolved_at IS NULL AND NOT (subject = ANY($2::text[]))`, k, subjects[k], now)
+			// An empty list must be passed as an empty array: a nil slice reaches SQL as NULL, "subject = ANY(NULL)" is
+			// unknown, and nothing would ever close once the last condition of a kind is gone.
+			keep := subjects[k]
+			if keep == nil {
+				keep = []string{}
+			}
+			tag, e := tx.Exec(ctx, `UPDATE alerts SET resolved_at=$3 WHERE kind=$1 AND resolved_at IS NULL AND NOT (subject = ANY($2::text[]))`, k, keep, now)
 			if e != nil {
 				return e
 			}
