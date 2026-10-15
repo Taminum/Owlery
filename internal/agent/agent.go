@@ -39,6 +39,7 @@ type Config struct {
 	AWGContainer  []string // awg source: the helper that creates and removes containers; empty = the host did not opt in
 	AWGSensorSock string   // awg source: Unix socket the traffic sensors report to; empty = no sensor
 	AWGSensorOf   []string // awg source: the containers whose reports are accepted
+	AWGSensorConf string   // awg source: the helper configuration whose SENSE list is accepted as well
 	FromStart     bool
 	BatchLines    int
 	BatchBytes    int
@@ -226,10 +227,10 @@ func runAWG(ctx context.Context, cfg Config, log *slog.Logger) error {
 	}}
 	link := &AWGLink{URL: cfg.ServerURL, TokenFile: cfg.TokenFile, CAFile: cfg.CAFile, AllowInsecure: cfg.AllowInsecure, Version: cfg.Version, SourceID: cfg.SourceID,
 		Snapshots: snaps, ManageArgv: cfg.AWGManage, ContainerArgv: cfg.AWGContainer, Log: log}
-	if cfg.AWGSensorSock != "" && len(cfg.AWGSensorOf) > 0 {
+	if cfg.AWGSensorSock != "" && (len(cfg.AWGSensorOf) > 0 || cfg.AWGSensorConf != "") {
 		flows := make(chan ingestproto.AWGFlows, 8)
 		link.Flows = flows
-		sensor := &AWGSensorSource{Socket: cfg.AWGSensorSock, Containers: cfg.AWGSensorOf, Log: func(m string) { log.Warn(m) }, Emit: func(f ingestproto.AWGFlows) {
+		sensor := &AWGSensorSource{Socket: cfg.AWGSensorSock, Containers: cfg.AWGSensorOf, ConfPath: cfg.AWGSensorConf, Log: func(m string) { log.Warn(m) }, Emit: func(f ingestproto.AWGFlows) {
 			select {
 			case flows <- f:
 			default: // the link is behind: this minute is lost, the next one is not
