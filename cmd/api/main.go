@@ -22,6 +22,7 @@ import (
 	"github.com/Taminum/RemnaScope/internal/awgops"
 	"github.com/Taminum/RemnaScope/internal/config"
 	"github.com/Taminum/RemnaScope/internal/demo"
+	"github.com/Taminum/RemnaScope/internal/dnsworker"
 	"github.com/Taminum/RemnaScope/internal/gemini"
 	"github.com/Taminum/RemnaScope/internal/geoip"
 	"github.com/Taminum/RemnaScope/internal/httpapi"
@@ -163,6 +164,8 @@ func serve(log *slog.Logger) error {
 		}
 	}()
 	secChecker := secchecks.New(st, log)
+	dnsWorker := dnsworker.New(st, log, srv.Intel)
+	srv.DNSWorker = dnsWorker
 	secHub := secops.New()
 	srv.SecOps = secHub
 	srv.SecChecks = secChecker
@@ -183,6 +186,7 @@ func serve(log *slog.Logger) error {
 	}
 	go alerts.Run(ctx, st, time.Minute, log)
 	go secChecker.Run(ctx)
+	go dnsWorker.Run(ctx)
 	go probe.Run(ctx, st, time.Minute, log)
 	go func() {
 		t := time.NewTicker(time.Hour)
@@ -203,6 +207,11 @@ func serve(log *slog.Logger) error {
 					log.Error("traffic retention purge failed", "err", err)
 				} else if n > 0 {
 					log.Info("retention purge", "traffic_samples_deleted", n)
+				}
+				if n, err := st.PurgeDNS(ctx, time.Now().UTC()); err != nil {
+					log.Error("dns retention purge failed", "err", err)
+				} else if n > 0 {
+					log.Info("retention purge", "dns_rows_deleted", n)
 				}
 				if n, err := st.PurgeSecurity(ctx, time.Now().UTC()); err != nil {
 					log.Error("security retention purge failed", "err", err)
