@@ -159,7 +159,7 @@ func (s *Server) secEvents(w http.ResponseWriter, r *http.Request, a auth.Actor,
 		limit = n
 	}
 	cat := q.Get("category")
-	if cat != "" && !secproto.ValidCategory(cat) {
+	if cat != "" && !secproto.ValidEventCategory(cat) {
 		s.writeErr(w, r, http.StatusBadRequest, "invalid_category", "unknown category")
 		return
 	}

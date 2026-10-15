@@ -68,6 +68,8 @@ type Server struct {
 	Sync         *syncer.Syncer
 	Ingest       http.Handler // the agents' WebSocket endpoint; authenticates by agent credential, not by session
 	SecIngest    http.Handler // the security agents' endpoint, with its own credentials
+	SecChecks    Nudger       // the external checker, woken by a manual request (nil = none)
+	checkLimit   *auth.Limiter
 	Limits       Limits
 	Live         *live.Hub // present-moment router snapshots (nil = none)
 	Gemini       *gemini.Client
@@ -90,6 +92,9 @@ type Server struct {
 }
 
 func (s *Server) init() {
+	if s.checkLimit == nil {
+		s.checkLimit = auth.NewLimiter(1.0/30, 1)
+	}
 	if s.intelSlots == nil {
 		s.intelSlots = make(chan struct{}, 4)
 	}
@@ -236,6 +241,13 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/security/vps/{id}/ports", s.session(s.secCategory(secproto.CatSockets)))
 	mux.Handle("GET /api/v1/security/vps/{id}/firewall", s.session(s.secCategory(secproto.CatFirewall)))
 	mux.Handle("GET /api/v1/security/vps/{id}/events", s.session(s.secEvents))
+	mux.Handle("GET /api/v1/security/vps/{id}/public-ports", s.session(s.listPublicPorts))
+	mux.Handle("POST /api/v1/security/vps/{id}/public-ports", s.session(s.addPublicPort))
+	mux.Handle("PATCH /api/v1/security/vps/{id}/public-ports/{eid}", s.session(s.patchPublicPort))
+	mux.Handle("GET /api/v1/security/vps/{id}/tls", s.session(s.listTLS))
+	mux.Handle("POST /api/v1/security/vps/{id}/tls", s.session(s.addTLS))
+	mux.Handle("PATCH /api/v1/security/vps/{id}/tls/{eid}", s.session(s.patchTLS))
+	mux.Handle("POST /api/v1/security/vps/{id}/checks/{kind}/run", s.session(s.runChecks))
 
 	mux.Handle("GET /api/v1/accounts", s.session(s.listAccounts))
 	mux.Handle("POST /api/v1/accounts", s.session(s.createAccount))
