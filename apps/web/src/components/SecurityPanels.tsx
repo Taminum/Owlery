@@ -12,6 +12,10 @@ import { DangerButton, GhostButton, Modal, PrimaryButton } from './Modal'
 type Tone = 'muted' | 'amber' | 'green' | 'red' | 'cyan'
 const STATE_TONE: Record<string, Tone> = { ok: 'green', stale: 'amber', waiting: 'muted', agent_required: 'muted', not_installed: 'muted', stopped: 'amber', permission_denied: 'amber', unsupported: 'muted', error: 'red' }
 
+function Code({ children }: { children: string }) {
+  return <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-control border border-line bg-elevated p-3 font-mono text-[12px]">{children}</pre>
+}
+
 export function StateChip({ state }: { state: string }) {
   return <Chip tone={STATE_TONE[state] ?? 'muted'}>{t(`sec.state.${state}` as MsgKey)}</Chip>
 }
@@ -124,7 +128,7 @@ export function FirewallTab({ vpsId }: { vpsId: string }) {
   )
 }
 
-function eventText(e: SecEvent): string {
+export function eventText(e: SecEvent): string {
   const key = (e.type.endsWith('.state_changed') ? 'sec.ev.state_changed' : `sec.ev.${e.type}`) as MsgKey
   const p: Record<string, string | number> = {}
   for (const [k, v] of Object.entries(e.payload)) if (typeof v === 'string' || typeof v === 'number') p[k] = v
@@ -217,10 +221,19 @@ export function AgentCard({ vpsId, canEdit }: { vpsId: string; canEdit: boolean 
         </div>
       )}
       {token && (
-        <Modal title={t('sec.agent.create')} onClose={() => setToken('')}>
-          <p className="text-[13px] text-muted">{t('sec.agent.token')}</p>
-          <pre className="mt-2 overflow-x-auto rounded-control border border-line bg-elevated p-3 font-mono text-[12px]">{token}</pre>
-          <pre className="mt-2 overflow-x-auto rounded-control border border-line bg-elevated p-3 font-mono text-[12px]">{`secagent -server wss://${window.location.host} -token-file /etc/remnascope/secagent.token`}</pre>
+        <Modal title={t('sec.onb.title')} onClose={() => setToken('')} wide>
+          <div className="space-y-3 text-[13px]">
+            <p className="text-muted">{t('sec.onb.intro')}</p>
+            <p>{t('sec.onb.s1')}</p>
+            <Code>{'useradd --system --no-create-home --shell /usr/sbin/nologin remnascope-sec'}</Code>
+            <p>{t('sec.onb.s2')}</p>
+            <Code>{`install -d -m 0755 /etc/remnascope && umask 077 && echo '${token}' > /etc/remnascope/secagent.token && chown root:remnascope-sec /etc/remnascope/secagent.token && chmod 0640 /etc/remnascope/secagent.token`}</Code>
+            <p>{t('sec.onb.s3')}</p>
+            <Code>{`install -m 0755 remnascope-secagent-linux-amd64 /usr/local/bin/remnascope-secagent
+sed -i 's#wss://SCOPE_HOST#wss://${window.location.host}#' remnascope-secagent.service
+cp remnascope-secagent.service /etc/systemd/system/ && systemctl daemon-reload && systemctl enable --now remnascope-secagent`}</Code>
+            <p className="text-muted">{t('sec.onb.s4')}</p>
+          </div>
           <div className="mt-4 flex justify-end"><PrimaryButton onClick={() => setToken('')}>{t('sec.agent.tokenSaved')}</PrimaryButton></div>
         </Modal>
       )}

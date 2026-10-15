@@ -11,6 +11,7 @@ import { useLoad } from '../hooks/useLoad'
 import type { VPS, VPSList } from '../lib/types'
 import { Card, Chip } from '../components/ui'
 import { PageHead, TableSkeleton } from '../components/Analyzer'
+import { Journal } from '../components/SecurityJournal'
 import { PublicPorts, TLSTab } from '../components/SecurityChecks'
 import { AgentCard, EventsTab, Fail2banTab, FirewallTab, PortsTab } from '../components/SecurityPanels'
 import { DangerButton, Field, GhostButton, Modal, PrimaryButton, inputCls } from '../components/Modal'
@@ -61,19 +62,27 @@ export default function Security() {
   const nav = useNavigate()
   const { data, error } = useLoad((s) => api.get<VPSList>('/api/v1/security/vps', s), [], 30_000)
   const [adding, setAdding] = useState(false)
+  const [view, setView] = useState<'servers' | 'journal'>('servers')
   return (
     <div className="space-y-4">
       <PageHead title={t('sec.title')} subtitle={t('sec.subtitle')}
         right={data?.can_create ? <PrimaryButton onClick={() => setAdding(true)}><span className="inline-flex items-center gap-2"><Plus size={16} aria-hidden />{t('sec.add')}</span></PrimaryButton> : undefined} />
-      {error && <p role="alert" className="text-[13px] text-red">{error}</p>}
-      {!data && !error && <TableSkeleton />}
-      {data && data.items.length === 0 && (
+      <div role="tablist" aria-label={t('sec.title')} className="flex gap-2">
+        {(['servers', 'journal'] as const).map((x) => (
+          <button key={x} role="tab" type="button" aria-selected={view === x} onClick={() => setView(x)}
+            className={`h-8 rounded-control border px-3 text-[13px] ${view === x ? 'border-cyan bg-elevated text-fg' : 'border-line text-muted hover:text-fg'}`}>{t(x === 'servers' ? 'sec.view.servers' : 'sec.view.journal')}</button>
+        ))}
+      </div>
+      {view === 'journal' && <Journal />}
+      {view === 'servers' && error && <p role="alert" className="text-[13px] text-red">{error}</p>}
+      {view === 'servers' && !data && !error && <TableSkeleton />}
+      {view === 'servers' && data && data.items.length === 0 && (
         <div role="status" className="rounded-card border border-line bg-surface px-6 py-12 text-center">
           <h2 className="text-lg font-semibold">{t('sec.none')}</h2>
           <p className="mx-auto mt-2 max-w-md text-[13px] text-muted">{data.can_create ? t('sec.noneHint') : t('sec.noneViewer')}</p>
         </div>
       )}
-      {data && data.items.length > 0 && (
+      {view === 'servers' && data && data.items.length > 0 && (
         <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {data.items.map((v) => (
             <li key={v.id}>
