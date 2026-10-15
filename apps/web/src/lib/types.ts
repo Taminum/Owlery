@@ -344,3 +344,12 @@ export interface SecOverview {
   events_24h: number
 }
 export interface SecEventDetail { event: JournalEvent; related: JournalEvent[] }
+
+export interface DigestSite { site: string; service?: string; category?: string; connections: number; users: number; first_seen: string }
+export interface DigestDevice { panel_id: string; panel_name: string; ip: string; name: string; up_bytes: number; down_bytes: number; first_seen?: string }
+export interface DigestResponse {
+  from: string; to: string; new_sites: DigestSite[]; top_devices: DigestDevice[]; new_devices: DigestDevice[]; new_devices_note?: string
+  security_events: { type: string; category: string; severity: 'info' | 'warning' | 'critical'; count: number }[]
+  dns: { total: number; volatile: number; failed_checks: number } | null
+  open_alerts: number; has_traffic: boolean; has_security: boolean
+}
