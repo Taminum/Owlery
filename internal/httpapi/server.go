@@ -28,6 +28,8 @@ import (
 	"github.com/Taminum/RemnaScope/internal/netintel"
 	"github.com/Taminum/RemnaScope/internal/remnawave"
 	"github.com/Taminum/RemnaScope/internal/safehttp"
+	"github.com/Taminum/RemnaScope/internal/secops"
+	"github.com/Taminum/RemnaScope/internal/secproto"
 	"github.com/Taminum/RemnaScope/internal/secrets"
 	"github.com/Taminum/RemnaScope/internal/store"
 	"github.com/Taminum/RemnaScope/internal/syncer"
@@ -66,6 +68,13 @@ type Server struct {
 	Probe        ProbeFactory
 	Sync         *syncer.Syncer
 	Ingest       http.Handler // the agents' WebSocket endpoint; authenticates by agent credential, not by session
+	SecIngest    http.Handler // the security agents' endpoint, with its own credentials
+	SecChecks    Nudger       // the external checker, woken by a manual request (nil = none)
+	SecOps       *secops.Hub  // carries ban/unban to security agents that are connected (nil = commands off)
+	DNSWorker    Nudger       // the DNS Map worker, woken by a refresh (nil = none)
+	dnsLimit     *auth.Limiter
+	checkLimit   *auth.Limiter
+	cmdLimit     *auth.Limiter
 	Limits       Limits
 	Live         *live.Hub // present-moment router snapshots (nil = none)
 	Gemini       *gemini.Client
@@ -88,6 +97,15 @@ type Server struct {
 }
 
 func (s *Server) init() {
+	if s.dnsLimit == nil {
+		s.dnsLimit = auth.NewLimiter(1.0/60, 1)
+	}
+	if s.cmdLimit == nil {
+		s.cmdLimit = auth.NewLimiter(1.0/6, 5)
+	}
+	if s.checkLimit == nil {
+		s.checkLimit = auth.NewLimiter(1.0/30, 1)
+	}
 	if s.intelSlots == nil {
 		s.intelSlots = make(chan struct{}, 4)
 	}
@@ -143,6 +161,10 @@ func (s *Server) Handler() http.Handler {
 		mux.Handle(ingestproto.Path, s.Ingest)
 	}
 
+	if s.SecIngest != nil {
+		mux.Handle(secproto.Path, s.SecIngest)
+	}
+
 	mux.HandleFunc("POST /api/v1/auth/login", s.login)
 	mux.Handle("POST /api/v1/auth/logout", s.session(s.logout))
 	mux.Handle("GET /api/v1/auth/me", s.session(s.me))
@@ -191,6 +213,16 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/v1/autoclassify/backfill", s.session(s.autoBackfill))
 	mux.Handle("POST /api/v1/autoclassify/dryrun", s.session(s.autoDryRunStart))
 	mux.Handle("GET /api/v1/autoclassify/dryrun", s.session(s.autoDryRunLatest))
+	mux.Handle("GET /api/v1/intel/dns/maps", s.session(s.listDNSMaps))
+	mux.Handle("POST /api/v1/intel/dns/maps", s.session(s.createDNSMap))
+	mux.Handle("GET /api/v1/intel/dns/maps/{id}", s.session(s.getDNSMap))
+	mux.Handle("PATCH /api/v1/intel/dns/maps/{id}", s.session(s.patchDNSMap))
+	mux.Handle("DELETE /api/v1/intel/dns/maps/{id}", s.session(s.archiveDNSMap))
+	mux.Handle("POST /api/v1/intel/dns/maps/{id}/refresh", s.session(s.refreshDNSMap))
+	mux.Handle("GET /api/v1/intel/dns/maps/{id}/records", s.session(s.dnsRecords))
+	mux.Handle("GET /api/v1/intel/dns/maps/{id}/graph", s.session(s.dnsGraph))
+	mux.Handle("GET /api/v1/intel/dns/maps/{id}/changes", s.session(s.dnsChanges))
+	mux.Handle("GET /api/v1/intel/dns/maps/{id}/checks", s.session(s.dnsChecks))
 	mux.Handle("GET /api/v1/intel/lookup", s.session(s.intelLookup))
 	mux.Handle("GET /api/v1/intel/dns", s.session(s.intelDNS))
 	mux.Handle("GET /api/v1/intel/subdomains", s.session(s.intelSubdomains))
@@ -215,6 +247,33 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/analytics/traffic", s.session(s.analyticsTraffic))
 	mux.Handle("GET /api/v1/analytics/devices", s.session(s.analyticsDevices))
 	mux.Handle("GET /api/v1/analytics/devices/detail", s.session(s.analyticsDeviceDetail))
+
+	mux.Handle("GET /api/v1/security/vps", s.session(s.listVPS))
+	mux.Handle("POST /api/v1/security/vps", s.session(s.createVPS))
+	mux.Handle("GET /api/v1/security/vps/{id}", s.session(s.getVPS))
+	mux.Handle("PATCH /api/v1/security/vps/{id}", s.session(s.patchVPS))
+	mux.Handle("DELETE /api/v1/security/vps/{id}", s.session(s.archiveVPS))
+	mux.Handle("POST /api/v1/security/vps/{id}/links", s.session(s.addVPSLink))
+	mux.Handle("DELETE /api/v1/security/vps/{id}/links/{link}", s.session(s.removeVPSLink))
+	mux.Handle("GET /api/v1/security/events", s.session(s.secJournal))
+	mux.Handle("GET /api/v1/security/settings", s.session(s.secSettings))
+	mux.Handle("POST /api/v1/security/vps/{id}/fail2ban/{action}", s.session(s.fail2banCommand))
+	mux.Handle("GET /api/v1/security/vps/{id}/commands", s.session(s.listCommands))
+	mux.Handle("GET /api/v1/security/commands/{id}", s.session(s.getCommand))
+	mux.Handle("GET /api/v1/security/vps/{id}/agent", s.session(s.getSecAgent))
+	mux.Handle("POST /api/v1/security/vps/{id}/agent", s.session(s.createSecAgent))
+	mux.Handle("DELETE /api/v1/security/vps/{id}/agent", s.session(s.revokeSecAgent))
+	mux.Handle("GET /api/v1/security/vps/{id}/fail2ban", s.session(s.secCategory(secproto.CatFail2ban)))
+	mux.Handle("GET /api/v1/security/vps/{id}/ports", s.session(s.secCategory(secproto.CatSockets)))
+	mux.Handle("GET /api/v1/security/vps/{id}/firewall", s.session(s.secCategory(secproto.CatFirewall)))
+	mux.Handle("GET /api/v1/security/vps/{id}/events", s.session(s.secEvents))
+	mux.Handle("GET /api/v1/security/vps/{id}/public-ports", s.session(s.listPublicPorts))
+	mux.Handle("POST /api/v1/security/vps/{id}/public-ports", s.session(s.addPublicPort))
+	mux.Handle("PATCH /api/v1/security/vps/{id}/public-ports/{eid}", s.session(s.patchPublicPort))
+	mux.Handle("GET /api/v1/security/vps/{id}/tls", s.session(s.listTLS))
+	mux.Handle("POST /api/v1/security/vps/{id}/tls", s.session(s.addTLS))
+	mux.Handle("PATCH /api/v1/security/vps/{id}/tls/{eid}", s.session(s.patchTLS))
+	mux.Handle("POST /api/v1/security/vps/{id}/checks/{kind}/run", s.session(s.runChecks))
 
 	mux.Handle("GET /api/v1/accounts", s.session(s.listAccounts))
 	mux.Handle("POST /api/v1/accounts", s.session(s.createAccount))

@@ -45,3 +45,31 @@ a session, every non-GET also `X-CSRF-Token`):
 Differences from the proposal: `DELETE` takes `{confirm, retention: "purge"|"archive"}`; `POST /panels` re-probes and
 answers 422 `probe_failed` or `partial_capabilities` (confirm with `allow_partial`); agents, `/traffic/samples`,
 `/destinations`, `/connections` and exports are M2-M3.
+
+## As built: security module (`/api/v1/security`)
+Same session, CSRF and error contract. A server is visible to the owner and to anyone with a role on a panel it is
+linked to; one outside the caller's scope answers 404 like one that does not exist. Changing a server needs an
+administrator role on a linked panel; creating and archiving one is the owner's.
+- Servers: `GET/POST /vps`, `GET/PATCH/DELETE /vps/{id}` (DELETE archives and revokes the agent),
+  `POST /vps/{id}/links`, `DELETE /vps/{id}/links/{link}`.
+- Agent: `GET/POST/DELETE /vps/{id}/agent` (POST returns the secret once). Reports arrive on the WebSocket
+  `/ingest/security/v1`, see SECURITY_AGENT.md.
+- State read from the agent: `GET /vps/{id}/fail2ban|ports|firewall` (state, observed time, staleness).
+- External checks: `GET/POST /vps/{id}/public-ports`, `PATCH /vps/{id}/public-ports/{eid}`,
+  `GET/POST /vps/{id}/tls`, `PATCH /vps/{id}/tls/{eid}`, `POST /vps/{id}/checks/{ports|tls}/run` (202, one per 30 s).
+  Targets must be registered on the server. See SECURITY_CHECKS.md.
+- Ban and unban (owner only): `POST /vps/{id}/fail2ban/{ban|unban}` with `{jail, ip, idempotency_key, acknowledge_risk?}`
+  answers 202 with a command, or 409 `risk` (needs `acknowledge_risk`), `agent_offline`, `state_stale`, `no_capability`;
+  `GET /commands/{id}`, `GET /vps/{id}/commands`. `GET /vps/{id}/fail2ban` carries `manage: {allowed, ready, reason}`.
+- Journal: `GET /vps/{id}/events` and `GET /events` (all visible servers). Filters `vps_id, category, type, severity,
+  q, from, to`; paging with `before_ts` + `before_id`; `limit` 1 to 200.
+- `GET /settings`: the fixed intervals, retention and the checker's vantage.
+Not built: firewall changes (never), a discovery scan of unknown ports.
+
+## As built: DNS Map (`/api/v1/intel/dns/maps`, owner only)
+- `GET/POST /maps` (create needs `confirm_scope: true`), `GET/PATCH/DELETE /maps/{id}`, `POST /maps/{id}/refresh`
+  (202; one per minute per map; 409 `running` while a run is in progress).
+- `GET /maps/{id}/records?type=&name=&q=&after_name=&after_type=&limit=`, `GET /maps/{id}/graph?max_nodes=`,
+  `GET /maps/{id}/changes?kind=&type=&name=&from=&to=&before_ts=&before_id=&limit=`, `GET /maps/{id}/checks`.
+Every answer says how it was obtained: `confirmed` (two resolvers agreed), the views of each resolver, and the
+run's coverage. See DNS_MAP.md.

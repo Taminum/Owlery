@@ -77,3 +77,33 @@ func TestAlertsOpenRefreshCloseAndScope(t *testing.T) {
 		t.Fatalf("%+v", r)
 	}
 }
+
+// The last alert of a kind must close when its condition is gone. With no conditions of that kind left
+// there is no list of subjects to keep, and an empty list must not be read as "unknown".
+func TestAlertClosesWhenNoConditionOfItsKindRemains(t *testing.T) {
+	w := analyzerWorld(t)
+	ctx := context.Background()
+	t0 := time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC)
+	kinds := []string{store.AlertAgentSilent, store.AlertPanelSync}
+	one := store.Condition{PanelID: w.home.ID, Kind: store.AlertAgentSilent, Subject: "a1", Label: "Агент роутера", Detail: "d"}
+
+	if o, _, err := w.h.st.ApplyConditions(ctx, kinds, []store.Condition{one}, t0); err != nil || o != 1 {
+		t.Fatalf("open: %d %v", o, err)
+	}
+	// Nothing is wrong any more, for any kind.
+	if _, c, err := w.h.st.ApplyConditions(ctx, kinds, nil, t0.Add(time.Minute)); err != nil || c != 1 {
+		t.Fatalf("the alert did not close: closed %d, %v", c, err)
+	}
+	_, b := w.owner.get("/api/v1/alerts?panel_ids=" + w.home.ID)
+	if r := parse[alertsResp](t, b); r.Open != 0 {
+		t.Fatalf("%+v", r)
+	}
+	// A different kind that still has a condition does not keep this one open either.
+	if o, _, _ := w.h.st.ApplyConditions(ctx, kinds, []store.Condition{one}, t0.Add(2*time.Minute)); o != 1 {
+		t.Fatal(o)
+	}
+	other := store.Condition{PanelID: w.home.ID, Kind: store.AlertPanelSync, Subject: "p1", Label: "Панель", Detail: "d"}
+	if _, c, _ := w.h.st.ApplyConditions(ctx, kinds, []store.Condition{other}, t0.Add(3*time.Minute)); c != 1 {
+		t.Fatalf("closed %d", c)
+	}
+}

@@ -50,3 +50,25 @@ or attempted usernames. Failed sign-ins record the reason code and, when the acc
 ## Rate limits (per process)
 Sign-in 10/min per IP; probe 10/min per account; test 6/min per account and panel; manual sync 3/min per
 panel; all other writes 60/min per account.
+
+## Security module
+- **Retention.** Security events, snapshots that recorded a change, and certificate observations are kept
+  180 days and purged hourly in batches of 5000. The audit log, the alerts table's own 90-day rule and all
+  analytics are not touched by it.
+- **Alerts.** Three kinds join the existing ones: `sec_agent_silent` (an enrolled agent not heard for 5 minutes),
+  `sec_tls` (expired, not valid, or inside 30 days) and `sec_port` (a port that started answering after its
+  baseline and is not marked expected, or an expected one that does not answer). Each belongs to the first panel the
+  server is linked to; a server linked to none has no panel and its alerts are shown to the owner only, when no
+  panel filter is chosen. The alerts page is the only channel; there is no push notification.
+- **Backups.** The security tables are in the same database as everything else, so `backup.sh` covers them.
+- **Rollback.** Migrations 0021 to 0024 only add tables and one column. An older API ignores them; nothing
+  existing is changed, so going back to a previous release needs no database step.
+
+## DNS Map
+- **Resolvers.** Studies ask 1.1.1.1 and 8.8.8.8 over UDP/TCP port 53, and the zone's authoritative servers when
+  their address is public. Outbound port 53 must be open from the API host.
+- **Retention.** DNS changes and run records are kept 180 days, separately from Security. Maps and the current
+  record sets are not purged; archiving a map keeps its history.
+- **Alerts.** `dns_check_failed` and `dns_change` belong to no panel and are shown to the owner under
+  "Сетевая разведка". A record set that flips often is marked volatile and raises no alert.
+- **Rollback.** Migration 0026 only adds tables; an older API ignores them.

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { DnsMapList } from './DnsMap'
 import { t, type MsgKey } from '../i18n'
 import { api } from '../lib/api'
 import { formatInt } from '../lib/format'
@@ -330,6 +331,7 @@ function SubTab({ target }: { target: string }) {
 export default function Intel() {
   const [params, setParams] = useSearchParams()
   const target = params.get('target') ?? ''
+  const view = params.get('view') === 'dns' ? 'dns' : 'lookup'
   const [text, setText] = useState(target)
   // The server validates and normalises the target; the kind it reports decides which tabs make sense.
   const probe = useLoad((s) => (target ? api.get<Envelope<unknown>>(`/api/v1/intel/lookup?target=${encodeURIComponent(target)}`, s) : Promise.resolve(null)), [target])
@@ -338,6 +340,14 @@ export default function Intel() {
   return (
     <div className="space-y-5">
       <PageHead title={t('intel.title')} subtitle={t('intel.subtitle')} />
+      <div role="group" aria-label={t('intel.title')} className="flex gap-2">
+        {(['lookup', 'dns'] as const).map((v) => (
+          <button key={v} type="button" aria-pressed={view === v} onClick={() => setParams(v === 'dns' ? { view: 'dns' } : {})}
+            className={`h-8 rounded-control border px-3 text-[13px] ${view === v ? 'border-cyan bg-elevated text-fg' : 'border-line text-muted hover:text-fg'}`}>{t(v === 'dns' ? 'dns.view.map' : 'dns.view.lookup')}</button>
+        ))}
+      </div>
+      {view === 'dns' && <DnsMapList />}
+      {view === 'lookup' && <>
       <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); const v = text.trim(); if (v) setParams({ target: v }) }}>
         <input aria-label={t('intel.placeholder')} className={`${inputCls} min-w-[260px] flex-1`} value={text} onChange={(e) => setText(e.target.value)} placeholder={t('intel.placeholder')} />
         <PrimaryButton type="submit">{t('intel.go')}</PrimaryButton>
@@ -345,6 +355,7 @@ export default function Intel() {
       {target && probe.error && <p role="alert" className="text-[13px] text-red">{probe.error}</p>}
       {target && kind && <Panels key={probe.data?.target} target={probe.data?.target ?? target} kind={kind} />}
       {!target && <p className="py-8 text-center text-[13px] text-muted">{t('intel.empty')}</p>}
+      </>}
     </div>
   )
 }

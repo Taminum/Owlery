@@ -1,0 +1,42 @@
+# RemnaScope Fail2ban helper. The only process that touches Fail2ban's control socket on behalf of the
+# security agent. It offers four operations over a Unix socket (status, jail status, ban one address, unban one
+# address), checks every field, and runs fail2ban-client with a fixed argument list and no shell.
+# See docs/SECURITY_AGENT.md.
+[Unit]
+Description=RemnaScope Fail2ban helper
+After=fail2ban.service
+Wants=fail2ban.service
+Before=remnascope-secagent.service
+
+[Service]
+# Its own user, allowed to use Fail2ban's socket through the group remnascope-f2b. The primary group is the
+# agent's, so the socket it creates is reachable by the agent and by nobody else.
+User=remnascope-f2b
+Group=remnascope-sec
+SupplementaryGroups=remnascope-f2b
+RuntimeDirectory=remnascope-sec
+RuntimeDirectoryMode=0750
+ExecStart=/usr/local/bin/remnascope-secagent helper -socket /run/remnascope-sec/f2b.sock
+Restart=always
+RestartSec=3
+
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+UMask=0007
+MemoryMax=64M
+TasksMax=32
+
+[Install]
+WantedBy=multi-user.target
