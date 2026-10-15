@@ -12,8 +12,9 @@ import type { AccountRow, AuditRow, Membership, Role, RulesResponse } from '../l
 import { Card, Chip } from '../components/ui'
 import AutoClassify from './AutoClassify'
 import { Field, GhostButton, Modal, PrimaryButton, inputCls } from '../components/Modal'
+import { NotifyTab } from '../components/NotifyTab'
 
-type Tab = 'profile' | 'accounts' | 'rules' | 'autoclassify' | 'audit'
+type Tab = 'profile' | 'accounts' | 'rules' | 'autoclassify' | 'notify' | 'audit'
 
 export default function Settings() {
   const { state } = useAuth()
@@ -25,6 +26,7 @@ export default function Settings() {
     { id: 'accounts', label: 'settings.tab.accounts', show: owner },
     { id: 'rules', label: 'settings.tab.rules', show: owner },
     { id: 'autoclassify', label: 'settings.tab.autoclassify', show: owner },
+    { id: 'notify', label: 'settings.tab.notify', show: owner },
     { id: 'audit', label: 'settings.tab.audit', show: true },
   ]
   return (
@@ -43,6 +45,7 @@ export default function Settings() {
         {tab === 'accounts' && owner && <Accounts />}
         {tab === 'rules' && owner && <RulesTab />}
         {tab === 'autoclassify' && owner && <AutoClassify />}
+        {tab === 'notify' && owner && <NotifyTab />}
         {tab === 'audit' && <Audit />}
       </div>
     </div>
