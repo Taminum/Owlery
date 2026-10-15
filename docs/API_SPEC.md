@@ -83,3 +83,9 @@ run's coverage. See DNS_MAP.md.
 ## Digest
 
 `GET /api/v1/analytics/digest?range=24h` (or `from`/`to`, plus `panel_ids`) answers "what changed" in one place: new sites (`new_only` view of Sites, top 10), the five busiest devices behind the router, devices not seen before the period (only for periods up to 14 days), the security journal counted by type for the servers the caller can see, DNS change counts (owner only, `null` otherwise) and the number of open alerts. Empty parts are empty arrays, not missing.
+
+## AmneziaWG containers (owner only)
+
+- `GET /api/v1/awg/hosts`: the AmneziaWG hosts, with `online`, `container_admin` (the host opted in) and the containers each reported.
+- `POST /api/v1/awg/hosts/{id}/containers` `{container, port, subnet}`: creates one container in the Amnezia layout. `container` is `amnezia-awg` or `amnezia-awg` plus up to two digits, `port` 1024 to 65535, `subnet` a /24 in 10.0.0.0/8. Answers 409 `container_admin_off` when the host did not opt in.
+- `POST /api/v1/awg/instances/{id}/remove` `{confirm}`: removes the container and every device in it. `confirm` must equal the container's name.

@@ -36,6 +36,7 @@ type Config struct {
 	AWGArgv       []string // awg source: the helper command
 	AWGEvery      time.Duration
 	AWGManage     []string // awg source: the management helper; empty = devices cannot be added or revoked
+	AWGContainer  []string // awg source: the helper that creates and removes containers; empty = the host did not opt in
 	AWGSensorSock string   // awg source: Unix socket the traffic sensors report to; empty = no sensor
 	AWGSensorOf   []string // awg source: the containers whose reports are accepted
 	FromStart     bool
@@ -224,7 +225,7 @@ func runAWG(ctx context.Context, cfg Config, log *slog.Logger) error {
 		}
 	}}
 	link := &AWGLink{URL: cfg.ServerURL, TokenFile: cfg.TokenFile, CAFile: cfg.CAFile, AllowInsecure: cfg.AllowInsecure, Version: cfg.Version, SourceID: cfg.SourceID,
-		Snapshots: snaps, ManageArgv: cfg.AWGManage, Log: log}
+		Snapshots: snaps, ManageArgv: cfg.AWGManage, ContainerArgv: cfg.AWGContainer, Log: log}
 	if cfg.AWGSensorSock != "" && len(cfg.AWGSensorOf) > 0 {
 		flows := make(chan ingestproto.AWGFlows, 8)
 		link.Flows = flows
