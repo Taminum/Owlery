@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Check, Copy, KeyRound, Plus, ShieldCheck, Trash2 } from 'lucide-react'
 import { toDataURL } from 'qrcode'
 import { t, type MsgKey } from '../i18n'
@@ -13,12 +14,15 @@ import { Card, Chip } from '../components/ui'
 import AutoClassify from './AutoClassify'
 import { Field, GhostButton, Modal, PrimaryButton, inputCls } from '../components/Modal'
 import { NotifyTab } from '../components/NotifyTab'
+import { AppearanceTab } from '../ember/AppearanceTab'
 
-type Tab = 'profile' | 'accounts' | 'rules' | 'autoclassify' | 'notify' | 'audit'
+type Tab = 'profile' | 'accounts' | 'rules' | 'autoclassify' | 'notify' | 'appearance' | 'audit'
 
 export default function Settings() {
   const { state } = useAuth()
-  const [tab, setTab] = useState<Tab>('profile')
+  const [params] = useSearchParams()
+  const wanted = params.get('tab') as Tab | null
+  const [tab, setTab] = useState<Tab>(wanted ?? 'profile')
   if (state.status !== 'authed') return null
   const owner = state.me.account.is_owner
   const tabs: { id: Tab; label: MsgKey; show: boolean }[] = [
@@ -27,6 +31,7 @@ export default function Settings() {
     { id: 'rules', label: 'settings.tab.rules', show: owner },
     { id: 'autoclassify', label: 'settings.tab.autoclassify', show: owner },
     { id: 'notify', label: 'settings.tab.notify', show: owner },
+    { id: 'appearance', label: 'settings.tab.appearance', show: true },
     { id: 'audit', label: 'settings.tab.audit', show: true },
   ]
   return (
@@ -46,6 +51,7 @@ export default function Settings() {
         {tab === 'rules' && owner && <RulesTab />}
         {tab === 'autoclassify' && owner && <AutoClassify />}
         {tab === 'notify' && owner && <NotifyTab />}
+        {tab === 'appearance' && <AppearanceTab />}
         {tab === 'audit' && <Audit />}
       </div>
     </div>
