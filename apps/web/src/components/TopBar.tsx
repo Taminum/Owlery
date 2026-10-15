@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { PAGE_WIDTH } from '../lib/layout'
-import { CalendarClock, LogOut, Menu, RefreshCw, Server, Spline, UserRound } from 'lucide-react'
+import { CalendarClock, LogOut, Menu, RefreshCw, Server, SlidersHorizontal, Spline, UserRound } from 'lucide-react'
 import { useAuth } from '../lib/auth'
 import { t } from '../i18n'
 import { RANGES, REFRESH, TIMEZONES, setPanelScope, type Filters, type Range } from '../lib/filters'
@@ -100,21 +100,31 @@ function AccountMenu() {
 
 export function TopBar({ filters, panels, update, onRefresh, loading, onMenu }: Props) {
   const smooth = useSmooth()
+  const [more, setMore] = useState(false)
   const presets = RANGES.filter((r): r is Exclude<Range, 'custom'> => r !== 'custom')
   return (
-    <header className="sticky top-0 z-20 border-b border-line bg-canvas/95 backdrop-blur">
+    <header className="top-0 z-20 border-b border-line bg-canvas [@media(min-height:700px)]:sticky">
       <div className={`${PAGE_WIDTH} flex flex-wrap items-center gap-2.5 py-3`}>
         <button type="button" onClick={onMenu} aria-label={t('nav.menu')} className={`${controlCls} grid w-10 place-items-center px-0 lg:hidden`}>
           <Menu size={18} aria-hidden />
         </button>
 
         <label className="sr-only" htmlFor="panel-select">{t('filter.panel')}</label>
-        <select id="panel-select" value={filters.panels.length === 1 ? filters.panels[0] : ''} onChange={(e) => update((f) => setPanelScope(f, e.target.value ? [e.target.value] : [], panels))} className={`${controlCls} min-w-[150px]`}>
+        <select id="panel-select" value={filters.panels.length === 1 ? filters.panels[0] : ''} onChange={(e) => update((f) => setPanelScope(f, e.target.value ? [e.target.value] : [], panels))} className={`${controlCls} min-w-0 flex-1 sm:min-w-[150px] sm:flex-none`}>
           <option value="">{t('filter.panelAll')}</option>
           {panels.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
 
         <NodePicker filters={filters} panels={panels} update={update} />
+
+        <button type="button" onClick={() => setMore((v) => !v)} aria-expanded={more} aria-label={t('filter.more')} title={t('filter.more')}
+          className={`${controlCls} ml-auto grid w-10 place-items-center px-0 sm:hidden ${more ? 'border-cyan text-fg' : ''}`}>
+          <SlidersHorizontal size={16} aria-hidden />
+        </button>
+
+        {/* On a phone the period, time zone and refresh controls sit behind the button above, so the page is not
+            pushed down by five rows of filters. From the sm width up they are in the bar as before. */}
+        <div className={`${more ? 'flex' : 'hidden'} w-full flex-wrap items-center gap-2.5 sm:contents`}>
 
         <div role="group" aria-label={t('filter.range')} className="flex h-10 items-center rounded-control border border-line bg-surface p-0.5">
           {presets.map((r) => (
@@ -142,6 +152,7 @@ export function TopBar({ filters, panels, update, onRefresh, loading, onMenu }: 
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} aria-hidden />
           </button>
           <AccountMenu />
+        </div>
         </div>
       </div>
     </header>
