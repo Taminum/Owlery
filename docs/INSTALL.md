@@ -12,7 +12,7 @@ Only Caddy publishes ports. Memory limits: postgres 512M, api 256M, web 64M, cad
 ## 1. Get the files and create secrets
 ```bash
 git clone https://github.com/Taminum/RemnaScope.git && cd RemnaScope/deploy/prod
-sudo ./init-secrets.sh scope.example.com v0.1.2
+sudo ./init-secrets.sh scope.example.com v0.2.0
 ```
 The arguments are your host name and the release tag (see the [releases](../../../releases) page; `latest` also works).
 The script creates, once and without printing anything:
