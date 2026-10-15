@@ -105,6 +105,18 @@ through the helper.
 An address banned or unbanned this way also appears in the journal as a Fail2ban event a moment later, from
 the state comparison.
 
+## Running as a checker
+
+An agent started with `-probe` also lets the server ask it to connect to a public TCP port or read a TLS
+certificate, so that a target can be seen from a machine that is not the target. It is off by default and
+is a decision of the host's owner: it makes that host dial public addresses on the server's request. It
+never dials a private, loopback or link-local address, never sends data on a TCP probe, and runs at most
+four probes at once.
+
+To turn it on, add a systemd drop-in that repeats `ExecStart` with `-probe` appended (see
+`deploy/secagent/probe.conf.example`) and restart the service. The agent then announces `probe` on its next
+connection; see [SECURITY_CHECKS.md](SECURITY_CHECKS.md) for how the server uses it.
+
 ## Limits of this version
 
 - No journal tailing yet: Fail2ban history comes from comparing states every 30 seconds, so a ban and an
@@ -113,7 +125,8 @@ the state comparison.
   `fail2ban.bans_unobserved` with the number. Naming them needs read access to Fail2ban's log, which is a
   privilege decision for the host owner (the log is readable by root and group `adm`), not something this
   agent asks for on its own.
-- Firewall rules are stored as canonical text (counters, handles, timestamps and Fail2ban's bans removed),
-  not as a structured model; the change view is "the rules changed", without a line diff.
+- Firewall rules are stored as canonical text (counters, handles, timestamps and Fail2ban's bans removed).
+  The screen reads them into tables, chains and policies, and compares two stored readings line by line;
+  it does not interpret what a rule allows. Whether a port is really open is for the external check to say.
 - Listening sockets are the host's own. Containers with their own network namespace may not appear.
 - Ban and unban act on Fail2ban's jails only. Nothing in RemnaScope changes the firewall.

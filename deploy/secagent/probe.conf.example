@@ -1,0 +1,12 @@
+# /etc/systemd/system/remnascope-secagent.service.d/probe.conf
+#
+# Makes this host a checker: the RemnaScope server may ask it to connect to a public TCP port or read a TLS
+# certificate. Copy the ExecStart of your own unit and add -probe; the empty ExecStart= line is required.
+[Service]
+ExecStart=
+ExecStart=/usr/local/bin/remnascope-secagent \
+  -server wss://SCOPE_HOST \
+  -token-file /etc/remnascope/secagent.token \
+  -helper-socket /run/remnascope-sec/f2b.sock \
+  -state-dir /var/lib/remnascope-secagent \
+  -probe

@@ -4,16 +4,25 @@ import { api } from '../lib/api'
 import { errorText } from '../lib/errors'
 import { formatDateTime } from '../lib/format'
 import { useLoad } from '../hooks/useLoad'
-import type { PublicPort, PublicPortsResponse, TLSEndpoint, TLSResponse } from '../lib/types'
+import type { PublicPort, PublicPortsResponse, TLSEndpoint, TLSResponse, Vantage } from '../lib/types'
 import { Card, Chip } from './ui'
 import { Field, GhostButton, PrimaryButton, inputCls } from './Modal'
 
 type Tone = 'muted' | 'amber' | 'green' | 'red' | 'cyan'
 
 /** The checker's point of view, always on screen: a result without it would read as more than it is. */
-function VantageNote({ independent }: { independent: boolean }) {
-  if (independent) return null
-  return <p role="note" className="mb-3 rounded-control border border-amber/40 px-3 py-2 text-[13px] text-amber">{t('sec.ext.vantage')}</p>
+/** Says where the checks were made from. A result from the RemnaScope server is not an independent point of
+ *  view, and a result from a checker on another machine is: each endpoint carries its own. */
+function VantageNote({ items }: { items: { vantage: Vantage | null; last_checked_at: string | null }[] }) {
+  const checked = items.filter((i) => i.last_checked_at)
+  const independent = [...new Set(checked.filter((i) => i.vantage?.independent).map((i) => i.vantage!.name || i.vantage!.id))]
+  const warn = checked.length === 0 || checked.some((i) => !i.vantage?.independent)
+  return (
+    <>
+      {independent.length > 0 && <p role="note" className="mb-3 rounded-control border border-green/40 px-3 py-2 text-[13px] text-green">{t('sec.ext.vantage.agent', { name: independent.join(', ') })}</p>}
+      {warn && <p role="note" className="mb-3 rounded-control border border-amber/40 px-3 py-2 text-[13px] text-amber">{t('sec.ext.vantage')}</p>}
+    </>
+  )
 }
 
 const PORT_TONE: Record<string, Tone> = { reachable: 'green', refused: 'muted', timeout: 'amber', filtered_or_unknown: 'amber', error: 'muted' }
@@ -95,7 +104,7 @@ export function PublicPorts({ vpsId, canEdit }: { vpsId: string; canEdit: boolea
   return (
     <Card title={t('sec.ext.title')} note={t('sec.ext.coverage', { n: data.interval_minutes })}
       right={canEdit ? <RunNow vpsId={vpsId} kind="ports" onDone={reload} /> : undefined}>
-      <VantageNote independent={data.vantage.independent} />
+      <VantageNote items={data.items} />
       {err && <p role="alert" className="mb-2 text-[13px] text-red">{err}</p>}
       {data.items.length === 0 && <p className="text-[13px] text-muted">{t('sec.ext.none')}</p>}
       {data.items.length > 0 && (
@@ -182,7 +191,7 @@ export function TLSTab({ vpsId, canEdit }: { vpsId: string; canEdit: boolean }) 
   if (!data) return null
   return (
     <Card title={t('sec.tls.title')} note={t('sec.tls.hint', { n: data.interval_hours })} right={canEdit ? <RunNow vpsId={vpsId} kind="tls" onDone={reload} /> : undefined}>
-      <VantageNote independent={data.vantage.independent} />
+      <VantageNote items={data.items} />
       {err && <p role="alert" className="mb-2 text-[13px] text-red">{err}</p>}
       {data.items.length === 0 && <p className="text-[13px] text-muted">{t('sec.tls.none')}</p>}
       {data.items.length > 0 && (
