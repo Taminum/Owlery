@@ -268,12 +268,33 @@ var (
 	iptCountRe   = regexp.MustCompile(` \[\d+:\d+\]`)
 )
 
-// CanonicalNft removes what changes without the rules changing: packet counters, handles, comments.
+// Fail2ban keeps the addresses it has banned inside the firewall: the elements of its nftables set, or one
+// per-address rule in its iptables chains. They change with every ban and unban, which is the journal's
+// Fail2ban events and not a change of the firewall's rules, so they are left out of the canonical form.
+var f2bIptablesRe = regexp.MustCompile(`^-A f2b-\S+ -s \S+ `)
+
+func isFail2banTable(name string) bool { return strings.HasPrefix(name, "f2b") }
+
+// CanonicalNft removes what changes without the rules changing: packet counters, handles, comments, and
+// the banned addresses Fail2ban keeps in its own table.
 func CanonicalNft(s string) string {
 	var out []string
+	table := ""
+	skipping := false // inside a multi-line "elements = { ... }" of a Fail2ban set
 	for _, line := range strings.Split(s, "\n") {
 		t := strings.TrimSpace(line)
+		if skipping {
+			skipping = !strings.Contains(t, "}")
+			continue
+		}
 		if t == "" || strings.HasPrefix(t, "#") {
+			continue
+		}
+		if f := strings.Fields(t); len(f) >= 3 && f[0] == "table" {
+			table = f[2]
+		}
+		if isFail2banTable(table) && strings.HasPrefix(t, "elements") {
+			skipping = !strings.Contains(t, "}")
 			continue
 		}
 		line = nftHandleRe.ReplaceAllString(line, "")
@@ -283,12 +304,12 @@ func CanonicalNft(s string) string {
 	return strings.Join(out, "\n")
 }
 
-// CanonicalIptables removes the generation timestamps and the per-chain counters of iptables-save.
+// CanonicalIptables removes the generation timestamps, the per-chain counters and Fail2ban's per-address rules.
 func CanonicalIptables(s string) string {
 	var out []string
 	for _, line := range strings.Split(s, "\n") {
 		t := strings.TrimSpace(line)
-		if t == "" || strings.HasPrefix(t, "#") {
+		if t == "" || strings.HasPrefix(t, "#") || f2bIptablesRe.MatchString(t) {
 			continue
 		}
 		out = append(out, strings.TrimRight(iptCountRe.ReplaceAllString(line, ""), " \t"))

@@ -176,6 +176,40 @@ func TestFirewallCanonicalFormIgnoresCountersAndTimestamps(t *testing.T) {
 	}
 }
 
+func TestFirewallCanonicalFormIgnoresFail2banBans(t *testing.T) {
+	table := func(elems string) string {
+		return "table inet filter {\n\tchain input {\n\t\ttcp dport 22 accept\n\t}\n}\n" +
+			"table inet f2b-table {\n\tset addr-set-sshd {\n\t\ttype ipv4_addr\n" + elems + "\t}\n\n" +
+			"\tchain f2b-chain {\n\t\ttype filter hook input priority filter - 1; policy accept;\n" +
+			"\t\ttcp dport 22 ip saddr @addr-set-sshd reject with icmp port-unreachable\n\t}\n}\n"
+	}
+	none := CanonicalNft(table(""))
+	one := CanonicalNft(table("\t\telements = { 176.53.159.197 }\n"))
+	many := CanonicalNft(table("\t\telements = { 1.1.1.1 timeout 10m expires 9m,\n\t\t\t\t   2.2.2.2 timeout 10m expires 3m }\n"))
+	if none != one || one != many {
+		t.Fatalf("bans changed the canonical form:\n%s\n---\n%s\n---\n%s", none, one, many)
+	}
+	if !strings.Contains(one, "ip saddr @addr-set-sshd reject") || !strings.Contains(one, "tcp dport 22 accept") || !strings.Contains(many, "chain f2b-chain") {
+		t.Fatalf("the rules themselves, and what follows a skipped block, must stay:\n%s", many)
+	}
+	// A static set in the operator's own table is configuration, and its elements stay.
+	own := CanonicalNft("table inet filter {\n\tset allowed {\n\t\ttype ipv4_addr\n\t\telements = { 203.0.113.9 }\n\t}\n}\n")
+	if !strings.Contains(own, "203.0.113.9") {
+		t.Fatalf("an operator's own set must not be hidden:\n%s", own)
+	}
+
+	ipt := func(extra string) string {
+		return "*filter\n:INPUT ACCEPT [0:0]\n:f2b-sshd - [0:0]\n-A INPUT -p tcp -m multiport --dports 22 -j f2b-sshd\n" + extra + "-A f2b-sshd -j RETURN\nCOMMIT\n"
+	}
+	bans := "-A f2b-sshd -s 203.0.113.5/32 -j REJECT --reject-with icmp-port-unreachable\n-A f2b-sshd -s 198.51.100.1/32 -j REJECT --reject-with icmp-port-unreachable\n"
+	if CanonicalIptables(ipt("")) != CanonicalIptables(ipt(bans)) {
+		t.Fatal("per-address iptables rules changed the canonical form")
+	}
+	if !strings.Contains(CanonicalIptables(ipt(bans)), "-j f2b-sshd") {
+		t.Fatal("the jump into the Fail2ban chain must stay")
+	}
+}
+
 func TestFirewallBackendsAndHonestFailures(t *testing.T) {
 	ctx := context.Background()
 	nft := "table inet filter {\n}\ntable ip nat {\n\tchain p {\n\t}\n}\n"
