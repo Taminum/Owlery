@@ -202,7 +202,7 @@ export function TLSTab({ vpsId, canEdit }: { vpsId: string; canEdit: boolean }) 
               {data.items.map((e) => (
                 <tr key={e.id} className={`border-t border-line align-top ${e.enabled ? '' : 'opacity-50'}`}>
                   <td className="py-2 pr-4 font-mono text-[12px]">{e.host}:{e.port}
-                    <div className="font-sans text-xs text-muted">{e.sni ? `SNI ${e.sni}` : t('sec.tls.nameUnchecked')}{e.enabled ? '' : ` · ${t('sec.ext.disabled')}`}</div>
+                    <div className="font-sans text-xs text-muted">{e.sni ? `SNI ${e.sni}` : t('sec.tls.nameUnchecked')}{e.enabled ? '' : ` · ${t('sec.ext.disabled')}`}{e.source === 'auto' ? ` · ${t('sec.tls.auto')}` : ''}</div>
                     {canEdit && <button type="button" className="font-sans text-xs text-muted underline hover:text-fg" onClick={() => void toggle(e)}>{e.enabled ? t('sec.ext.disable') : t('sec.ext.enable')}</button>}
                   </td>
                   <td className="pr-4">{e.last_state ? <Chip tone={TLS_TONE[e.last_state] ?? 'muted'}>{t(`sec.tls.state.${e.last_state}` as MsgKey)}</Chip> : <span className="text-muted">{t('sec.tls.unchecked')}</span>}</td>

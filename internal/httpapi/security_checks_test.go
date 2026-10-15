@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"testing"
 )
 
@@ -118,5 +119,39 @@ func TestSecurityChecksTargetsScopeAndRateLimit(t *testing.T) {
 	}
 	if st, _ := w.adm.do("POST", "/api/v1/security/vps/"+pv.ID+"/checks/ports/run", nil); st != 404 {
 		t.Errorf("manual run on an invisible server: %d", st)
+	}
+}
+
+func TestDiscoveryScanIsOffUntilAnAdministratorTurnsItOn(t *testing.T) {
+	w := newAgentWorld(t)
+	v := mkVPS(t, w, "Scan", "203.0.113.60", w.work.ID)
+	base := "/api/v1/security/vps/" + v
+	type vpsScan struct {
+		DiscoveryScan bool `json:"discovery_scan"`
+	}
+	_, b := w.owner.get(base)
+	if parse[vpsScan](t, b).DiscoveryScan {
+		t.Fatal("the scan must start off")
+	}
+	if st, _ := w.viewer.do("PATCH", base, map[string]any{"discovery_scan": true}); st != 403 {
+		t.Fatalf("a viewer turned the scan on: %d", st)
+	}
+	st, b := w.owner.do("PATCH", base, map[string]any{"discovery_scan": true})
+	if st != 200 || !parse[vpsScan](t, b).DiscoveryScan {
+		t.Fatalf("%d %s", st, b)
+	}
+	_, pb := w.owner.get(base + "/public-ports")
+	var ports struct {
+		Coverage struct {
+			Discovery string `json:"discovery"`
+		} `json:"coverage"`
+	}
+	if err := json.Unmarshal(pb, &ports); err != nil || ports.Coverage.Discovery != "on" {
+		t.Fatalf("%s", pb)
+	}
+	// Other fields leave it alone.
+	st, b = w.owner.do("PATCH", base, map[string]any{"note": "x"})
+	if st != 200 || !parse[vpsScan](t, b).DiscoveryScan {
+		t.Fatalf("%d %s", st, b)
 	}
 }

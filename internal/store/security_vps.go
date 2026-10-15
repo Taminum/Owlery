@@ -39,13 +39,18 @@ type VPS struct {
 	UpdatedAt time.Time    `json:"updated_at"`
 	Addresses []VPSAddress `json:"addresses"`
 	Links     []VPSLink    `json:"links"`
+	// DiscoveryScan is opt-in: when on, a fixed list of common ports is tried on the registered IP
+	// addresses once a day, and what answers becomes a port endpoint that is not expected.
+	DiscoveryScan   bool       `json:"discovery_scan"`
+	DiscoveryScanAt *time.Time `json:"discovery_scan_at"`
 }
 
 type VPSPatch struct {
-	Name      *string
-	Note      *string
-	Enabled   *bool
-	Addresses *[]VPSAddress // replaces the whole set
+	Name          *string
+	Note          *string
+	Enabled       *bool
+	Addresses     *[]VPSAddress // replaces the whole set
+	DiscoveryScan *bool
 }
 
 // vpsVisible is the predicate every VPS read shares: the server is not archived and the actor is the
@@ -58,12 +63,12 @@ func vpsVisible(sc Scope, n int) (string, []any) {
 		strconv.Itoa(n+1) + `::uuid[]))`, []any{uuids(sc.IDs)}
 }
 
-const vpsCols = `v.id, v.name, v.origin, v.enabled, v.note, v.created_at, v.updated_at`
+const vpsCols = `v.id, v.name, v.origin, v.enabled, v.note, v.created_at, v.updated_at, v.discovery_scan, v.discovery_scan_at`
 
 func scanVPS(r pgx.Row) (VPS, error) {
 	var v VPS
 	var id uuid.UUID
-	err := r.Scan(&id, &v.Name, &v.Origin, &v.Enabled, &v.Note, &v.CreatedAt, &v.UpdatedAt)
+	err := r.Scan(&id, &v.Name, &v.Origin, &v.Enabled, &v.Note, &v.CreatedAt, &v.UpdatedAt, &v.DiscoveryScan, &v.DiscoveryScanAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return v, ErrNotFound
 	}
@@ -220,11 +225,12 @@ func (s *Store) UpdateVPS(ctx context.Context, sc Scope, id string, p VPSPatch) 
 
 func (s *Store) updateVPS(ctx context.Context, sc Scope, u uuid.UUID, p VPSPatch) (VPS, error) {
 	err := s.inTx(ctx, func(tx pgx.Tx) error {
-		pred, args := vpsVisible(sc, 4)
+		pred, args := vpsVisible(sc, 5)
 		tag, err := tx.Exec(ctx, `UPDATE security_vps v SET
-				name = COALESCE($2, v.name), note = COALESCE($3, v.note), enabled = COALESCE($4, v.enabled), updated_at = now()
+				name = COALESCE($2, v.name), note = COALESCE($3, v.note), enabled = COALESCE($4, v.enabled),
+				discovery_scan = COALESCE($5, v.discovery_scan), updated_at = now()
 			WHERE v.id=$1 AND `+pred,
-			append([]any{u, p.Name, p.Note, p.Enabled}, args...)...)
+			append([]any{u, p.Name, p.Note, p.Enabled, p.DiscoveryScan}, args...)...)
 		if err != nil {
 			return err
 		}
