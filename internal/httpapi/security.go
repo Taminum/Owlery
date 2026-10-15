@@ -35,7 +35,25 @@ func (s *Server) vpsNotFound(w http.ResponseWriter, r *http.Request) {
 	s.writeErr(w, r, http.StatusNotFound, "not_found", "server not found")
 }
 
-// vpsAddresses validates and normalises what a person typed: an IP address or a domain, nothing else.
+// normAddress validates and normalises one address a person typed: an IP address or a domain, nothing else.
+func normAddress(raw string) (store.VPSAddress, bool) {
+	tg, err := netintel.Parse(raw)
+	if err != nil {
+		return store.VPSAddress{}, false
+	}
+	switch tg.Kind {
+	case netintel.KindIP:
+		a := store.VPSAddress{Address: tg.Addr.Unmap().String(), Kind: "ipv6"}
+		if tg.Addr.Unmap().Is4() {
+			a.Kind = "ipv4"
+		}
+		return a, true
+	case netintel.KindDomain:
+		return store.VPSAddress{Address: tg.Value, Kind: "domain"}, true
+	}
+	return store.VPSAddress{}, false
+}
+
 func vpsAddresses(in []string) ([]store.VPSAddress, string) {
 	if len(in) > store.MaxVPSAddresses {
 		return nil, "too many addresses"
@@ -43,21 +61,9 @@ func vpsAddresses(in []string) ([]store.VPSAddress, string) {
 	seen := map[string]bool{}
 	out := make([]store.VPSAddress, 0, len(in))
 	for _, raw := range in {
-		tg, err := netintel.Parse(raw)
-		if err != nil {
+		a, ok := normAddress(raw)
+		if !ok {
 			return nil, "invalid address: " + strings.TrimSpace(raw)
-		}
-		var a store.VPSAddress
-		switch tg.Kind {
-		case netintel.KindIP:
-			a = store.VPSAddress{Address: tg.Addr.Unmap().String(), Kind: "ipv6"}
-			if tg.Addr.Unmap().Is4() {
-				a.Kind = "ipv4"
-			}
-		case netintel.KindDomain:
-			a = store.VPSAddress{Address: tg.Value, Kind: "domain"}
-		default:
-			return nil, "an address must be an IP or a domain"
 		}
 		if !seen[a.Address] {
 			seen[a.Address] = true
