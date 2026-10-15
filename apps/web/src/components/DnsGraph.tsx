@@ -56,7 +56,7 @@ export function DnsGraph({ graph, selected, onSelect, query }: { graph: Graph; s
 
   return (
     <div className="overflow-auto rounded-control border border-line bg-surface">
-      <svg role="img" aria-label={t('dns.tab.map')} width={COL_X.ip + W + 20} height={height} className="block min-w-full">
+      <svg role="img" aria-label={t('dns.tab.map')} viewBox={`0 0 ${COL_X.ip + W + 20} ${height}`} width="100%" className="block min-w-[640px]" style={{ aspectRatio: `${COL_X.ip + W + 20} / ${height}` }}>
         {graph.edges.map((e: DnsGraphEdge, i) => {
           const a = placed.get(e.from)
           const b = placed.get(e.to)

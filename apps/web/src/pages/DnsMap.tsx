@@ -144,6 +144,8 @@ export function DnsMapDetail() {
   if (error) return <p role="alert" className="text-[13px] text-red">{error}</p>
   if (!data) return <TableSkeleton />
   const m = data.map
+  // A run that finishes changes what every tab shows, so the tabs reload when it does.
+  const rk = `${m.last_run_at ?? ''}|${m.last_status ?? ''}`
   async function refresh() {
     setErr('')
     setMsg('')
@@ -183,10 +185,10 @@ export function DnsMapDetail() {
             className={`h-8 rounded-control border px-3 text-[13px] ${tab === x ? 'border-cyan bg-elevated text-fg' : 'border-line text-muted hover:text-fg'}`}>{t(`dns.tab.${x}` as MsgKey)}</button>
         ))}
       </div>
-      {tab === 'map' && <MapTab id={id} />}
-      {tab === 'records' && <RecordsTab id={id} />}
-      {tab === 'history' && <HistoryTab id={id} />}
-      {tab === 'checks' && <ChecksTab id={id} />}
+      {tab === 'map' && <MapTab id={id} rk={rk} finished={!!m.last_run_at} />}
+      {tab === 'records' && <RecordsTab id={id} rk={rk} />}
+      {tab === 'history' && <HistoryTab id={id} rk={rk} />}
+      {tab === 'checks' && <ChecksTab id={id} rk={rk} />}
       <div><DangerButton onClick={() => setConfirm(true)}>{t('dns.archive')}</DangerButton></div>
       {confirm && (
         <Modal title={t('dns.archive')} onClose={() => setConfirm(false)}>
@@ -200,11 +202,11 @@ export function DnsMapDetail() {
 
 // ---- map -----------------------------------------------------------------------------------------
 
-function MapTab({ id }: { id: string }) {
+function MapTab({ id, rk, finished }: { id: string; rk: string; finished: boolean }) {
   const [max, setMax] = useState(150)
   const [selected, setSelected] = useState<DnsGraphNode | null>(null)
   const [query, setQuery] = useState('')
-  const { data, error } = useLoad((s) => api.get<GraphData>(`${BASE}/${id}/graph?max_nodes=${max}`, s), [id, max], 30_000)
+  const { data, error } = useLoad((s) => api.get<GraphData>(`${BASE}/${id}/graph?max_nodes=${max}`, s), [id, max, rk], 30_000)
   if (error) return <p role="alert" className="text-[13px] text-red">{error}</p>
   if (!data) return <TableSkeleton />
   return (
@@ -215,7 +217,7 @@ function MapTab({ id }: { id: string }) {
           <select id="dns-max" className={inputCls} value={max} onChange={(e) => setMax(Number(e.target.value))}>{[50, 150, 400].map((n) => <option key={n} value={n}>{n}</option>)}</select>
         </Field>
       </div>
-      {data.nodes.length === 0 ? <p className="text-[13px] text-muted">{t('dns.map.empty')}</p> : (
+      {data.nodes.length === 0 ? <p className="text-[13px] text-muted">{t(finished ? 'dns.map.noRecords' : 'dns.map.empty')}</p> : (
         <DnsGraph graph={data} selected={selected?.id ?? null} onSelect={setSelected} query={query} />
       )}
       {data.truncated && <p className="mt-2 text-[13px] text-amber">{t('dns.map.truncated', { n: data.nodes.length, m: data.total_nodes })}</p>}
@@ -254,7 +256,7 @@ function ValueText({ r, v }: { r: DnsRecord; v: string }) {
   return <>{v}</>
 }
 
-function RecordsTab({ id }: { id: string }) {
+function RecordsTab({ id, rk }: { id: string; rk: string }) {
   const [type, setType] = useState('')
   const [q, setQ] = useState('')
   const [dq, setDq] = useState('')
@@ -269,7 +271,7 @@ function RecordsTab({ id }: { id: string }) {
   if (type) qs.set('type', type)
   if (dq) qs.set('q', dq)
   const key = qs.toString()
-  const first = useLoad((s) => api.get<{ items: DnsRecord[]; more: boolean }>(`${BASE}/${id}/records?${key}`, s), [id, key], 30_000)
+  const first = useLoad((s) => api.get<{ items: DnsRecord[]; more: boolean }>(`${BASE}/${id}/records?${key}`, s), [id, key, rk], 30_000)
   const added = extra.key === key ? extra : { key, items: [], more: null }
   const items = [...(first.data?.items ?? []), ...added.items]
   const more = added.more ?? first.data?.more ?? false
@@ -337,7 +339,7 @@ function RecordsTab({ id }: { id: string }) {
 
 const KINDS = ['dns.record_added', 'dns.record_removed', 'dns.value_changed', 'dns.mx_changed', 'dns.ns_changed', 'dns.spf_changed', 'dns.dmarc_changed', 'dns.check_failed', 'dns.check_recovered']
 
-function HistoryTab({ id }: { id: string }) {
+function HistoryTab({ id, rk }: { id: string; rk: string }) {
   const [kind, setKind] = useState('')
   const [type, setType] = useState('')
   const [extra, setExtra] = useState<{ key: string; items: DnsChange[]; more: boolean | null }>({ key: '', items: [], more: null })
@@ -346,7 +348,7 @@ function HistoryTab({ id }: { id: string }) {
   if (kind) qs.set('kind', kind)
   if (type) qs.set('type', type)
   const key = qs.toString()
-  const first = useLoad((s) => api.get<{ items: DnsChange[]; more: boolean }>(`${BASE}/${id}/changes?${key}`, s), [id, key], 30_000)
+  const first = useLoad((s) => api.get<{ items: DnsChange[]; more: boolean }>(`${BASE}/${id}/changes?${key}`, s), [id, key, rk], 30_000)
   const added = extra.key === key ? extra : { key, items: [], more: null }
   const items = [...(first.data?.items ?? []), ...added.items]
   const more = added.more ?? first.data?.more ?? false
@@ -401,8 +403,8 @@ function HistoryTab({ id }: { id: string }) {
 
 // ---- checks --------------------------------------------------------------------------------------
 
-function ChecksTab({ id }: { id: string }) {
-  const { data, error } = useLoad((s) => api.get<{ items: DnsRun[] }>(`${BASE}/${id}/checks?limit=20`, s), [id], 20_000)
+function ChecksTab({ id, rk }: { id: string; rk: string }) {
+  const { data, error } = useLoad((s) => api.get<{ items: DnsRun[] }>(`${BASE}/${id}/checks?limit=20`, s), [id, rk], 20_000)
   if (error) return <p role="alert" className="text-[13px] text-red">{error}</p>
   if (!data) return <TableSkeleton />
   if (data.items.length === 0) return <Card><p className="text-[13px] text-muted">{t('dns.checks.none')}</p></Card>
