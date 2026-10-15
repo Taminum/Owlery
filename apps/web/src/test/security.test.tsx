@@ -253,4 +253,24 @@ describe('Security page', () => {
       expect(screen.getByRole('button', { name: 'Разблокировать' })).toBeDisabled()
     })
   })
+
+  describe('server cards', () => {
+    const card = (id: string, name: string, summary: object) => vps({ id, name, summary })
+    it('shows how many addresses Fail2ban has blocked, and says when there is no agent or the data is old', async () => {
+      mockApi({ me: owner, handler: (r: Req) => (r.path === '/api/v1/security/vps' ? { status: 200, body: { can_create: true, items: [
+        card('a', 'Live', { agent: 'online', fail2ban: { state: 'ok', banned: 7, total_banned: 412, jails: 2, observed_at: '2026-10-15T12:00:00Z' } }),
+        card('b', 'Old', { agent: 'offline', fail2ban: { state: 'stale', banned: 3, total_banned: 20, jails: 1, observed_at: '2026-10-15T09:00:00Z' } }),
+        card('c', 'Bare', { agent: 'none', fail2ban: { state: 'agent_required', banned: 0, total_banned: 0, jails: 0, observed_at: null } }),
+        card('d', 'Denied', { agent: 'online', fail2ban: { state: 'permission_denied', banned: 0, total_banned: 0, jails: 0, observed_at: null } }),
+      ] } } : undefined) })
+      renderSec('/security')
+      expect(await screen.findByText('заблокировано сейчас: 7')).toBeInTheDocument()
+      expect(screen.getByText(/за всё время: 412/)).toBeInTheDocument()
+      expect(screen.getByText(/данные устарели: 3/)).toBeInTheDocument()
+      expect(screen.getByText('нужен агент')).toBeInTheDocument()
+      expect(screen.getByText('нет прав на чтение')).toBeInTheDocument()
+      // No number is invented for a server that cannot be read.
+      expect(screen.queryByText('заблокировано сейчас: 0')).toBeNull()
+    })
+  })
 })

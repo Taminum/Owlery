@@ -4,9 +4,11 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/Taminum/RemnaScope/internal/auth"
 	"github.com/Taminum/RemnaScope/internal/netintel"
+	"github.com/Taminum/RemnaScope/internal/secproto"
 	"github.com/Taminum/RemnaScope/internal/store"
 )
 
@@ -16,7 +18,50 @@ import (
 
 type vpsOut struct {
 	store.VPS
-	CanEdit bool `json:"can_edit"`
+	CanEdit bool       `json:"can_edit"`
+	Summary secSummary `json:"summary"`
+}
+
+// secSummary is the card's one-glance picture. Each part says how fresh it is: a number from old data is
+// shown as old, and a server with no agent says so instead of showing zero.
+type secSummary struct {
+	Agent    string `json:"agent"` // none | waiting | online | offline
+	Fail2ban struct {
+		State       string     `json:"state"` // agent_required | waiting | ok | stale | not_installed | stopped | permission_denied | unsupported | error
+		Banned      int        `json:"banned"`
+		TotalBanned int        `json:"total_banned"`
+		Jails       int        `json:"jails"`
+		ObservedAt  *time.Time `json:"observed_at"`
+	} `json:"fail2ban"`
+}
+
+func summaryOf(x store.SecSummary, ok bool, now time.Time) secSummary {
+	var o secSummary
+	o.Agent, o.Fail2ban.State = "none", "agent_required"
+	if !ok || x.AgentStatus == "" {
+		return o
+	}
+	switch {
+	case x.AgentLastSeen == nil:
+		o.Agent = "waiting"
+	case now.Sub(*x.AgentLastSeen) < secproto.StaleAfter:
+		o.Agent = "online"
+	default:
+		o.Agent = "offline"
+	}
+	o.Fail2ban.State = "waiting"
+	if x.F2BStatus == "" || x.F2BReceivedAt == nil {
+		return o
+	}
+	o.Fail2ban.State = x.F2BStatus
+	if now.Sub(*x.F2BReceivedAt) > secproto.StaleAfter {
+		o.Fail2ban.State = "stale"
+	}
+	o.Fail2ban.ObservedAt = x.F2BObservedAt
+	if x.F2BStatus == secproto.StatusOK {
+		o.Fail2ban.Banned, o.Fail2ban.TotalBanned, o.Fail2ban.Jails = x.Banned, x.TotalBanned, x.Jails
+	}
+	return o
 }
 
 func vpsCanEdit(a auth.Actor, v store.VPS) bool {
@@ -88,9 +133,16 @@ func (s *Server) listVPS(w http.ResponseWriter, r *http.Request, a auth.Actor, _
 		s.writeErr(w, r, http.StatusInternalServerError, "internal", "internal error")
 		return
 	}
+	sums, err := s.Store.SecuritySummaries(r.Context(), a.Scope())
+	if err != nil {
+		s.writeErr(w, r, http.StatusInternalServerError, "internal", "internal error")
+		return
+	}
+	now := s.Now().UTC()
 	out := make([]vpsOut, 0, len(vs))
 	for _, v := range vs {
-		out = append(out, vpsOut{VPS: v, CanEdit: vpsCanEdit(a, v)})
+		x, ok := sums[v.ID]
+		out = append(out, vpsOut{VPS: v, CanEdit: vpsCanEdit(a, v), Summary: summaryOf(x, ok, now)})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": out, "can_create": a.IsOwner})
 }
