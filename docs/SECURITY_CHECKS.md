@@ -32,7 +32,7 @@ TCP probe, and never turns certificate verification off for its verdict.
   reported by the agent, each on the server's registered addresses (a wildcard listener on `0.0.0.0` is checked
   on the IPv4 addresses, on `::` on the IPv6 ones, either on registered domains). A listener that disappears
   disables its candidate; the history stays. **Other ports are not scanned.** A port that is not in the list is
-  not "closed", it is not looked at. A discovery scan of unknown ports is not implemented and is off.
+  not "closed", it is not looked at. A discovery scan of unknown ports exists but is **off** until a server is opted in (below).
 - **TLS endpoints, daily.** Only endpoints the operator adds. Not every port 443 is HTTPS, so nothing is guessed.
   The handshake sends the SNI (the domain, or the one you give for an IP); the chain is verified against the
   system trust store and the name is checked. For an untrusted (for example self-signed) certificate the dates
@@ -71,3 +71,22 @@ Events are written when something changes, never on each check.
 
 Notifications through the existing alerts page are a later stage: alerts are panel-scoped and a manually
 created server may have no panel.
+
+## Finding endpoints nobody listed
+
+Two mechanisms, both bounded, neither a general scanner.
+
+**TLS endpoints found by a handshake.** Each round, a few candidates are handshaken with: a *registered
+domain* on port 443, and a *known listener* (a port endpoint that answered) on a well-known TLS port (443,
+8443, 9443, 4443, 7443, 2053, 2083, 2087, 2096, 993, 995, 465, 636, 853, 8883). Only a presented certificate
+confirms TLS and adds an endpoint (`source: auto`, journal event `tls.discovered`); a refusal or a timeout adds
+nothing. A candidate that was tried is left alone for three days. SSH, SMTP-submission and other non-TLS
+ports are never handshaken with, because a handshake sent to them only fills their logs with complaints.
+
+**The opt-in port scan.** Off by default and per server (`discovery_scan`). When on, once a day, a fixed list
+of about sixty common service ports is tried on that server's registered **IP addresses** (never a domain,
+never an address that is not registered), at most four at a time with a pause between attempts, from a checker
+when there is one. Ports that answer and are not yet an endpoint of that server are added as
+`source: discovered`, not expected, with a journal event `port.discovered` (warning). A port number the server
+already has an endpoint for, under any name, is not added again. The scan is a list, not a range: it never walks
+1-65535, and a port outside the list is not looked at, so "nothing found" never means "nothing open".
