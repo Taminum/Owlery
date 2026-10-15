@@ -72,3 +72,34 @@ func TestFirewallChangeOnlyWhenBothCompleteAndHashDiffers(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 }
+
+func TestBansThatCameAndWentBetweenReadsAreCountedNotNamed(t *testing.T) {
+	jail := func(total int, ips ...string) secproto.Jail {
+		return secproto.Jail{Name: "sshd", TotalBanned: total, BannedIPs: ips}
+	}
+	// Two new bans are visible (the counter grew by 2): nothing was missed.
+	if got := types(Diff(secproto.CatFail2ban, f2b("ok", jail(10)), f2b("ok", jail(12, "1.1.1.1", "2.2.2.2")))); got["fail2ban.bans_unobserved"] != 0 || got["fail2ban.ban"] != 2 {
+		t.Fatalf("%v", got)
+	}
+	// The counter grew by 5 and one new address is visible: four bans came and went unseen.
+	got := Diff(secproto.CatFail2ban, f2b("ok", jail(10)), f2b("ok", jail(15, "1.1.1.1")))
+	var n any
+	for _, e := range got {
+		if e.Type == "fail2ban.bans_unobserved" {
+			n = e.Payload["count"]
+		}
+	}
+	if n != 4 {
+		t.Fatalf("%v %+v", n, got)
+	}
+	// A restart with a fresh counter, or no growth at all, says nothing.
+	for _, cur := range []secproto.Jail{jail(3), jail(10)} {
+		if got := types(Diff(secproto.CatFail2ban, f2b("ok", jail(10)), f2b("ok", cur))); got["fail2ban.bans_unobserved"] != 0 {
+			t.Fatalf("%v", got)
+		}
+	}
+	// A jail that did not exist before is a baseline, whatever its counter.
+	if got := types(Diff(secproto.CatFail2ban, f2b("ok"), f2b("ok", jail(40)))); got["fail2ban.bans_unobserved"] != 0 {
+		t.Fatalf("%v", got)
+	}
+}
