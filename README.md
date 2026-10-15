@@ -20,6 +20,13 @@ independent panels and their nodes, with honest attribution of what is measured 
 - **AmneziaWG servers.** Read-only collector (devices, handshakes, totals), optional device management (add, revoke,
   rename, with QR configs) and an optional traffic sensor that adds AmneziaWG traffic to the same site/domain lists.
 - **Network intelligence.** Look up an IP, domain or ASN; geo/ASN data is bundled (DB-IP Lite).
+- **DNS Map.** The publicly observable DNS records of a domain, how they link, and what changed: two resolvers must
+  agree before a change is recorded, authoritative servers are compared, and DNSSEC is reported as not checked. It
+  shows the names it knows, never "the whole zone".
+- **Server security.** A VPS is the unit: a read-only agent reports Fail2ban, listening sockets and firewall rules; the
+  server checks known public ports and TLS certificates from outside (and says that point of view is not
+  independent); a journal, alerts and 180-day retention; and the owner can ban or unban one address through a narrow
+  helper, with confirmation and an audit trail.
 - **Everyday tools.** Live view, alerts, endpoint probes, activity heat map, per-country view, CSV-free API.
 - **Security by default.** Argon2id accounts with roles and optional TOTP, rate limits and lockout, CSRF, strict
   security headers, SSRF-guarded outbound requests, no secrets in environment variables.
@@ -44,7 +51,7 @@ You need a Linux server with Docker, a DNS name pointing at it, and ports 80/443
 
 ```bash
 git clone https://github.com/Taminum/RemnaScope.git && cd RemnaScope/deploy/prod
-sudo ./init-secrets.sh scope.example.com v0.1.2     # host name, release tag; creates secrets and .env, prints nothing
+sudo ./init-secrets.sh scope.example.com v0.2.0     # host name, release tag; creates secrets and .env, prints nothing
 sudo docker compose -f compose.prod.yml up -d       # pulls ghcr.io/taminum/remnascope-{api,web}
 sudo cat secrets/owner_password                     # sign in at https://scope.example.com as "owner"
 ```
@@ -74,6 +81,7 @@ only and are not part of the release images.
 | Web UI | `apps/web` | React, TypeScript, Tailwind, served by nginx behind Caddy |
 | Node agent | `cmd/agent` | read-only; also router and AmneziaWG modes |
 | AmneziaWG sensor | `cmd/awgsensor` | optional, passive packet parser, drops privileges |
+| Security agent | `cmd/secagent` | read-only; also the Fail2ban helper (`secagent helper`), see [docs/SECURITY_AGENT.md](docs/SECURITY_AGENT.md) |
 | Deploy files | `deploy/` | prod compose + Caddy, systemd units, router init script, AWG helpers |
 
 Release binaries (agent, sensor) and checksums are attached to each [GitHub release](../../releases).
@@ -101,6 +109,7 @@ Without Docker: a Postgres, `go run ./cmd/api` (needs `DATABASE_URL`, `MASTER_KE
 - [OPERATIONS](docs/OPERATIONS.md): secrets, key rotation, accounts, rate limits, production checklist
 - [SECURITY](docs/SECURITY.md), [ARCHITECTURE](docs/ARCHITECTURE.md), [INGESTION](docs/INGESTION.md),
   [API_SPEC](docs/API_SPEC.md), [DATA_MODEL](docs/DATA_MODEL.md)
+- [SECURITY_AGENT](docs/SECURITY_AGENT.md), [SECURITY_CHECKS](docs/SECURITY_CHECKS.md), [DNS_MAP](docs/DNS_MAP.md)
 - [AWG_COLLECTOR](docs/AWG_COLLECTOR.md) (AmneziaWG, Russian), [AUTOCLASSIFY](docs/AUTOCLASSIFY.md) (AI categories, Russian)
 
 ## License
