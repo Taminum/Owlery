@@ -304,3 +304,28 @@ func TestSecurityDataFollowsServerVisibility(t *testing.T) {
 		t.Errorf("bad category: %d", st)
 	}
 }
+
+func TestArchivingAServerRevokesItsAgent(t *testing.T) {
+	w := newAgentWorld(t)
+	_, b := w.owner.do("POST", "/api/v1/security/vps", map[string]any{"name": "Gone soon"})
+	v := parse[vpsResp](t, b)
+	_, ab := w.owner.do("POST", "/api/v1/security/vps/"+v.ID+"/agent", nil)
+	token := parse[struct {
+		Token string `json:"token"`
+	}](t, ab).Token
+	url := "ws" + strings.TrimPrefix(w.h.ts.URL, "http") + secproto.Path
+	hdr := http.Header{"Authorization": {"Bearer " + token}}
+
+	c, _, err := websocket.Dial(context.Background(), url, &websocket.DialOptions{HTTPHeader: hdr})
+	if err != nil {
+		t.Fatalf("a live agent must connect: %v", err)
+	}
+	c.CloseNow()
+
+	if st, _ := w.owner.do("DELETE", "/api/v1/security/vps/"+v.ID, nil); st != 204 {
+		t.Fatalf("archive: %d", st)
+	}
+	if _, resp, err := websocket.Dial(context.Background(), url, &websocket.DialOptions{HTTPHeader: hdr}); err == nil || resp == nil || resp.StatusCode != 401 {
+		t.Fatalf("an archived server's agent must be refused: %v %v", err, resp)
+	}
+}

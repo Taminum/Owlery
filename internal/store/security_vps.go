@@ -245,18 +245,25 @@ func (s *Store) updateVPS(ctx context.Context, sc Scope, u uuid.UUID, p VPSPatch
 	return s.GetVPS(ctx, sc, u.String())
 }
 
-// ArchiveVPS hides a server and keeps its history; nothing about it is deleted.
+// ArchiveVPS hides a server and keeps its history; nothing about it is deleted. Its security agent is
+// revoked in the same step, so an archived server cannot keep reporting.
 func (s *Store) ArchiveVPS(ctx context.Context, sc Scope, id string) error {
 	u, err := ParseID(id)
 	if err != nil {
 		return ErrNotFound
 	}
-	pred, args := vpsVisible(sc, 1)
-	tag, err := s.pool.Exec(ctx, `UPDATE security_vps v SET archived_at = now(), enabled = false, updated_at = now() WHERE v.id=$1 AND `+pred, append([]any{u}, args...)...)
-	if err == nil && tag.RowsAffected() == 0 {
-		return ErrNotFound
-	}
-	return err
+	return s.inTx(ctx, func(tx pgx.Tx) error {
+		pred, args := vpsVisible(sc, 1)
+		tag, err := tx.Exec(ctx, `UPDATE security_vps v SET archived_at = now(), enabled = false, updated_at = now() WHERE v.id=$1 AND `+pred, append([]any{u}, args...)...)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return ErrNotFound
+		}
+		_, err = tx.Exec(ctx, `UPDATE security_agents SET status='revoked', revoked_at=now() WHERE vps_id=$1 AND status <> 'revoked'`, u)
+		return err
+	})
 }
 
 // AddVPSLink records that the operator confirmed the server hosts a panel (nodeID empty) or one of
