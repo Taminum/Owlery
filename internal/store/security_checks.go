@@ -82,15 +82,16 @@ type TLSEndpoint struct {
 	LastNotAfter    *time.Time      `json:"last_not_after"`
 	LastObs         json.RawMessage `json:"last_obs"`
 	Vantage         *Vantage        `json:"vantage"` // from the last observation; null until the first check
+	Source          string          `json:"source"`  // manual | auto (found by a handshake on a known address)
 }
 
-const tlsCols = `id, vps_id, host, port, sni, profile, enabled, last_checked_at, last_state, last_ip, last_fingerprint, last_not_after, last_obs`
+const tlsCols = `id, vps_id, host, port, sni, profile, enabled, last_checked_at, last_state, last_ip, last_fingerprint, last_not_after, last_obs, source`
 
 func scanTLS(r pgx.Row) (TLSEndpoint, error) {
 	var e TLSEndpoint
 	var id, vid uuid.UUID
 	var obs []byte
-	err := r.Scan(&id, &vid, &e.Host, &e.Port, &e.SNI, &e.Profile, &e.Enabled, &e.LastCheckedAt, &e.LastState, &e.LastIP, &e.LastFingerprint, &e.LastNotAfter, &obs)
+	err := r.Scan(&id, &vid, &e.Host, &e.Port, &e.SNI, &e.Profile, &e.Enabled, &e.LastCheckedAt, &e.LastState, &e.LastIP, &e.LastFingerprint, &e.LastNotAfter, &obs, &e.Source)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return e, ErrNotFound
 	}

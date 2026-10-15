@@ -257,6 +257,6 @@ func (s *Server) secSettings(w http.ResponseWriter, r *http.Request, a auth.Acto
 		"agent_interval_seconds": 30, "stale_after_seconds": int(secproto.StaleAfter / time.Second),
 		"port_check_minutes": int(secchecks.PortEvery / time.Minute), "tls_check_hours": int(secchecks.TLSEvery / time.Hour),
 		"tls_warn_days": []int{30, 14, 7, 3}, "retention_days": int(store.SecurityRetention / (24 * time.Hour)),
-		"vantage": vantageOut(), "discovery_scan": "off",
+		"vantage": vantageOut(), "discovery_scan": "per_server_opt_in",
 	})
 }

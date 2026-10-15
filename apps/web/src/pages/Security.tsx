@@ -132,6 +132,35 @@ export default function Security() {
   )
 }
 
+/** The opt-in scan of common ports on this server's own IP addresses. Off unless someone turns it on. */
+function ScanCard({ v, canEdit, onChanged }: { v: VPS; canEdit: boolean; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const on = !!v.discovery_scan
+  async function toggle() {
+    setBusy(true)
+    setErr('')
+    try {
+      await api.patch(`/api/v1/security/vps/${v.id}`, { discovery_scan: !on })
+      onChanged()
+    } catch (e) {
+      setErr(errorText(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Card title={t('sec.scan.title')} note={t('sec.scan.hint')}>
+      <div className="flex flex-wrap items-center gap-3 text-[13px]">
+        <Chip tone={on ? 'amber' : 'muted'}>{t(on ? 'sec.scan.status.on' : 'sec.scan.status.off')}</Chip>
+        <span className="tnum text-muted">{v.discovery_scan_at ? t('sec.scan.last', { at: formatDateTime(v.discovery_scan_at, 'local') }) : t('sec.scan.never')}</span>
+        {canEdit && <GhostButton onClick={() => void toggle()} disabled={busy}>{t(on ? 'sec.scan.off' : 'sec.scan.on')}</GhostButton>}
+      </div>
+      {err && <p role="alert" className="mt-2 text-[13px] text-red">{err}</p>}
+    </Card>
+  )
+}
+
 export function SecurityDetail() {
   const { id = '' } = useParams()
   const nav = useNavigate()
@@ -213,6 +242,7 @@ export function SecurityDetail() {
       </div>
 
       <AgentCard vpsId={v.id} canEdit={v.can_edit} />
+      <ScanCard v={v} canEdit={v.can_edit} onChanged={reload} />
 
       <div role="tablist" aria-label={t('sec.collectors')} className="flex flex-wrap gap-2">
         {TABS.map((x) => (
