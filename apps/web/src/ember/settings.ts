@@ -5,6 +5,9 @@ import { useSyncExternalStore } from 'react'
 export type KawaiiTheme = 'kawaii_dark' | 'sakura_light' | 'neko_terminal'
 export const KAWAII_THEMES: KawaiiTheme[] = ['kawaii_dark', 'sakura_light', 'neko_terminal']
 
+export type MascotSize = 'm' | 'l' | 'xl'
+export const MASCOT_SIZES: Record<MascotSize, number> = { m: 200, l: 280, xl: 360 }
+
 export interface KawaiiSettings {
   enabled: boolean
   theme: KawaiiTheme
@@ -13,10 +16,12 @@ export interface KawaiiSettings {
   animations: boolean
   itemStorm: boolean
   reduced: boolean // a manual "less motion"; the system preference is honoured as well
+  size: MascotSize
+  pos: { x: number; y: number } | null // where the mascot was dragged to (left and top, in px); null: the corner
 }
 
 export const KAWAII_DEFAULTS: KawaiiSettings = {
-  enabled: false, theme: 'kawaii_dark', mascot: true, comments: true, animations: true, itemStorm: true, reduced: false,
+  enabled: false, theme: 'kawaii_dark', mascot: true, comments: true, animations: true, itemStorm: true, reduced: false, size: 'l', pos: null,
 }
 
 const KEY = 'remnascope.kawaii'
@@ -35,6 +40,8 @@ function read(): KawaiiSettings {
       animations: p.animations !== false,
       itemStorm: p.itemStorm !== false,
       reduced: p.reduced === true,
+      size: p.size === 'm' || p.size === 'xl' ? p.size : 'l',
+      pos: p.pos && Number.isFinite(p.pos.x) && Number.isFinite(p.pos.y) ? { x: Math.round(p.pos.x), y: Math.round(p.pos.y) } : null,
     }
   } catch {
     return KAWAII_DEFAULTS // storage blocked or broken: the default look
