@@ -11,12 +11,13 @@ import { useLoad } from '../hooks/useLoad'
 import type { VPS, VPSList } from '../lib/types'
 import { Card, Chip } from '../components/ui'
 import { PageHead, TableSkeleton } from '../components/Analyzer'
+import { PublicPorts, TLSTab } from '../components/SecurityChecks'
 import { AgentCard, EventsTab, Fail2banTab, FirewallTab, PortsTab } from '../components/SecurityPanels'
 import { DangerButton, Field, GhostButton, Modal, PrimaryButton, inputCls } from '../components/Modal'
 
-type Tab = 'fail2ban' | 'ports' | 'firewall' | 'events'
-const TABS: Tab[] = ['fail2ban', 'ports', 'firewall', 'events']
-const TAB_LABEL: Record<Tab, MsgKey> = { fail2ban: 'sec.fail2ban', ports: 'sec.ports', firewall: 'sec.firewall', events: 'sec.tab.events' }
+type Tab = 'fail2ban' | 'ports' | 'tls' | 'firewall' | 'events'
+const TABS: Tab[] = ['fail2ban', 'ports', 'tls', 'firewall', 'events']
+const TAB_LABEL: Record<Tab, MsgKey> = { fail2ban: 'sec.fail2ban', ports: 'sec.ports', tls: 'sec.tls', firewall: 'sec.firewall', events: 'sec.tab.events' }
 
 const lines = (s: string) => s.split('\n').map((x) => x.trim()).filter(Boolean)
 
@@ -180,7 +181,8 @@ export function SecurityDetail() {
         ))}
       </div>
       {tab === 'fail2ban' && <Fail2banTab vpsId={v.id} />}
-      {tab === 'ports' && <PortsTab vpsId={v.id} />}
+      {tab === 'ports' && <><PortsTab vpsId={v.id} /><PublicPorts vpsId={v.id} canEdit={v.can_edit} /></>}
+      {tab === 'tls' && <TLSTab vpsId={v.id} canEdit={v.can_edit} />}
       {tab === 'firewall' && <FirewallTab vpsId={v.id} />}
       {tab === 'events' && <EventsTab vpsId={v.id} />}
 
