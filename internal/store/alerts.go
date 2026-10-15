@@ -13,6 +13,12 @@ const (
 	AlertAgentSilent = "agent_silent" // an enrolled agent has not been heard from
 	AlertPanelSync   = "panel_sync"   // the panel cannot be synced
 	AlertProbeDown   = "probe_down"   // a probed channel has stopped answering
+
+	// Raised for servers in the security module. Their panel is the first one the server is linked to;
+	// a server linked to none has no panel and its alerts are the owner's.
+	AlertSecAgent = "sec_agent_silent" // a security agent has stopped reporting
+	AlertSecTLS   = "sec_tls"          // a certificate is expiring, expired or not valid
+	AlertSecPort  = "sec_port"         // an unexpected port answers, or an expected one does not
 )
 
 type Alert struct {
@@ -43,9 +49,14 @@ func (s *Store) ApplyConditions(ctx context.Context, kinds []string, conds []Con
 	err = s.inTx(ctx, func(tx pgx.Tx) error {
 		subjects := map[string][]string{}
 		for _, c := range conds {
-			pid, perr := ParseID(c.PanelID)
-			if perr != nil {
-				continue
+			// An empty panel is allowed: the alert then belongs to no panel and only the owner sees it.
+			var pid *uuid.UUID
+			if c.PanelID != "" {
+				u, perr := ParseID(c.PanelID)
+				if perr != nil {
+					continue
+				}
+				pid = &u
 			}
 			_, e := tx.Exec(ctx, `INSERT INTO alerts (panel_id, kind, subject, label, detail, opened_at, last_seen_at) VALUES ($1,$2,$3,$4,$5,$6,$6)
 				ON CONFLICT (kind, subject) WHERE resolved_at IS NULL DO UPDATE SET label=EXCLUDED.label, detail=EXCLUDED.detail, last_seen_at=EXCLUDED.last_seen_at`,
@@ -79,13 +90,13 @@ func (s *Store) ApplyConditions(ctx context.Context, kinds []string, conds []Con
 }
 
 // ListAlerts returns alerts of the panels in scope, open first then recent history.
-func (s *Store) ListAlerts(ctx context.Context, panelIDs []string, openOnly bool, limit int) ([]Alert, error) {
+func (s *Store) ListAlerts(ctx context.Context, panelIDs []string, withUnscoped, openOnly bool, limit int) ([]Alert, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
 	rs, err := s.pool.Query(ctx, `SELECT id, panel_id, kind, subject, label, detail, opened_at, last_seen_at, resolved_at FROM alerts
-		WHERE panel_id = ANY($1::uuid[]) AND ($2 = false OR resolved_at IS NULL)
-		ORDER BY (resolved_at IS NULL) DESC, COALESCE(resolved_at, opened_at) DESC LIMIT $3`, uuids(panelIDs), openOnly, limit)
+		WHERE (panel_id = ANY($1::uuid[]) OR ($4 AND panel_id IS NULL)) AND ($2 = false OR resolved_at IS NULL)
+		ORDER BY (resolved_at IS NULL) DESC, COALESCE(resolved_at, opened_at) DESC LIMIT $3`, uuids(panelIDs), openOnly, limit, withUnscoped)
 	if err != nil {
 		return nil, err
 	}
@@ -93,11 +104,15 @@ func (s *Store) ListAlerts(ctx context.Context, panelIDs []string, openOnly bool
 	out := []Alert{}
 	for rs.Next() {
 		var a Alert
-		var id, pid uuid.UUID
+		var id uuid.UUID
+		var pid *uuid.UUID
 		if err := rs.Scan(&id, &pid, &a.Kind, &a.Subject, &a.Label, &a.Detail, &a.OpenedAt, &a.LastSeenAt, &a.ResolvedAt); err != nil {
 			return nil, err
 		}
-		a.ID, a.PanelID = id.String(), pid.String()
+		a.ID = id.String()
+		if pid != nil {
+			a.PanelID = pid.String()
+		}
 		out = append(out, a)
 	}
 	return out, rs.Err()
@@ -131,7 +146,8 @@ func (s *Store) AgentStates(ctx context.Context) ([]AgentState, error) {
 	var out []AgentState
 	for rs.Next() {
 		var a AgentState
-		var id, pid uuid.UUID
+		var id uuid.UUID
+		var pid *uuid.UUID
 		if err := rs.Scan(&id, &pid, &a.Kind, &a.Name, &a.NodeName, &a.Status, &a.LastSeen, &a.CreatedAt); err != nil {
 			return nil, err
 		}

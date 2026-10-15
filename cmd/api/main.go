@@ -201,6 +201,11 @@ func serve(log *slog.Logger) error {
 				} else if n > 0 {
 					log.Info("retention purge", "traffic_samples_deleted", n)
 				}
+				if n, err := st.PurgeSecurity(ctx, time.Now().UTC()); err != nil {
+					log.Error("security retention purge failed", "err", err)
+				} else if n > 0 {
+					log.Info("retention purge", "security_rows_deleted", n)
+				}
 				if n, err := st.PurgeExpiredDevices(ctx, time.Now().UTC()); err != nil {
 					log.Error("device retention purge failed", "err", err)
 				} else if n > 0 {
