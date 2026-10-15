@@ -5,6 +5,7 @@ import { errorText } from '../lib/errors'
 import { useLoad } from '../hooks/useLoad'
 import { Card, Chip } from './ui'
 import { DangerButton, Field, GhostButton, Modal, PrimaryButton, inputCls } from './Modal'
+import { RestoreContainer } from './AwgBackup'
 
 interface Host { id: string; node_name: string; online: boolean; container_admin: boolean; containers: string[] }
 
@@ -75,6 +76,7 @@ function Install({ host, onClose, onDone }: { host: Host; onClose: () => void; o
 export function AwgHosts({ onChanged }: { onChanged: () => void }) {
   const { data, error, reload } = useLoad((s) => api.get<{ hosts: Host[] }>('/api/v1/awg/hosts', s), [], 30_000)
   const [installing, setInstalling] = useState<Host | null>(null)
+  const [restoring, setRestoring] = useState<Host | null>(null)
   if (error || !data || data.hosts.length === 0) return null
   const done = () => { reload(); onChanged() }
   return (
@@ -90,7 +92,10 @@ export function AwgHosts({ onChanged }: { onChanged: () => void }) {
               <span className="flex items-center gap-3">
                 <Chip tone={h.online ? 'green' : 'muted'}>{h.online ? t('awgc.online') : t('awgc.offline')}</Chip>
                 {h.container_admin
-                  ? <GhostButton onClick={() => setInstalling(h)} disabled={!h.online}>{t('awgc.install')}</GhostButton>
+                  ? <span className="flex items-center gap-2">
+                      <GhostButton onClick={() => setRestoring(h)} disabled={!h.online}>{t('awgb.restore')}</GhostButton>
+                      <GhostButton onClick={() => setInstalling(h)} disabled={!h.online}>{t('awgc.install')}</GhostButton>
+                    </span>
                   : <span className="text-xs text-muted" title={t('awgc.off.hint')}>{t('awgc.off')}</span>}
               </span>
             </li>
@@ -98,6 +103,7 @@ export function AwgHosts({ onChanged }: { onChanged: () => void }) {
         </ul>
       </Card>
       {installing && <Install host={installing} onClose={() => setInstalling(null)} onDone={done} />}
+      {restoring && <RestoreContainer host={restoring} onClose={() => setRestoring(null)} onDone={done} />}
     </>
   )
 }

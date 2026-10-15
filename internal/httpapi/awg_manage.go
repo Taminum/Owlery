@@ -36,7 +36,7 @@ func (s *Server) awgOpFailure(w http.ResponseWriter, r *http.Request, err error,
 		switch code {
 		case "not_managed", "management_off", "busy", "container_not_running", "container_admin_off", "container_exists", "port_published", "port_in_use", "subnet_in_use", "not_confirmed":
 			status = http.StatusConflict
-		case "bad_name", "bad_key", "bad_container", "bad_operation", "bad_port", "bad_subnet":
+		case "bad_name", "bad_key", "bad_container", "bad_operation", "bad_port", "bad_subnet", "bad_backup", "bad_config", "bad_files", "too_large":
 			status = http.StatusUnprocessableEntity
 		case "not_found":
 			status = http.StatusNotFound

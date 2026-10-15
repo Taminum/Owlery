@@ -5,6 +5,12 @@
 #
 #   remnascope-awg-container install <container> <port> <subnet, a /24 like 10.8.1.0/24>
 #   remnascope-awg-container remove  <container> yes-delete-all-devices
+#   remnascope-awg-container export  <container>                 (prints the container's config files)
+#   remnascope-awg-container restore <container>                 (reads those files on stdin, creates the container)
+#
+# export and restore are how a server is backed up and moved: the files carry the server's keys and every
+# device's public key and preshared key, so the output is secret and is never kept on this host. restore
+# validates the configuration against a whitelist of keys first: awg-quick would run a PostUp line as a command.
 #
 # The server scripts are Amnezia's (GPL-3.0). They are NOT copied into RemnaScope: they are fetched from the
 # upstream repository at one pinned commit, and each file is checked against the SHA-256 recorded below before
@@ -47,6 +53,7 @@ fail() { printf 'RESULT\terror\t%s\n' "$1"; exit 0; }
 conf_value() { sed -n "s/^$1=\"\(.*\)\"\$/\1/p" "$MANAGE_CONF" 2>/dev/null | head -1; }
 
 op="${1:-}"; name="${2:-}"; a3="${3:-}"; a4="${4:-}"
+FILES="awg0.conf wireguard_server_private_key.key wireguard_server_public_key.key wireguard_psk.key clientsTable"
 printf '%s' "$name" | grep -Eq '^amnezia-awg[0-9]{0,2}$' || fail bad_container
 
 # Rewrites one list variable of the helper config (MANAGED, SENSE, CONTAINERS): adds or removes one name.
@@ -69,8 +76,25 @@ conf_list() { # <var> <add|del> <name>
 exec 9>"$LOCKFILE"
 "${FLOCK:-flock}" -n 9 || fail busy
 "$DOCKER" version >/dev/null 2>&1 || fail docker_unavailable
+work=$(mktemp -d) || fail no_workdir
+trap 'rm -rf "$work"' EXIT
 
 case "$op" in
+export)
+  case " $(conf_value MANAGED) " in *" $name "*) ;; *) fail not_managed ;; esac
+  "$DOCKER" inspect -f '{{.State.Running}}' "$name" 2>/dev/null | grep -qx true || fail container_not_running
+  out="$work/export"
+  : > "$out"
+  for f in $FILES; do
+    b=$("$DOCKER" exec "$name" sh -c "cat /opt/amnezia/awg/$f 2>/dev/null | base64 | tr -d '\n'" 2>/dev/null) || continue
+    [ -n "$b" ] && printf 'FILE\t%s\t%s\n' "$f" "$b" >> "$out"
+  done
+  grep -q "^FILE.awg0.conf." "$out" || fail conf_unreadable
+  [ "$(wc -c < "$out")" -le 400000 ] || fail too_large
+  printf 'RESULT\tok\t%s\n' "$name"
+  cat "$out"
+  exit 0
+  ;;
 remove)
   [ "$a3" = "yes-delete-all-devices" ] || fail not_confirmed
   case " $(conf_value MANAGED) " in *" $name "*) ;; *) fail not_managed ;; esac
@@ -82,11 +106,46 @@ remove)
   printf 'RESULT\tok\t%s\n' "$name"
   exit 0
   ;;
-install) ;;
+install) RESTORE=0 ;;
+restore) RESTORE=1 ;;
 *) fail bad_operation ;;
 esac
 
-port="$a3"; subnet="$a4"
+if [ "$RESTORE" = 1 ]; then
+  # The files come on stdin as FILE<TAB>name<TAB>base64. Nothing is trusted: names, sizes and the content of
+  # the configuration are all checked before a container is created.
+  mkdir -p "$work/in"
+  tab=$(printf '\t')
+  while IFS="$tab" read -r tag fname data; do
+    [ "$tag" = FILE ] || continue
+    case " $FILES " in *" $fname "*) ;; *) fail bad_backup ;; esac
+    printf '%s' "$data" | grep -Eq '^[A-Za-z0-9+/=]*$' || fail bad_backup
+    printf '%s' "$data" | base64 -d > "$work/in/$fname" 2>/dev/null || fail bad_backup
+    [ "$(wc -c < "$work/in/$fname")" -le 131072 ] || fail too_large
+  done
+  [ -s "$work/in/awg0.conf" ] || fail bad_backup
+  # Only these keys are allowed: awg-quick would run a PostUp, PreUp or PostDown line as a command.
+  awk '
+    BEGIN { n = split("PrivateKey Address ListenPort Jc Jmin Jmax S1 S2 S3 S4 H1 H2 H3 H4 HeaderProtectionKey ContentPaddingAddition RekeyAfterTime RekeyTimeout RejectAfterTime KeepaliveTimeout MaxHandshakeAttempts RandomTrailers DisableCookies PublicKey PresharedKey AllowedIPs PersistentKeepalive", k, " "); for (i = 1; i <= n; i++) ok[k[i]] = 1 }
+    /^[ \t\r]*$/ { next }
+    /^[ \t]*#/ { if ($0 ~ /[^ -~\t\r]/) bad = 1; next }
+    /^\[(Interface|Peer)\][ \t\r]*$/ { next }
+    {
+      line = $0; sub(/\r$/, "", line)
+      i = index(line, "=")
+      if (i == 0) { bad = 1; next }
+      key = substr(line, 1, i - 1); gsub(/[ \t]/, "", key)
+      val = substr(line, i + 1); sub(/^[ \t]+/, "", val); sub(/[ \t]+$/, "", val)
+      if (!(key in ok) || val !~ /^[A-Za-z0-9+\/=_.:, -]*$/) bad = 1
+    }
+    END { exit bad ? 1 : 0 }' "$work/in/awg0.conf" || fail bad_config
+  port=$(sed -n 's/^[ \t]*ListenPort[ \t]*=[ \t]*\([0-9]*\).*/\1/p' "$work/in/awg0.conf" | head -1)
+  addr=$(sed -n 's/^[ \t]*Address[ \t]*=[ \t]*\([0-9.\/]*\).*/\1/p' "$work/in/awg0.conf" | head -1)
+  case "$addr" in 10.*/24) ;; *) fail bad_subnet ;; esac
+  subnet="${addr%.*}.0/24"
+else
+  port="$a3"; subnet="$a4"
+fi
 printf '%s' "$port" | grep -Eq '^[0-9]{4,5}$' && [ "$port" -ge 1024 ] && [ "$port" -le 65535 ] || fail bad_port
 printf '%s' "$subnet" | grep -Eq '^10\.([0-9]{1,3})\.([0-9]{1,3})\.0/24$' || fail bad_subnet
 for o in $(printf '%s' "${subnet%/*}" | tr '.' ' '); do [ "$o" -le 255 ] || fail bad_subnet; done
@@ -103,8 +162,6 @@ for c in $("$DOCKER" ps -a --format '{{.Names}}' 2>/dev/null | grep -E '^amnezia
   "$DOCKER" exec "$c" sh -c "grep -E '^Address' /opt/amnezia/awg/awg0.conf /opt/amnezia/awg/wg0.conf 2>/dev/null" 2>/dev/null | grep -q "${subnet_ip%.*}\." && fail subnet_in_use
 done
 
-work=$(mktemp -d) || fail no_workdir
-trap 'rm -rf "$work"' EXIT
 fetch() {
   if [ -n "$SRC_DIR" ]; then cp "$SRC_DIR/$1" "$work/$1" 2>/dev/null; return $?; fi
   if command -v curl >/dev/null 2>&1; then curl -fsSL --max-time 60 -o "$work/$1" "$UPSTREAM_BASE/$1"
@@ -163,7 +220,16 @@ cleanup_failed() {
   || { cleanup_failed; fail run_failed; }
 "$DOCKER" network connect "$DNS_NET" "$name" >/dev/null 2>&1 || true
 "$DOCKER" exec -i "$name" sh -c 'cat > /opt/amnezia/start.sh && chmod a+x /opt/amnezia/start.sh' < "$work/start.rendered" || { cleanup_failed; fail upload_failed; }
-"$DOCKER" exec -i "$name" bash -s < "$work/configure.rendered" >/dev/null 2>&1 || { cleanup_failed; fail configure_failed; }
+if [ "$RESTORE" = 1 ]; then
+  # The restored files replace what a fresh configuration would have created.
+  "$DOCKER" exec "$name" mkdir -p /opt/amnezia/awg || { cleanup_failed; fail restore_failed; }
+  for f in $FILES; do
+    [ -s "$work/in/$f" ] || continue
+    "$DOCKER" exec -i "$name" sh -c "cat > /opt/amnezia/awg/$f && chmod 600 /opt/amnezia/awg/$f" < "$work/in/$f" || { cleanup_failed; fail restore_failed; }
+  done
+else
+  "$DOCKER" exec -i "$name" bash -s < "$work/configure.rendered" >/dev/null 2>&1 || { cleanup_failed; fail configure_failed; }
+fi
 "$DOCKER" restart "$name" >/dev/null 2>&1 || { cleanup_failed; fail restart_failed; }
 
 up=0; i=0

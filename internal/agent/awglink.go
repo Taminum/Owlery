@@ -49,6 +49,8 @@ type AWGLink struct {
 	Log           *slog.Logger
 	// RunCmd replaces the process execution in tests.
 	RunCmd func(ctx context.Context, argv []string) ([]byte, error)
+	// RunCmdIn is the same for a command that takes input on stdin and may print a lot (export, restore).
+	RunCmdIn func(ctx context.Context, argv []string, stdin []byte) ([]byte, error)
 
 	opMu sync.Mutex
 }
@@ -234,7 +236,16 @@ func (l *AWGLink) containerOp(ctx context.Context, op ingestproto.AWGOp) ingestp
 		return fail("bad_container")
 	}
 	var args []string
+	var stdin []byte
 	switch op.Op {
+	case "export":
+		args = []string{"export", op.Container}
+	case "restore":
+		in, code := filesToStdin(op.Files)
+		if code != "" {
+			return fail(code)
+		}
+		args, stdin = []string{"restore", op.Container}, in
 	case "install":
 		if op.Port < 1024 || op.Port > 65535 {
 			return fail("bad_port")
@@ -264,11 +275,22 @@ func (l *AWGLink) containerOp(ctx context.Context, op ingestproto.AWGOp) ingestp
 	if run == nil {
 		run = runArgv
 	}
-	out, err := run(rctx, append(append([]string{}, l.ContainerArgv...), args...))
+	argv := append(append([]string{}, l.ContainerArgv...), args...)
+	var out []byte
+	var err error
+	if op.Op == "export" || op.Op == "restore" {
+		runIn := l.RunCmdIn
+		if runIn == nil {
+			runIn = runArgvIn
+		}
+		out, err = runIn(rctx, argv, stdin)
+	} else {
+		out, err = run(rctx, argv)
+	}
 	if err != nil && len(out) == 0 {
 		return fail("helper_failed")
 	}
-	first, _, _ := strings.Cut(string(out), "\n")
+	first, rest, _ := strings.Cut(string(out), "\n")
 	f := strings.Split(strings.TrimRight(first, "\r"), "\t")
 	if len(f) < 3 || f[0] != "RESULT" {
 		return fail("bad_helper_output")
@@ -280,19 +302,98 @@ func (l *AWGLink) containerOp(ctx context.Context, op ingestproto.AWGOp) ingestp
 		return fail(f[2])
 	}
 	res := ingestproto.AWGOpResult{Status: "ok"}
-	if op.Op == "install" {
+	switch op.Op {
+	case "install", "restore":
 		if len(f) < 5 || !opKeyRe.MatchString(f[3]) {
 			return fail("bad_helper_output")
 		}
 		res.Key = f[3]
 		res.Port, _ = strconv.Atoi(f[4])
+	case "export":
+		files, code := parseFiles(rest)
+		if code != "" {
+			return fail(code)
+		}
+		res.Files = files
 	}
 	return res
 }
 
+var fileNameOK = func() map[string]bool {
+	m := map[string]bool{}
+	for _, n := range ingestproto.AWGFileNames {
+		m[n] = true
+	}
+	return m
+}()
+
+var b64Re = regexp.MustCompile(`^[A-Za-z0-9+/]*={0,2}$`)
+
+// parseFiles reads the helper's FILE lines. Only the known names, only base64, and a bounded total.
+func parseFiles(text string) ([]ingestproto.AWGFile, string) {
+	var out []ingestproto.AWGFile
+	total := 0
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimRight(line, "\r")
+		if line == "" {
+			continue
+		}
+		f := strings.Split(line, "\t")
+		if len(f) != 3 || f[0] != "FILE" || !fileNameOK[f[1]] || !b64Re.MatchString(f[2]) {
+			return nil, "bad_helper_output"
+		}
+		total += len(f[2])
+		if total > ingestproto.MaxAWGFilesBytes {
+			return nil, "too_large"
+		}
+		out = append(out, ingestproto.AWGFile{Name: f[1], Data: f[2]})
+	}
+	hasConf := false
+	for _, x := range out {
+		hasConf = hasConf || x.Name == "awg0.conf"
+	}
+	if !hasConf {
+		return nil, "bad_helper_output"
+	}
+	return out, ""
+}
+
+// filesToStdin writes files as the helper reads them, after checking every one again.
+func filesToStdin(files []ingestproto.AWGFile) ([]byte, string) {
+	var b strings.Builder
+	total := 0
+	seen := map[string]bool{}
+	for _, f := range files {
+		if !fileNameOK[f.Name] || seen[f.Name] || !b64Re.MatchString(f.Data) {
+			return nil, "bad_files"
+		}
+		seen[f.Name] = true
+		total += len(f.Data)
+		if total > ingestproto.MaxAWGFilesBytes {
+			return nil, "too_large"
+		}
+		b.WriteString("FILE\t" + f.Name + "\t" + f.Data + "\n")
+	}
+	if !seen["awg0.conf"] {
+		return nil, "bad_files"
+	}
+	return []byte(b.String()), ""
+}
+
+func runArgvIn(ctx context.Context, argv []string, stdin []byte) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	var out bytes.Buffer
+	cmd.Stdout = &limitWriter{w: &out, n: ingestproto.MaxAWGFilesBytes + 4096}
+	if stdin != nil {
+		cmd.Stdin = bytes.NewReader(stdin)
+	}
+	err := cmd.Run()
+	return out.Bytes(), err
+}
+
 func (l *AWGLink) runOp(ctx context.Context, op ingestproto.AWGOp) ingestproto.AWGOpResult {
 	fail := func(code string) ingestproto.AWGOpResult { return ingestproto.AWGOpResult{Status: "error", Code: code} }
-	if op.Op == "install" || op.Op == "remove" {
+	if op.Op == "install" || op.Op == "remove" || op.Op == "export" || op.Op == "restore" {
 		return l.containerOp(ctx, op)
 	}
 	if len(l.ManageArgv) == 0 {
