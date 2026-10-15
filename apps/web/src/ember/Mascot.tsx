@@ -4,7 +4,7 @@ import { t } from '../i18n'
 import { api } from '../lib/api'
 import { useLoad } from '../hooks/useLoad'
 import { Director, moodForAlert, type Mood } from './director'
-import { setKawaii, useKawaii } from './settings'
+import { MASCOT_SIZES, setKawaii, useKawaii } from './settings'
 
 interface Cell { a: number; x: number; y: number }
 interface Marker { name: string; atMs: number; origin?: { x: number; y: number }; count?: number }
@@ -36,6 +36,12 @@ function systemReducedNow(): boolean {
   return typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false
 }
 
+function subscribeWidth(cb: () => void): () => void {
+  window.addEventListener('resize', cb)
+  return () => window.removeEventListener('resize', cb)
+}
+const narrowNow = () => window.innerWidth < 640
+
 function typingNow(): boolean {
   const el = document.activeElement
   if (!el) return false
@@ -62,7 +68,10 @@ export function Mascot() {
   const sayTimer = useRef<number | undefined>(undefined)
   const busy = useRef(false)
   const director = useMemo(() => new Director(), [])
+  const narrow = useSyncExternalStore(subscribeWidth, narrowNow, () => false)
   const reduced = s.reduced || systemReduced
+  const [drag, setDrag] = useState<{ x: number; y: number } | null>(null) // while the mascot is being moved
+  const moved = useRef(false)
   const animated = s.animations && !reduced
 
   // Pictures and phrases are fetched only when the mode is on and the mascot is shown.
@@ -217,23 +226,56 @@ export function Mascot() {
   }, [bans.data, react])
 
   if (!active || !manifest) return null
-  const size = 176
+  const base = MASCOT_SIZES[s.size]
+  const size = narrow ? Math.round(base * 0.72) : base
   const k = size / manifest.frameSize.width
+  // Where it sits: the corner by default, or where it was dragged to, kept inside the window.
+  const clampPos = (p: { x: number; y: number }) => ({
+    x: Math.min(Math.max(0, p.x), Math.max(0, window.innerWidth - size)),
+    y: Math.min(Math.max(0, p.y), Math.max(0, window.innerHeight - size)),
+  })
+  const shown = drag ?? (s.pos ? clampPos(s.pos) : null)
+  const onDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.button !== 0) return
+    const root = (e.currentTarget.closest('.ember-root') as HTMLElement).getBoundingClientRect()
+    const grab = { dx: e.clientX - root.left, dy: e.clientY - root.top, sx: e.clientX, sy: e.clientY }
+    moved.current = false
+    e.currentTarget.setPointerCapture(e.pointerId)
+    const move = (ev: PointerEvent) => {
+      if (!moved.current && Math.hypot(ev.clientX - grab.sx, ev.clientY - grab.sy) < 6) return
+      moved.current = true
+      setMenu(false)
+      setDrag(clampPos({ x: ev.clientX - grab.dx, y: ev.clientY - grab.dy }))
+    }
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      if (moved.current) {
+        const p = clampPos({ x: ev.clientX - grab.dx, y: ev.clientY - grab.dy })
+        setKawaii({ pos: p })
+        setDrag(null)
+      }
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
   const clip = manifest.clips[frame.clip] ?? manifest.clips.idle
   const cell = !animated ? manifest.poster : clip.frames[Math.min(frame.i, clip.frames.length - 1)]
 
   return (
-    <div className="ember-root" data-testid="ember">
+    <div className="ember-root" data-testid="ember" style={shown ? { left: shown.x, top: shown.y, right: 'auto', bottom: 'auto' } : undefined}>
       {say && (
         <div className="ember-bubble" role="status" onClick={() => setSay(null)}>{say}</div>
       )}
       <div ref={stageRef} className="ember-stage" style={{ width: size, height: size }}>
-        <button type="button" className="ember-body" aria-label={t('kw.mascot')} aria-expanded={menu} onClick={() => setMenu((v) => !v)}
+        <button type="button" className="ember-body" aria-label={t('kw.mascot')} aria-expanded={menu} onPointerDown={onDown}
+          onClick={() => { if (moved.current) { moved.current = false; return } setMenu((v) => !v) }}
           style={{ width: size, height: size, backgroundImage: `url(${BASE}/atlas-${cell.a}.webp)`, backgroundSize: `${manifest.atlasSize * k}px ${manifest.atlasSize * k}px`, backgroundPosition: `-${cell.x * k}px -${cell.y * k}px` }} />
       </div>
       {menu && (
         <div className="ember-menu" role="menu">
           {s.itemStorm && animated && <button role="menuitem" type="button" onClick={() => { setMenu(false); play(manifest, 'item_storm', pick(phrases?.clips.item_storm)) }}>{t('kw.tease')}</button>}
+          {s.pos && <button role="menuitem" type="button" onClick={() => { setMenu(false); setKawaii({ pos: null }) }}>{t('kw.reset')}</button>}
           <button role="menuitem" type="button" onClick={() => { setMenu(false); setHidden(true) }}>{t('kw.hide')}</button>
           <button role="menuitem" type="button" onClick={() => { setMenu(false); setKawaii({ mascot: false }) }}>{t('kw.off')}</button>
           <Link role="menuitem" to="/settings?tab=appearance" onClick={() => setMenu(false)}>{t('kw.settings')}</Link>
