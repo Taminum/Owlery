@@ -8,6 +8,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/Taminum/RemnaScope/internal/ingestproto"
 )
@@ -19,8 +21,15 @@ import (
 type AWGSensorSource struct {
 	Socket     string   // path of the Unix socket to listen on
 	Containers []string // containers whose reports are accepted; a report for any other is ignored
-	Emit       func(ingestproto.AWGFlows)
-	Log        func(msg string)
+	// ConfPath is the host's helper configuration. Containers listed in its SENSE are accepted as well, so a
+	// container created after the agent started is heard without restarting the agent.
+	ConfPath string
+	Emit     func(ingestproto.AWGFlows)
+	Log      func(msg string)
+
+	mu     sync.Mutex
+	read   time.Time
+	cached []string
 }
 
 func (s *AWGSensorSource) allowed(c string) bool {
@@ -29,7 +38,36 @@ func (s *AWGSensorSource) allowed(c string) bool {
 			return true
 		}
 	}
+	for _, a := range s.fromConf() {
+		if a == c {
+			return true
+		}
+	}
 	return false
+}
+
+// fromConf reads SENSE from the helper configuration, at most every ten seconds.
+func (s *AWGSensorSource) fromConf() []string {
+	if s.ConfPath == "" {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if time.Since(s.read) < 10*time.Second {
+		return s.cached
+	}
+	s.read = time.Now()
+	s.cached = nil
+	b, err := os.ReadFile(s.ConfPath)
+	if err != nil {
+		return nil
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		if v, ok := strings.CutPrefix(strings.TrimSpace(line), "SENSE=\""); ok {
+			s.cached = strings.Fields(strings.TrimSuffix(v, "\""))
+		}
+	}
+	return s.cached
 }
 
 // Run listens until ctx ends.
