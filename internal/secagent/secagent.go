@@ -124,7 +124,7 @@ func Run(ctx context.Context, cfg Config) error {
 	if err != nil {
 		return err
 	}
-	a := &agent{cfg: cfg, url: url, hc: hc, epoch: newEpoch(), probes: make(chan struct{}, maxProbes)}
+	a := &agent{cfg: cfg, url: url, hc: hc, epoch: newEpoch(), probes: make(chan struct{}, maxProbes), socks: seccollect.NewSocketWatch(10 * time.Minute)}
 	if cfg.HelperSocket != "" {
 		a.helper = f2bhelper.Client{Path: cfg.HelperSocket}
 		// Fail2ban is read through the helper, and the agent never runs fail2ban-client itself.
@@ -169,6 +169,7 @@ type agent struct {
 	done   *executed
 	cmdMu  sync.Mutex // one command at a time, in the order they arrive
 	probes chan struct{}
+	socks  *seccollect.SocketWatch
 }
 
 func (a *agent) token() (string, error) {
@@ -373,7 +374,7 @@ func (a *agent) collect(ctx context.Context) []seccollect.Snapshot {
 		banned = bannedSet(f)
 	}
 	if !a.cfg.NoSockets {
-		out = append(out, seccollect.Sockets(ctx, a.cfg.Runner, a.cfg.SSBin))
+		out = append(out, a.socks.Collect(ctx, a.cfg.Runner, a.cfg.SSBin, time.Now()))
 	}
 	if !a.cfg.NoFirewall {
 		out = append(out, seccollect.FirewallWithBans(ctx, a.cfg.Runner, a.cfg.NftBin, a.cfg.IptablesBin, banned))

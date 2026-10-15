@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Taminum/RemnaScope/internal/secproto"
 )
@@ -251,5 +252,48 @@ func TestFail2banRulesInUFWChainsAreNotFirewallChanges(t *testing.T) {
 	g := canonicalIptables(ipt, banned)
 	if strings.Contains(g, "180.76.233.177") || !strings.Contains(g, "198.51.100.1") {
 		t.Fatalf("%s", g)
+	}
+}
+
+type fixedSS struct{ out string }
+
+func (s fixedSS) Run(context.Context, string, ...string) Result { return Result{Stdout: s.out} }
+
+func TestFlowSocketsOfAProxyAreNotListenersButARealHighUDPServiceIsAfterAWhile(t *testing.T) {
+	const flow = "udp UNCONN 0 0 0.0.0.0:50459 0.0.0.0:* users:((\"rw-core\",pid=7,fd=9))\n"
+	const vpn = "udp UNCONN 0 0 0.0.0.0:49587 0.0.0.0:*\ntcp LISTEN 0 4096 0.0.0.0:22 0.0.0.0:*\n"
+	w := NewSocketWatch(10 * time.Minute)
+	t0 := time.Date(2026, 10, 16, 0, 0, 0, 0, time.UTC)
+	ports := func(s Snapshot) map[int]bool {
+		m := map[int]bool{}
+		for _, l := range s.Data.(secproto.Sockets).Listeners {
+			m[l.Port] = true
+		}
+		return m
+	}
+	// Right away: TCP and low ports show, the dynamic-range UDP ones do not.
+	got := ports(w.Collect(context.Background(), fixedSS{flow + vpn}, "ss", t0))
+	if !got[22] || got[50459] || got[49587] {
+		t.Fatalf("%v", got)
+	}
+	// The flow socket is gone a minute later and never appeared; the VPN port has stayed.
+	got = ports(w.Collect(context.Background(), fixedSS{vpn}, "ss", t0.Add(time.Minute)))
+	if got[50459] || got[49587] {
+		t.Fatalf("%v", got)
+	}
+	got = ports(w.Collect(context.Background(), fixedSS{vpn}, "ss", t0.Add(11*time.Minute)))
+	if !got[49587] || !got[22] {
+		t.Fatalf("a socket that stayed 10 minutes is a service: %v", got)
+	}
+}
+
+func TestNamedCounterBodiesAreNotRuleChanges(t *testing.T) {
+	a := "table ip t {\n\tcounter processed {\n\t\tpackets 10 bytes 100\n\t}\n\tchain c {\n\t\ttcp dport 22 accept\n\t}\n}\n"
+	b := strings.Replace(a, "packets 10 bytes 100", "packets 99 bytes 5000", 1)
+	if CanonicalNft(a) != CanonicalNft(b) {
+		t.Fatalf("a running counter changed the canonical text:\n%s\n--\n%s", CanonicalNft(a), CanonicalNft(b))
+	}
+	if !strings.Contains(CanonicalNft(a), "counter processed") {
+		t.Fatal("the counter object itself must stay")
 	}
 }

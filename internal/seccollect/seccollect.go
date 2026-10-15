@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os/exec"
 	"regexp"
 	"sort"
@@ -241,6 +242,26 @@ func splitHostPort(s string) (string, int, bool) {
 }
 
 func Sockets(ctx context.Context, r Runner, bin string) Snapshot {
+	return NewSocketWatch(0).Collect(ctx, r, bin, time.Now())
+}
+
+// EphemeralFrom is the first port of Linux's default dynamic range. A proxy such as Xray opens a UDP socket in
+// that range for every client flow; each is a "listener" for seconds, and none is a service.
+const EphemeralFrom = 32768
+
+// SocketWatch reads listening sockets but reports a UDP socket in the dynamic range only once it has been
+// there for MinAge: a service that is really listening there (a VPN on a high UDP port) shows up after that
+// delay, and flow sockets that come and go never do. Everything else is reported at once.
+type SocketWatch struct {
+	MinAge time.Duration
+	seen   map[string]time.Time
+}
+
+func NewSocketWatch(minAge time.Duration) *SocketWatch {
+	return &SocketWatch{MinAge: minAge, seen: map[string]time.Time{}}
+}
+
+func (w *SocketWatch) Collect(ctx context.Context, r Runner, bin string, now time.Time) Snapshot {
 	snap := Snapshot{Category: secproto.CatSockets}
 	res := r.Run(ctx, bin, "-H", "-tulnp")
 	switch {
@@ -252,6 +273,26 @@ func Sockets(ctx context.Context, r Runner, bin string) Snapshot {
 		return snap
 	}
 	data := ParseSS(res.Stdout)
+	if w.MinAge > 0 {
+		now2 := map[string]time.Time{}
+		kept := data.Listeners[:0]
+		for _, l := range data.Listeners {
+			if l.Proto != "udp" || l.Port < EphemeralFrom {
+				kept = append(kept, l)
+				continue
+			}
+			k := fmt.Sprintf("%s|%d", l.Addr, l.Port)
+			first, ok := w.seen[k]
+			if !ok {
+				first = now
+			}
+			now2[k] = first
+			if now.Sub(first) >= w.MinAge {
+				kept = append(kept, l)
+			}
+		}
+		w.seen, data.Listeners = now2, kept
+	}
 	if len(data.Listeners) > secproto.MaxListeners {
 		data.Listeners = data.Listeners[:secproto.MaxListeners]
 	}
@@ -265,7 +306,9 @@ func Sockets(ctx context.Context, r Runner, bin string) Snapshot {
 var (
 	nftCounterRe = regexp.MustCompile(`counter packets \d+ bytes \d+`)
 	nftHandleRe  = regexp.MustCompile(`\s+# handle \d+$`)
-	iptCountRe   = regexp.MustCompile(` \[\d+:\d+\]`)
+	// The body of a named counter object ("counter processed { packets N bytes M }") is a running count.
+	nftCounterBodyRe = regexp.MustCompile(`^packets \d+ bytes \d+$`)
+	iptCountRe       = regexp.MustCompile(` \[\d+:\d+\]`)
 )
 
 // Fail2ban keeps the addresses it has banned inside the firewall: the elements of its nftables set, or one
@@ -308,7 +351,7 @@ func canonicalNft(s string, banned map[string]bool) string {
 			skipping = !strings.Contains(t, "}")
 			continue
 		}
-		if t == "" || strings.HasPrefix(t, "#") {
+		if t == "" || strings.HasPrefix(t, "#") || nftCounterBodyRe.MatchString(t) {
 			continue
 		}
 		if f := strings.Fields(t); len(f) >= 3 && f[0] == "table" {
