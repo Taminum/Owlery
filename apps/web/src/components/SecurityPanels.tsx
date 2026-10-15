@@ -161,7 +161,7 @@ export function EventsTab({ vpsId }: { vpsId: string }) {
         {items.map((e) => (
           <li key={e.id} className="flex flex-wrap items-baseline justify-between gap-3 py-2 text-[13px]">
             <span><Chip tone={e.severity === 'info' ? 'muted' : e.severity === 'warning' ? 'amber' : 'red'}>{t(`sec.sev.${e.severity}` as MsgKey)}</Chip> <span className="ml-2">{eventText(e)}</span></span>
-            <span className="tnum text-xs text-muted">{formatDateTime(e.observed_at, 'local')} · {t('sec.events.source')}</span>
+            <span className="tnum text-xs text-muted">{formatDateTime(e.observed_at, 'local')} · {t(e.source === 'external_check' ? 'sec.ext.source' : 'sec.events.source')}</span>
           </li>
         ))}
       </ul>
