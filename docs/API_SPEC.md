@@ -45,3 +45,20 @@ a session, every non-GET also `X-CSRF-Token`):
 Differences from the proposal: `DELETE` takes `{confirm, retention: "purge"|"archive"}`; `POST /panels` re-probes and
 answers 422 `probe_failed` or `partial_capabilities` (confirm with `allow_partial`); agents, `/traffic/samples`,
 `/destinations`, `/connections` and exports are M2-M3.
+
+## As built: security module (`/api/v1/security`)
+Same session, CSRF and error contract. A server is visible to the owner and to anyone with a role on a panel it is
+linked to; one outside the caller's scope answers 404 like one that does not exist. Changing a server needs an
+administrator role on a linked panel; creating and archiving one is the owner's.
+- Servers: `GET/POST /vps`, `GET/PATCH/DELETE /vps/{id}` (DELETE archives and revokes the agent),
+  `POST /vps/{id}/links`, `DELETE /vps/{id}/links/{link}`.
+- Agent: `GET/POST/DELETE /vps/{id}/agent` (POST returns the secret once). Reports arrive on the WebSocket
+  `/ingest/security/v1`, see SECURITY_AGENT.md.
+- State read from the agent: `GET /vps/{id}/fail2ban|ports|firewall` (state, observed time, staleness).
+- External checks: `GET/POST /vps/{id}/public-ports`, `PATCH /vps/{id}/public-ports/{eid}`,
+  `GET/POST /vps/{id}/tls`, `PATCH /vps/{id}/tls/{eid}`, `POST /vps/{id}/checks/{ports|tls}/run` (202, one per 30 s).
+  Targets must be registered on the server. See SECURITY_CHECKS.md.
+- Journal: `GET /vps/{id}/events` and `GET /events` (all visible servers). Filters `vps_id, category, type, severity,
+  q, from, to`; paging with `before_ts` + `before_id`; `limit` 1 to 200.
+- `GET /settings`: the fixed intervals, retention and the checker's vantage.
+Not built: ban/unban, firewall changes (never), a discovery scan of unknown ports.
