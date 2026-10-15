@@ -56,6 +56,7 @@ type awgPeerOut struct {
 }
 
 type awgInstanceOut struct {
+	Host          string       `json:"host"` // the agent (and so the server) the container lives on
 	ID            string       `json:"id"`
 	Container     string       `json:"container"`
 	Interface     string       `json:"interface"`
@@ -103,7 +104,7 @@ func (s *Server) awgList(w http.ResponseWriter, r *http.Request, a auth.Actor, _
 		Period    string           `json:"period"`
 	}{Instances: []awgInstanceOut{}, Period: period.String()}
 	for _, in := range rows {
-		o := awgInstanceOut{ID: in.ID, Container: in.Container, Interface: in.Interface, Port: in.Port, Variant: in.Variant, Mode: in.Mode,
+		o := awgInstanceOut{Host: in.AgentName, ID: in.ID, Container: in.Container, Interface: in.Interface, Port: in.Port, Variant: in.Variant, Mode: in.Mode,
 			LastReport: in.LastReport.UTC(), CountersSince: in.Started, LegacyAt: in.LegacyAt, ReportFresh: now.Sub(in.LastReport) <= awgFresh, Peers: []awgPeerOut{}}
 		for _, p := range in.Peers {
 			state := "unknown"

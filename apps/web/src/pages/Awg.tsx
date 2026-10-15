@@ -25,7 +25,7 @@ interface Peer {
   expires_at: string | null; traffic_limit_bytes: number | null; used_bytes: number; auto_revoked?: string
 }
 interface Instance {
-  id: string; container: string; interface: string; port?: number; variant?: string; mode: string
+  id: string; host?: string; container: string; interface: string; port?: number; variant?: string; mode: string
   last_report: string; report_fresh: boolean; counters_since: string | null; legacy_at?: string | null; peers: Peer[]
 }
 interface AwgResponse { instances: Instance[]; period: string }
@@ -132,7 +132,7 @@ export default function Awg() {
               {/^amnezia-awg\d{0,2}$/.test(in_.container) && <GhostButton onClick={() => setRemovingServer(in_)}>{t('awgc.remove')}</GhostButton>}
             </div>
           ) : undefined}
-          title={`${in_.container} · ${in_.interface}`}
+          title={`${in_.host ? `${in_.host.replace(/^awg-/, '')} · ` : ''}${in_.container} · ${in_.interface}`}
           note={[in_.port ? t('awg.port', { n: in_.port }) : '', in_.variant ? t('awg.variant', { v: in_.variant }) : '', t(`awg.mode.${in_.mode}` as MsgKey), t('awg.report', { when: ago(in_.last_report) })].filter(Boolean).join(' · ')}>
           {!in_.report_fresh && <p role="status" className="mb-3 text-[13px] text-amber">{t('awg.noReport')}</p>}
           <div className="overflow-x-auto">
