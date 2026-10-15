@@ -20,6 +20,8 @@
 #   --managed "a b"      containers whose devices RemnaScope may add and revoke            [default: none]
 #   --sense "a b"        containers whose traffic the sensor watches                       [default: --managed]
 #   --dns "1.1.1.1, ..." DNS written into new client configs                               [default 1.1.1.1, 1.0.0.1]
+#   --container-admin    also install the helper that can CREATE and REMOVE AmneziaWG containers
+#                        (remnascope-awg-container) behind its own sudoers rule. Off by default.
 #   --version TAG        release to install                                               [default: latest]
 #   --from DIR           use files already in DIR instead of downloading (agent, sensor, tar, SHA256SUMS)
 #   --stage DIR          write everything under DIR and run no systemctl/useradd (for tests and review)
@@ -29,7 +31,7 @@ set -eu
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
 SERVER="" TOKEN="${REMNASCOPE_TOKEN:-}" TOKEN_FILE="" ENDPOINT="" MANAGED="" SENSE="" DNS="1.1.1.1, 1.0.0.1"
-VERSION="latest" FROM="" STAGE="" UNINSTALL=0 DRY=0
+VERSION="latest" FROM="" STAGE="" UNINSTALL=0 DRY=0 CONTAINER_ADMIN=0
 BASE_URL="${REMNASCOPE_RELEASE_URL:-https://github.com/Taminum/RemnaScope/releases}"
 
 die() { echo "install: $*" >&2; exit 1; }
@@ -48,6 +50,7 @@ while [ $# -gt 0 ]; do
     --version) need_val "$@"; VERSION="$2"; shift 2 ;;
     --from) need_val "$@"; FROM="$2"; shift 2 ;;
     --stage) need_val "$@"; STAGE="$2"; shift 2 ;;
+    --container-admin) CONTAINER_ADMIN=1; shift ;;
     --uninstall) UNINSTALL=1; shift ;;
     --dry-run) DRY=1; shift ;;
     -h|--help) sed -n '2,32p' "$0"; exit 0 ;;
@@ -94,7 +97,7 @@ if [ "$UNINSTALL" -eq 1 ]; then
   fi
   sysctl_run systemctl disable --now remnascope-awg || true
   run rm -rf "$UNITS/remnascope-awg.service" "$UNITS/remnascope-awg.service.d" "$UNITS/remnascope-awg-sensor@.service" \
-    "$SUDOERS/remnascope-awg" "$SUDOERS/remnascope-awg-manage" "$BIN/remnascope-agent-awg" \
+    "$SUDOERS/remnascope-awg" "$SUDOERS/remnascope-awg-manage" "$SUDOERS/remnascope-awg-container" "$SBIN/remnascope-awg-container" "$BIN/remnascope-agent-awg" \
     "$SBIN/remnascope-awg-snapshot" "$SBIN/remnascope-awg-manage" "$SBIN/remnascope-awg-sensor" "$SBIN/remnascope-awg-sensor-run" \
     "$ETC/awg.token" "$CONF" "$R/var/lib/remnascope-awg"
   sysctl_run systemctl daemon-reload
@@ -143,7 +146,9 @@ fi
 say "files verified against SHA256SUMS"
 tar -xzf "$WORK/$A_TAR" -C "$WORK" deploy/agent/awg
 SRC="$WORK/deploy/agent/awg"
-for f in remnascope-awg-snapshot remnascope-awg-manage remnascope-awg-sensor-run remnascope-awg.service 'remnascope-awg-sensor@.service'; do
+REQUIRED="remnascope-awg-snapshot remnascope-awg-manage remnascope-awg-sensor-run remnascope-awg.service remnascope-awg-sensor@.service"
+[ "$CONTAINER_ADMIN" -eq 1 ] && REQUIRED="$REQUIRED remnascope-awg-container"
+for f in $REQUIRED; do
   [ -f "$SRC/$f" ] || die "the release does not contain $f"
 done
 
@@ -157,6 +162,12 @@ run install -m 0755 "$WORK/$A_SENSOR" "$SBIN/remnascope-awg-sensor"
 for f in remnascope-awg-snapshot remnascope-awg-manage remnascope-awg-sensor-run; do
   run install -m 0755 "$SRC/$f" "$SBIN/$f"
 done
+if [ "$CONTAINER_ADMIN" -eq 1 ]; then
+  run install -m 0755 "$SRC/remnascope-awg-container" "$SBIN/remnascope-awg-container"
+  printf '%s\n' 'remnascope ALL=(root) NOPASSWD: /usr/local/sbin/remnascope-awg-container' > "$SUDOERS/remnascope-awg-container"
+  chmod 0440 "$SUDOERS/remnascope-awg-container"
+  [ -n "$STAGE" ] || visudo -cf "$SUDOERS/remnascope-awg-container" >/dev/null || { rm -f "$SUDOERS/remnascope-awg-container"; die "sudoers check failed"; }
+fi
 run install -m 0644 "$SRC/remnascope-awg-sensor@.service" "$UNITS/remnascope-awg-sensor@.service"
 
 if [ -n "$TOKEN" ]; then

@@ -14,7 +14,7 @@ rel="$tmp/release"; mkdir -p "$rel"
 printf 'fake agent\n' > "$rel/remnascope-agent-linux-$arch"
 printf 'fake sensor\n' > "$rel/remnascope-awg-sensor-linux-$arch"
 ( cd "$root" && tar -czf "$rel/remnascope-deploy-files.tar.gz" deploy/agent/awg/remnascope-awg-snapshot deploy/agent/awg/remnascope-awg-manage \
-    deploy/agent/awg/remnascope-awg-sensor-run deploy/agent/awg/remnascope-awg.service 'deploy/agent/awg/remnascope-awg-sensor@.service' )
+    deploy/agent/awg/remnascope-awg-container deploy/agent/awg/remnascope-awg-sensor-run deploy/agent/awg/remnascope-awg.service 'deploy/agent/awg/remnascope-awg-sensor@.service' )
 ( cd "$rel" && sha256sum remnascope-* > SHA256SUMS )
 printf 'agentid.secretsecretsecretsecret\n' > "$tmp/token"
 
@@ -43,6 +43,15 @@ grep -q 'SENSOR_CONTAINERS=amnezia-awg2,amnezia-awg3"' "$st/etc/systemd/system/r
 mode=$(stat -c %a "$st/etc/remnascope/awg.token" 2>/dev/null || stat -f %Lp "$st/etc/remnascope/awg.token")
 case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) ;; *) [ "$mode" = 640 ] || fail "token mode is $mode" ;; esac
 echo "install ok"
+# Without --container-admin the helper that creates containers is not installed and has no sudoers rule.
+[ ! -e "$st/usr/local/sbin/remnascope-awg-container" ] || fail "the container helper was installed without being asked for"
+[ ! -e "$st/etc/sudoers.d/remnascope-awg-container" ] || fail "a container rule exists without being asked for"
+st4="$tmp/stage4"
+sh "$inst" --stage "$st4" --from "$rel" --server wss://scope.example.org/ingest/v1 --token-file "$tmp/token" \
+  --endpoint-host 203.0.113.10 --managed amnezia-awg3 --container-admin >/dev/null 2>&1 || fail "install with --container-admin failed"
+[ -f "$st4/usr/local/sbin/remnascope-awg-container" ] || fail "container helper missing"
+grep -qx 'remnascope ALL=(root) NOPASSWD: /usr/local/sbin/remnascope-awg-container' "$st4/etc/sudoers.d/remnascope-awg-container" || fail "container rule"
+echo "container-admin ok"
 
 # A tampered file is refused and nothing is written.
 bad="$tmp/bad"; cp -r "$rel" "$bad"; printf 'evil\n' > "$bad/remnascope-agent-linux-$arch"
