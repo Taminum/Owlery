@@ -91,4 +91,42 @@ describe('Security page', () => {
     expect(await screen.findByText('нет прав на чтение')).toBeInTheDocument()
     expect(screen.queryByRole('table')).toBeNull()
   })
+
+  it('shows external results with the vantage warning, and never calls a timeout closed', async () => {
+    const port = (over: object) => ({ id: 'e1', host: '203.0.113.7', port: 443, expected: true, source: 'manual', enabled: true, last_checked_at: '2026-10-15T12:00:00Z', last_result: 'reachable', last_error: null, last_ip: '203.0.113.7', last_rtt_ms: 12, changed_at: null, ...over })
+    const api = mockApi({ me: owner, handler: (r: Req) => {
+      if (r.path === '/api/v1/security/vps/v1') return { status: 200, body: vps() }
+      if (r.path === '/api/v1/security/vps/v1/agent') return { status: 200, body: { agent: null } }
+      if (r.path === '/api/v1/security/vps/v1/ports') return { status: 200, body: { category: 'sockets', state: 'agent_required', observed_at: null, received_at: null, clock_skew_ms: 0, data: null, agent: null } }
+      if (r.path === '/api/v1/security/vps/v1/public-ports' && r.method === 'GET') return { status: 200, body: { items: [port({}), port({ id: 'e2', port: 8443, expected: false, last_result: 'timeout' }), port({ id: 'e3', port: 22, last_result: null, last_checked_at: null, last_ip: null })], vantage: { id: 'api_server', independent: false }, interval_minutes: 60, coverage: { kind: 'known_endpoints', discovery: 'off' } } }
+      if (r.path === '/api/v1/security/vps/v1/checks/ports/run') return { status: 202, body: { requested: 3 } }
+    } })
+    renderSec('/security/v1')
+    await userEvent.click(await screen.findByRole('tab', { name: 'Порты' }))
+    expect(await screen.findByText(/Это не независимая точка/)).toBeInTheDocument()
+    expect(screen.getByText(/Остальные порты не сканируются/)).toBeInTheDocument()
+    expect(screen.getByText('отвечает')).toBeInTheDocument()
+    expect(screen.getByText('нет ответа (не значит «закрыт»)')).toBeInTheDocument()
+    expect(screen.queryByText(/закрыт$/)).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Проверить сейчас' }))
+    expect(await screen.findByText(/Проверка запрошена/)).toBeInTheDocument()
+    expect(api.find('POST', '/api/v1/security/vps/v1/checks/ports/run')).toHaveLength(1)
+  })
+
+  it('shows certificates with days left, flags an expired one, and keeps unchecked ones unchecked', async () => {
+    const ep = (over: object) => ({ id: 't1', host: 'fi.example.com', port: 443, sni: 'fi.example.com', enabled: true, last_checked_at: '2026-10-15T12:00:00Z', last_state: 'ok', last_ip: '203.0.113.7', last_fingerprint: 'ab', last_not_after: '2026-12-01T00:00:00Z', last_obs: { issuer: "CN=R11,O=Let's Encrypt", days_left: 47 }, ...over })
+    mockApi({ me: owner, handler: (r: Req) => {
+      if (r.path === '/api/v1/security/vps/v1') return { status: 200, body: vps() }
+      if (r.path === '/api/v1/security/vps/v1/agent') return { status: 200, body: { agent: null } }
+      if (r.path === '/api/v1/security/vps/v1/fail2ban') return { status: 200, body: { category: 'fail2ban', state: 'agent_required', observed_at: null, received_at: null, clock_skew_ms: 0, data: null, agent: null } }
+      if (r.path === '/api/v1/security/vps/v1/tls') return { status: 200, body: { items: [ep({}), ep({ id: 't2', host: 'old.example.com', last_state: 'expired', last_not_after: '2026-10-10T00:00:00Z', last_obs: { days_left: -5 } }), ep({ id: 't3', host: 'new.example.com', last_state: null, last_checked_at: null, last_not_after: null, last_obs: {} })], vantage: { id: 'api_server', independent: false }, interval_hours: 24 } }
+    } })
+    renderSec('/security/v1')
+    await userEvent.click(await screen.findByRole('tab', { name: 'TLS-сертификаты' }))
+    expect(await screen.findByText(/через 47 дн./)).toBeInTheDocument()
+    expect(screen.getByText(/истёк 5 дн. назад/)).toBeInTheDocument()
+    expect(screen.getByText('истёк')).toBeInTheDocument()
+    expect(screen.getByText('ещё не проверялся')).toBeInTheDocument()
+    expect(screen.getByText(/Это не независимая точка/)).toBeInTheDocument()
+  })
 })
