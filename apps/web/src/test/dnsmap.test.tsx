@@ -126,6 +126,20 @@ describe('DNS Map', () => {
     expect(screen.getByRole('link', { name: '93.184.216.34' })).toHaveAttribute('href', '/intel?target=93.184.216.34')
   })
 
+  it('links a record to a server only when its address is a registered one', async () => {
+    mockApi({ me: owner, handler: (r: Req) => {
+      if (r.path === '/api/v1/intel/dns/maps/m1') return { status: 200, body: { map: map(), names: [] } }
+      if (r.path === '/api/v1/intel/dns/maps/m1/graph') return { status: 200, body: { nodes: [], edges: [], total_nodes: 0, truncated: false, note: '' } }
+      if (r.path === '/api/v1/intel/dns/maps/m1/records') return { status: 200, body: { items: [rec({}), rec({ name: 'other.example.com', values: ['9.9.9.9'] })], more: false } }
+      if (r.path === '/api/v1/security/vps-by-address') return { status: 200, body: { items: { '93.184.216.34': { vps_id: 'v1', name: 'Helsinki' } } } }
+    } })
+    renderAt('/intel/dns/m1')
+    await userEvent.click(await screen.findByRole('tab', { name: 'Записи' }))
+    const link = await screen.findByRole('link', { name: /Helsinki/ })
+    expect(link).toHaveAttribute('href', '/security/v1')
+    expect(screen.getAllByRole('link', { name: /Сервер в/ })).toHaveLength(1)
+  })
+
   it('shows history with before and after, and a flapping record as volatile', async () => {
     const api = mockApi({ me: owner, handler: (r: Req) => {
       if (r.path === '/api/v1/intel/dns/maps/m1') return { status: 200, body: { map: map(), names: [] } }
