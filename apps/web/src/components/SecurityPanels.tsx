@@ -5,7 +5,7 @@ import { api } from '../lib/api'
 import { errorText } from '../lib/errors'
 import { formatDateTime } from '../lib/format'
 import { useLoad } from '../hooks/useLoad'
-import type { SecAgent, SecCategory, SecEvent, SecJail, SecListener } from '../lib/types'
+import type { SecAgent, SecCategory, SecEvent, SecFwDiff, SecFwModel, SecFwSnapshot, SecJail, SecListener } from '../lib/types'
 import { Card, Chip } from './ui'
 import { CommandHistory, useBanControls } from './SecurityBan'
 import { DangerButton, GhostButton, Modal, PrimaryButton } from './Modal'
@@ -120,19 +120,111 @@ export function PortsTab({ vpsId }: { vpsId: string }) {
   )
 }
 
+function FwStructure({ m }: { m: SecFwModel }) {
+  const chains = m.tables.reduce((n, x) => n + x.chains.length, 0)
+  return (
+    <div className="space-y-4">
+      <p className="text-[13px] text-muted">{t('sec.fw.summary', { tables: m.tables.length, chains, rules: m.rules })}</p>
+      {m.tables.map((tb) => (
+        <div key={`${tb.family}|${tb.name}`} className="rounded-control border border-line">
+          <div className="border-b border-line bg-elevated px-3 py-2 text-[13px] font-medium">{tb.family} {tb.name}</div>
+          <div className="space-y-3 p-3">
+            {tb.chains.map((c) => (
+              <div key={c.name}>
+                <div className="flex flex-wrap items-center gap-2 text-[13px]">
+                  <span className="font-mono font-medium">{c.name}</span>
+                  {c.hook && <Chip tone="cyan">{c.hook}{c.priority ? ` ${c.priority}` : ''}</Chip>}
+                  {c.policy && <Chip tone={c.policy === 'drop' ? 'amber' : 'muted'}>{t('sec.fw.policy')} {c.policy}</Chip>}
+                </div>
+                {c.rules.length === 0 ? <p className="mt-1 text-[12px] text-muted">{t('sec.fw.noRules')}</p> : (
+                  <pre className="mt-1 max-h-[260px] overflow-auto whitespace-pre-wrap break-all font-mono text-[12px] leading-5">{c.rules.join('\n')}</pre>
+                )}
+              </div>
+            ))}
+            {tb.other && tb.other.length > 0 && <p className="text-[12px] text-muted">{t('sec.fw.other')}: {tb.other.join(', ')}</p>}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+const OP_CLASS: Record<string, string> = { '+': 'bg-green/10 text-green', '-': 'bg-red/10 text-red', '…': 'text-muted' }
+
+function FwChanges({ vpsId }: { vpsId: string }) {
+  const diff = useLoad((s) => api.get<SecFwDiff>(`/api/v1/security/vps/${vpsId}/firewall/diff`, s), [vpsId], 30_000)
+  const hist = useLoad((s) => api.get<{ items: SecFwSnapshot[] }>(`/api/v1/security/vps/${vpsId}/firewall/history?limit=15`, s), [vpsId], 30_000)
+  const d = diff.data
+  return (
+    <div className="space-y-4">
+      <p className="text-[13px] text-muted">{t('sec.fw.diff.hint')}</p>
+      {diff.error && <p role="alert" className="text-[13px] text-red">{diff.error}</p>}
+      {d && !d.available && <p className="text-[13px] text-muted">{d.reason === 'a_reading_was_incomplete' ? t('sec.fw.diff.incomplete') : t('sec.fw.diff.none')}</p>}
+      {d?.available && (
+        <>
+          <p className="tnum text-[13px] text-muted">{t('sec.fw.diff.range', { from: formatDateTime(d.from!.observed_at, 'local'), to: formatDateTime(d.to!.observed_at, 'local') })}</p>
+          {d.backend_changed && <p className="text-[13px] text-amber">{t('sec.fw.diff.backend')}</p>}
+          {(d.lines ?? []).length === 0 ? <p className="text-[13px]">{t('sec.fw.diff.same')}</p> : (
+            <>
+              <p className="text-[13px]">{t('sec.fw.diff.counts', { added: d.added ?? 0, removed: d.removed ?? 0 })}</p>
+              <pre className="max-h-[420px] overflow-auto rounded-control border border-line bg-elevated p-3 font-mono text-[12px] leading-5">
+                {d.lines!.map((l, i) => (
+                  <div key={i} className={OP_CLASS[l.op] ?? ''}>{l.op === '…' ? '…' : `${l.op} ${l.text.replace(/^\t+/, (x) => '  '.repeat(x.length))}`}</div>
+                ))}
+              </pre>
+              {d.truncated && <p className="text-[13px] text-amber">{t('sec.fw.diff.truncated')}</p>}
+            </>
+          )}
+        </>
+      )}
+      <div>
+        <h3 className="mb-1 text-[13px] font-medium">{t('sec.fw.history')}</h3>
+        {hist.data && hist.data.items.length === 0 && <p className="text-[13px] text-muted">{t('sec.fw.history.none')}</p>}
+        <ul className="space-y-1 text-[13px]">
+          {(hist.data?.items ?? []).map((x) => (
+            <li key={x.id} className="flex flex-wrap items-center gap-3">
+              <span className="tnum text-muted">{formatDateTime(x.observed_at, 'local')}</span>
+              <span className="font-mono text-[12px] text-muted">{x.hash.slice(0, 8)}</span>
+              {x.status !== 'ok' && <StateChip state={x.status} />}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  )
+}
+
 export function FirewallTab({ vpsId }: { vpsId: string }) {
   const { data: c, error } = useCategory<{ backend: string; rules: string; truncated?: boolean }>(vpsId, 'firewall')
+  const [view, setView] = useState<'structure' | 'changes' | 'raw'>('structure')
   if (error) return <p role="alert" className="text-[13px] text-red">{error}</p>
   if (!c) return null
+  const model = hasData(c) ? c.model : undefined
+  const views: ('structure' | 'changes' | 'raw')[] = ['structure', 'changes', 'raw']
   return (
     <Card title="Firewall" note={t('sec.fw.hint')}>
       <Freshness c={c} />
       {hasData(c) && (
         <>
-          <p className="mb-2 text-[13px] text-muted">{t('sec.fw.backend')}: <span className="text-fg">{c.data!.backend}</span></p>
-          {c.data!.rules === '' ? <p className="text-[13px] text-muted">{t('sec.fw.empty')}</p> : (
+          <p className="mb-3 text-[13px] text-muted">{t('sec.fw.backend')}: <span className="text-fg">{c.data!.backend}</span></p>
+          <div role="tablist" className="mb-3 flex gap-2 text-[13px]">
+            {views.map((v) => (
+              <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)}
+                className={`rounded-control border px-3 py-1 ${view === v ? 'border-cyan text-cyan' : 'border-line text-muted hover:text-fg'}`}>
+                {t(`sec.fw.${v}` as MsgKey)}
+              </button>
+            ))}
+          </div>
+          {view === 'structure' && (model && model.tables.length > 0 ? <FwStructure m={model} /> : (
+            <>
+              <p className="mb-2 text-[13px] text-muted">{c.data!.rules === '' ? t('sec.fw.empty') : t('sec.fw.noModel')}</p>
+              {c.data!.rules !== '' && <Code>{c.data!.rules}</Code>}
+            </>
+          ))}
+          {view === 'changes' && <FwChanges vpsId={vpsId} />}
+          {view === 'raw' && (c.data!.rules === '' ? <p className="text-[13px] text-muted">{t('sec.fw.empty')}</p> : (
             <pre className="max-h-[480px] overflow-auto rounded-control border border-line bg-elevated p-3 font-mono text-[12px] leading-5">{c.data!.rules}</pre>
-          )}
+          ))}
           {c.data!.truncated && <p className="mt-2 text-[13px] text-amber">{t('sec.fw.truncated')}</p>}
         </>
       )}

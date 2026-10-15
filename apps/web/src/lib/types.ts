@@ -262,7 +262,7 @@ export interface SecJail { name: string; currently_failed: number; total_failed:
 export interface SecListener { proto: string; addr: string; port: number; state?: string; process?: string; pid?: number }
 export interface SecCategory<T> {
   category: string; state: string; status?: string; observed_at: string | null; received_at: string | null; clock_skew_ms: number
-  data: T | null; agent: SecAgent | null; manage?: SecManage
+  data: T | null; agent: SecAgent | null; manage?: SecManage; model?: SecFwModel
 }
 export interface SecEvent { id: string; category: string; type: string; severity: 'info' | 'warning' | 'critical'; source: string; observed_at: string; payload: Record<string, unknown> }
 
@@ -317,3 +317,13 @@ export interface DnsChange { id: string; name: string; type: string; kind: strin
 export interface DnsGraphNode { id: string; kind: 'name' | 'ip' | 'mail' | 'ns'; label: string; group?: string; provenance?: string }
 export interface DnsGraphEdge { from: string; to: string; type: string; label?: string; unverified?: boolean; no_longer_observed?: boolean }
 export interface DnsGraph { nodes: DnsGraphNode[]; edges: DnsGraphEdge[]; total_nodes: number; truncated: boolean; note: string }
+
+export interface SecFwChain { name: string; type?: string; hook?: string; priority?: string; policy?: string; rules: string[] }
+export interface SecFwTable { family: string; name: string; chains: SecFwChain[]; other?: string[] }
+export interface SecFwModel { backend: string; tables: SecFwTable[]; rules: number }
+export interface SecFwRef { id: string; observed_at: string; hash: string; backend: string }
+export interface SecFwDiff {
+  available: boolean; reason?: string; from?: SecFwRef; to?: SecFwRef; backend_changed?: boolean
+  added?: number; removed?: number; truncated?: boolean; lines?: { op: string; text: string }[]
+}
+export interface SecFwSnapshot { id: string; observed_at: string; status: string; hash: string; backend: string }
