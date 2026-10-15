@@ -34,6 +34,7 @@ const base = {
   'filter.nodes': 'Ноды',
   'filter.nodesAll': 'Все ноды',
   'filter.nodesSelected': 'Выбрано: {n}',
+  'filter.more': 'Период, часовой пояс и обновление',
   'filter.range': 'Период',
   'filter.custom': 'Свой период',
   'filter.from': 'С',

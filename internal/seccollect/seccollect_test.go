@@ -231,3 +231,25 @@ func TestFirewallBackendsAndHonestFailures(t *testing.T) {
 		t.Errorf("%+v", s)
 	}
 }
+
+func TestFail2banRulesInUFWChainsAreNotFirewallChanges(t *testing.T) {
+	const nft = "table ip filter {\n\tchain ufw-user-input {\n\t\tip saddr 180.76.233.177 counter reject\n\t\tip saddr 182.93.50.90 counter reject\n\t\ttcp dport 22 counter accept\n\t\tip saddr 203.0.113.77 counter drop\n\t}\n}\n"
+	banned := map[string]bool{"180.76.233.177": true, "182.93.50.90": true}
+	got := canonicalNft(nft, banned)
+	if strings.Contains(got, "180.76.233.177") || strings.Contains(got, "182.93.50.90") {
+		t.Fatalf("a ban rule is part of the canonical text:\n%s", got)
+	}
+	// Someone's own rule, even a drop of one address, and the real rules stay.
+	if !strings.Contains(got, "203.0.113.77") || !strings.Contains(got, "tcp dport 22") {
+		t.Fatalf("a rule that is not a Fail2ban ban was removed:\n%s", got)
+	}
+	// With nothing banned (or no Fail2ban) nothing is dropped.
+	if !strings.Contains(canonicalNft(nft, nil), "180.76.233.177") {
+		t.Fatal("rules were dropped without a ban list")
+	}
+	ipt := "*filter\n-A ufw-user-input -s 180.76.233.177/32 -j REJECT\n-A INPUT -s 198.51.100.1 -j DROP\nCOMMIT\n"
+	g := canonicalIptables(ipt, banned)
+	if strings.Contains(g, "180.76.233.177") || !strings.Contains(g, "198.51.100.1") {
+		t.Fatalf("%s", g)
+	}
+}
