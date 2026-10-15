@@ -176,3 +176,60 @@ func (s *Server) awgRename(w http.ResponseWriter, r *http.Request, a auth.Actor,
 	s.audit(r, a, "", "awg.rename", "awg_peer", r.PathValue("id"), map[string]any{"name": label})
 	w.WriteHeader(http.StatusNoContent)
 }
+
+const (
+	awgMinLimit  = 10 << 20         // 10 MiB: below this a limit is a typing mistake
+	awgMaxLimit  = int64(100) << 40 // 100 TiB
+	awgMaxExpiry = 5 * 365 * 24 * time.Hour
+)
+
+// awgSetLimits sets or clears a device's expiry date and traffic allowance. RemnaScope enforces them by
+// revoking the device on the host, so they only make sense on a server the host lets RemnaScope manage, and
+// only the owner may set them. A revoked device cannot be switched back on: it has to be created again.
+func (s *Server) awgSetLimits(w http.ResponseWriter, r *http.Request, a auth.Actor, _ store.Session) {
+	if !a.IsOwner {
+		s.writeErr(w, r, http.StatusForbidden, "forbidden", "only the owner can set device limits")
+		return
+	}
+	var in struct {
+		ExpiresAt         *time.Time `json:"expires_at"`
+		TrafficLimitBytes *int64     `json:"traffic_limit_bytes"`
+	}
+	if !s.decode(w, r, &in) {
+		return
+	}
+	now := s.Now().UTC()
+	if in.ExpiresAt != nil {
+		if !in.ExpiresAt.After(now) || in.ExpiresAt.After(now.Add(awgMaxExpiry)) {
+			s.writeErr(w, r, http.StatusUnprocessableEntity, "invalid_expiry", "the expiry must be in the future and within five years")
+			return
+		}
+		t := in.ExpiresAt.UTC()
+		in.ExpiresAt = &t
+	}
+	if in.TrafficLimitBytes != nil && (*in.TrafficLimitBytes < awgMinLimit || *in.TrafficLimitBytes > awgMaxLimit) {
+		s.writeErr(w, r, http.StatusUnprocessableEntity, "invalid_limit", "the traffic limit must be between 10 MiB and 100 TiB")
+		return
+	}
+	peerID := r.PathValue("id")
+	_, _, _, mode, _, label, gone, err := s.Store.AWGPeerTarget(r.Context(), a.Scope(), peerID)
+	if err != nil {
+		s.writeErr(w, r, http.StatusNotFound, "not_found", "no such device")
+		return
+	}
+	if mode != "managed" && (in.ExpiresAt != nil || in.TrafficLimitBytes != nil) {
+		s.writeErr(w, r, http.StatusConflict, "not_managed", "this server is read-only: a limit could not be enforced")
+		return
+	}
+	if gone {
+		s.writeErr(w, r, http.StatusConflict, "already_gone", "the device is already removed from the server")
+		return
+	}
+	if err := s.Store.SetAWGPeerLimits(r.Context(), a.Scope(), peerID, in.ExpiresAt, in.TrafficLimitBytes, now); err != nil {
+		s.writeErr(w, r, http.StatusNotFound, "not_found", "no such device")
+		return
+	}
+	meta := map[string]any{"name": label, "expires": in.ExpiresAt != nil, "traffic_limit": in.TrafficLimitBytes != nil}
+	s.audit(r, a, "", "awg.limits", "awg_peer", peerID, meta)
+	w.WriteHeader(http.StatusNoContent)
+}
