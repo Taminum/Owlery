@@ -32,6 +32,7 @@ import (
 	"github.com/Taminum/RemnaScope/internal/probe"
 	"github.com/Taminum/RemnaScope/internal/remnawave"
 	"github.com/Taminum/RemnaScope/internal/safehttp"
+	"github.com/Taminum/RemnaScope/internal/secchecks"
 	"github.com/Taminum/RemnaScope/internal/secingest"
 	"github.com/Taminum/RemnaScope/internal/secrets"
 	"github.com/Taminum/RemnaScope/internal/store"
@@ -160,6 +161,8 @@ func serve(log *slog.Logger) error {
 			}
 		}
 	}()
+	secChecker := secchecks.New(st, log)
+	srv.SecChecks = secChecker
 	srv.SecIngest = (&secingest.Server{Store: st, Log: log, Limiter: auth.NewLimiter(1, 10), ClientIP: srv.ClientAddr}).Handler()
 	srv.Ingest = (&ingest.Server{Store: st, Log: log, Limiter: auth.NewLimiter(1, 10), ClientIP: srv.ClientAddr, Live: srv.Live, Ops: srv.AWGOps}).Handler()
 
@@ -176,6 +179,7 @@ func serve(log *slog.Logger) error {
 		go sy.Run(ctx)
 	}
 	go alerts.Run(ctx, st, time.Minute, log)
+	go secChecker.Run(ctx)
 	go probe.Run(ctx, st, time.Minute, log)
 	go func() {
 		t := time.NewTicker(time.Hour)

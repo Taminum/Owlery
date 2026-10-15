@@ -33,6 +33,10 @@ const (
 
 func ValidCategory(c string) bool { return c == CatFail2ban || c == CatSockets || c == CatFirewall }
 
+// EventCategories are the categories the journal can be filtered by: the agent's three plus the
+// external checks'.
+func ValidEventCategory(c string) bool { return ValidCategory(c) || c == "ports" || c == "tls" }
+
 // Collection statuses. Anything but ok means Data is empty or partial and must not be read as "nothing found".
 const (
 	StatusOK               = "ok"
