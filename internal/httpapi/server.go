@@ -274,6 +274,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/security/vps/{id}/events", s.session(s.secEvents))
 	mux.Handle("GET /api/v1/security/vps/{id}/public-ports", s.session(s.listPublicPorts))
 	mux.Handle("POST /api/v1/security/vps/{id}/public-ports", s.session(s.addPublicPort))
+	mux.Handle("POST /api/v1/security/vps/{id}/public-ports/accept-open", s.session(s.acceptOpenPorts))
 	mux.Handle("PATCH /api/v1/security/vps/{id}/public-ports/{eid}", s.session(s.patchPublicPort))
 	mux.Handle("GET /api/v1/security/vps/{id}/tls", s.session(s.listTLS))
 	mux.Handle("POST /api/v1/security/vps/{id}/tls", s.session(s.addTLS))
