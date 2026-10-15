@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom'
-import { BarChart3, Bell, Compass, Gauge, Globe2, Laptop, Shield, ShieldCheck, Telescope, LayoutDashboard, Radio, Server, Settings, Users, Waypoints, X, type LucideIcon } from 'lucide-react'
+import { BarChart3, Bell, Compass, Gauge, Globe2, Laptop, Shield, ShieldCheck, Telescope, LayoutDashboard, History, Radio, Server, Settings, Users, Waypoints, X, type LucideIcon } from 'lucide-react'
 import { t, type MsgKey } from '../i18n'
 import { api } from '../lib/api'
 import { useLoad } from '../hooks/useLoad'
@@ -9,6 +9,7 @@ interface Item { to: string; key: MsgKey; icon: LucideIcon; disabled?: boolean }
 
 const MAIN: Item[] = [
   { to: '/', key: 'nav.overview', icon: LayoutDashboard },
+  { to: '/digest', key: 'nav.digest', icon: History },
   { to: '/live', key: 'nav.live', icon: Radio },
   { to: '/traffic', key: 'nav.traffic', icon: BarChart3 },
   { to: '/sites', key: 'nav.sites', icon: Compass },

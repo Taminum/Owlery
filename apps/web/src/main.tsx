@@ -9,6 +9,7 @@ import Alerts from './pages/Alerts'
 import Channels from './pages/Channels'
 import Live from './pages/Live'
 import Devices from './pages/Devices'
+import Digest from './pages/Digest'
 import Awg from './pages/Awg'
 import Intel from './pages/Intel'
 import { DnsMapDetail } from './pages/DnsMap'
@@ -43,6 +44,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="users" element={<Users />} />
             <Route path="nodes" element={<Nodes />} />
             <Route path="devices" element={<Devices />} />
+            <Route path="digest" element={<Digest />} />
             <Route path="panels" element={<Panels />} />
             <Route path="settings" element={<Settings />} />
             <Route path="*" element={<Placeholder />} />
