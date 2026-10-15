@@ -25,6 +25,7 @@ type Hub struct {
 	conns map[string]*link
 	pend  map[string]*pending
 	next  uint64
+	admin map[string]bool // agents whose last snapshot said the host can create and remove containers
 }
 
 type link struct {
@@ -37,7 +38,9 @@ type pending struct {
 	ch    chan ingestproto.AWGOpResult
 }
 
-func New() *Hub { return &Hub{conns: map[string]*link{}, pend: map[string]*pending{}} }
+func New() *Hub {
+	return &Hub{conns: map[string]*link{}, pend: map[string]*pending{}, admin: map[string]bool{}}
+}
 
 // Register makes an agent's connection available for commands. The returned function removes it (and
 // only it: a newer connection of the same agent stays registered).
@@ -105,4 +108,18 @@ func (h *Hub) Deliver(agentID string, r ingestproto.AWGOpResult) {
 	case p.ch <- r:
 	default:
 	}
+}
+
+// SetContainerAdmin records what an agent's latest snapshot said about container administration.
+func (h *Hub) SetContainerAdmin(agentID string, v bool) {
+	h.mu.Lock()
+	h.admin[agentID] = v
+	h.mu.Unlock()
+}
+
+// ContainerAdmin reports whether the agent's host has opted in. It is what the host said, not a promise.
+func (h *Hub) ContainerAdmin(agentID string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.admin[agentID]
 }

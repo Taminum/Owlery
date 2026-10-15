@@ -143,6 +143,9 @@ type AWGInstance struct {
 type AWG struct {
 	Type      string        `json:"type"` // "awg"
 	Instances []AWGInstance `json:"instances"`
+	// ContainerAdmin says that the host has the helper that creates and removes containers installed. A host
+	// with no container yet reports it too, which is how an empty server can be set up from RemnaScope.
+	ContainerAdmin bool `json:"ca,omitempty"`
 }
 
 const (
@@ -156,10 +159,15 @@ const (
 type AWGOp struct {
 	Type      string `json:"type"` // "awg_op"
 	ID        string `json:"id"`
-	Op        string `json:"op"` // add | revoke
+	Op        string `json:"op"` // add | revoke | install | remove
 	Container string `json:"c"`
 	Name      string `json:"n,omitempty"` // add: the device's name
 	Key       string `json:"k,omitempty"` // revoke: the device's public key
+	// install and remove act on a whole container and need the host to have opted in to container
+	// administration (the "container_admin" capability). They carry no free text.
+	Port    int    `json:"p,omitempty"` // install: the UDP port
+	Subnet  string `json:"s,omitempty"` // install: the tunnel subnet, a /24 in 10.0.0.0/8
+	Confirm string `json:"y,omitempty"` // remove: the confirmation word, which deletes every device in the container
 }
 
 // AWGOpResult is the agent's answer. For a successful add it carries the new device's client
@@ -171,6 +179,7 @@ type AWGOpResult struct {
 	Code   string `json:"code,omitempty"` // error: a short machine word
 	Key    string `json:"k,omitempty"`    // the device's public key
 	IP     string `json:"ip,omitempty"`   // its address in the tunnel
+	Port   int    `json:"port,omitempty"` // install: the port the new container listens on
 	Config string `json:"cfg,omitempty"`
 }
 

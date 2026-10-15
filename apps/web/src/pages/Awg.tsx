@@ -12,6 +12,7 @@ import { PageHead } from '../components/Analyzer'
 import { Drawer } from '../components/Drawer'
 import { controlCls } from '../components/Popover'
 import { AddDevice, RenameDevice, RevokeDevice } from '../components/AwgDevice'
+import { AwgHosts, RemoveContainer } from '../components/AwgContainers'
 import { GhostButton } from '../components/Modal'
 
 interface Peer {
@@ -85,6 +86,7 @@ export default function Awg() {
   const [period, setPeriod] = useState<(typeof PERIODS)[number]>('24h')
   const [open, setOpen] = useState<Peer | null>(null)
   const [adding, setAdding] = useState<Instance | null>(null)
+  const [removingServer, setRemovingServer] = useState<Instance | null>(null)
   const [revoking, setRevoking] = useState<Peer | null>(null)
   const [renaming, setRenaming] = useState<Peer | null>(null)
   const q = useLoad((s) => api.get<AwgResponse>(`/api/v1/awg?period=${period}`, s), [period], 30_000)
@@ -118,9 +120,15 @@ export default function Awg() {
         } />
       {q.error && <p role="alert" className="text-[13px] text-red">{q.error}</p>}
       {q.data && q.data.instances.length === 0 && <p className="py-10 text-center text-[13px] text-muted">{t('awg.empty')}</p>}
+      {canForget && <AwgHosts onChanged={() => q.reload()} />}
       {q.data?.instances.map((in_) => (
         <Card key={in_.id}
-          right={canForget && in_.mode === 'managed' ? <GhostButton onClick={() => setAdding(in_)}>{t('awg.add')}</GhostButton> : undefined}
+          right={canForget && in_.mode === 'managed' ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <GhostButton onClick={() => setAdding(in_)}>{t('awg.add')}</GhostButton>
+              {/^amnezia-awg\d{0,2}$/.test(in_.container) && <GhostButton onClick={() => setRemovingServer(in_)}>{t('awgc.remove')}</GhostButton>}
+            </div>
+          ) : undefined}
           title={`${in_.container} · ${in_.interface}`}
           note={[in_.port ? t('awg.port', { n: in_.port }) : '', in_.variant ? t('awg.variant', { v: in_.variant }) : '', t(`awg.mode.${in_.mode}` as MsgKey), t('awg.report', { when: ago(in_.last_report) })].filter(Boolean).join(' · ')}>
           {!in_.report_fresh && <p role="status" className="mb-3 text-[13px] text-amber">{t('awg.noReport')}</p>}
@@ -170,6 +178,7 @@ export default function Awg() {
         <div className="space-y-1 text-xs leading-5 text-muted"><p>{t('awg.state.hint')}</p><p>{t('awg.direction')}</p></div>
       )}
       {adding && <AddDevice instanceId={adding.id} container={adding.container} onClose={() => setAdding(null)} onDone={() => q.reload()} />}
+      {removingServer && <RemoveContainer instanceId={removingServer.id} container={removingServer.container} onClose={() => setRemovingServer(null)} onDone={() => q.reload()} />}
       {revoking && <RevokeDevice peerId={revoking.id} label={revoking.label} onClose={() => setRevoking(null)} onDone={() => q.reload()} />}
       {renaming && <RenameDevice peerId={renaming.id} label={renaming.label} onClose={() => setRenaming(null)} onDone={() => q.reload()} />}
       {open && <Drawer title={open.label} onClose={() => setOpen(null)}><PeerDetail peer={open} range={period} /></Drawer>}
