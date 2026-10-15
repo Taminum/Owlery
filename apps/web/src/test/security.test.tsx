@@ -56,11 +56,39 @@ describe('Security page', () => {
     expect(screen.queryByRole('button', { name: /Добавить сервер/ })).toBeNull()
   })
 
-  it('never shows a healthy state for collectors that are not connected', async () => {
-    mockApi({ me: owner, handler: (r: Req) => (r.path === '/api/v1/security/vps/v1' ? { status: 200, body: vps() } : undefined) })
+  it('never shows a healthy state for a server without an agent, and says what it knows when it has one', async () => {
+    const cat = (over: object) => ({ category: 'fail2ban', state: 'agent_required', status: undefined, observed_at: null, received_at: null, clock_skew_ms: 0, data: null, agent: null, ...over })
+    let agent: object | null = null
+    let f2b: object = cat({})
+    mockApi({ me: owner, handler: (r: Req) => {
+      if (r.path === '/api/v1/security/vps/v1') return { status: 200, body: vps() }
+      if (r.path === '/api/v1/security/vps/v1/agent') return { status: 200, body: { agent } }
+      if (r.path === '/api/v1/security/vps/v1/fail2ban') return { status: 200, body: f2b }
+    } })
+    const view = renderSec('/security/v1')
+    expect(await screen.findByText('Агент не создан. Без него Fail2ban, порты и firewall не видны.')).toBeInTheDocument()
+    expect(await screen.findByText('нужен агент')).toBeInTheDocument()
+    expect(screen.queryByText('данные получены')).toBeNull()
+    view.unmount()
+
+    agent = { id: 'a1', status: 'active', agent_version: '0.1', hostname: 'h1', capabilities: [], last_seen: new Date().toISOString(), online: true }
+    f2b = cat({ state: 'ok', status: 'ok', observed_at: '2026-10-15T12:00:00Z', received_at: '2026-10-15T12:00:00Z',
+      data: { jails: [{ name: 'sshd', currently_failed: 1, total_failed: 9, currently_banned: 1, total_banned: 4, banned_ips: ['203.0.113.5'] }] } })
     renderSec('/security/v1')
-    expect(await screen.findByText('Fail2ban')).toBeInTheDocument()
-    expect(screen.getAllByText('нужен агент')).toHaveLength(4)
-    expect(screen.getByText(/не значит, что всё в порядке/)).toBeInTheDocument()
+    expect(await screen.findByText('sshd')).toBeInTheDocument()
+    expect(screen.getByText('203.0.113.5')).toBeInTheDocument()
+    expect(screen.getByText('на связи')).toBeInTheDocument()
+    expect(screen.getByText('1 / 4')).toBeInTheDocument()
+  })
+
+  it('marks old data as stale and an unreadable source as such, with no invented rows', async () => {
+    mockApi({ me: owner, handler: (r: Req) => {
+      if (r.path === '/api/v1/security/vps/v1') return { status: 200, body: vps() }
+      if (r.path === '/api/v1/security/vps/v1/agent') return { status: 200, body: { agent: null } }
+      if (r.path === '/api/v1/security/vps/v1/fail2ban') return { status: 200, body: { category: 'fail2ban', state: 'permission_denied', status: 'permission_denied', observed_at: '2026-10-15T12:00:00Z', received_at: '2026-10-15T12:00:00Z', clock_skew_ms: 0, data: {}, agent: null } }
+    } })
+    renderSec('/security/v1')
+    expect(await screen.findByText('нет прав на чтение')).toBeInTheDocument()
+    expect(screen.queryByRole('table')).toBeNull()
   })
 })

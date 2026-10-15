@@ -1,0 +1,38 @@
+# RemnaScope security agent. Read-only: it reads Fail2ban, listening sockets and firewall rules and reports
+# them. It listens on nothing and runs no command the server sends. See docs/SECURITY_AGENT.md.
+[Unit]
+Description=RemnaScope security agent (read-only)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=remnascope-sec
+Group=remnascope-sec
+ExecStart=/usr/local/bin/remnascope-secagent \
+  -server wss://SCOPE_HOST \
+  -token-file /etc/remnascope/secagent.token
+Restart=always
+RestartSec=5
+
+# Not root. Two capabilities are enough to read the firewall and to see which process owns a socket;
+# reading Fail2ban needs one more decision from you, described in docs/SECURITY_AGENT.md.
+AmbientCapabilities=CAP_NET_ADMIN CAP_SYS_PTRACE CAP_DAC_READ_SEARCH
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_SYS_PTRACE CAP_DAC_READ_SEARCH
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+ReadOnlyPaths=/etc/remnascope
+MemoryMax=128M
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target
