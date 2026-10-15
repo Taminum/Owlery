@@ -87,6 +87,7 @@ export const securityText = {
   'sec.events.source': 'источник: разница снимков',
   'sec.ev.fail2ban.ban': 'Блокировка {ip} в {jail}',
   'sec.ev.fail2ban.unban': 'Снята блокировка {ip} в {jail}',
+  'sec.ev.fail2ban.bans_unobserved': 'В jail {jail} между чтениями были и прошли блокировки: {count} (адреса не видны, нужен журнал)',
   'sec.ev.fail2ban.jail_changed': 'Jail {jail}: {change}',
   'sec.ev.state_changed': 'Состояние: {from} → {to}',
   'sec.ev.port.local_added': 'Новый слушающий порт {proto}/{port} на {addr}',
