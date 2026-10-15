@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, ServerOff, Waypoints } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, FileWarning, Network, ServerOff, ShieldAlert, Waypoints } from 'lucide-react'
 import { t } from '../i18n'
 import { api } from '../lib/api'
 import { useApp } from '../lib/context'
@@ -8,7 +8,7 @@ import type { AlertsResponse } from '../lib/types'
 import { Card, Chip } from '../components/ui'
 import { PageHead, TableSkeleton } from '../components/Analyzer'
 
-const ICON = { agent_silent: ServerOff, panel_sync: Waypoints } as const
+const ICON = { agent_silent: ServerOff, panel_sync: Waypoints, sec_agent_silent: ShieldAlert, sec_tls: FileWarning, sec_port: Network } as const
 
 export default function Alerts() {
   const { filters } = useApp()

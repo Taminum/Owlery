@@ -277,3 +277,9 @@ export interface TLSEndpoint {
   last_ip: string | null; last_fingerprint: string | null; last_not_after: string | null; last_obs: TLSObs
 }
 export interface TLSResponse { items: TLSEndpoint[]; vantage: Vantage; interval_hours: number }
+
+export interface JournalEvent extends SecEvent { vps_id: string; vps_name: string }
+export interface SecSettings {
+  agent_interval_seconds: number; stale_after_seconds: number; port_check_minutes: number; tls_check_hours: number
+  tls_warn_days: number[]; retention_days: number; vantage: Vantage; discovery_scan: string
+}
