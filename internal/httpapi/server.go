@@ -236,6 +236,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("DELETE /api/v1/awg/peers/{id}", s.session(s.awgForget))
 	mux.Handle("PATCH /api/v1/awg/peers/{id}", s.session(s.awgRename))
 	mux.Handle("POST /api/v1/awg/peers/{id}/revoke", s.session(s.awgRevoke))
+	mux.Handle("PUT /api/v1/awg/peers/{id}/limits", s.session(s.awgSetLimits))
 	mux.Handle("POST /api/v1/awg/instances/{id}/peers", s.session(s.awgAdd))
 	mux.Handle("GET /api/v1/awg/hosts", s.session(s.awgHosts))
 	mux.Handle("POST /api/v1/awg/hosts/{id}/containers", s.session(s.awgInstall))

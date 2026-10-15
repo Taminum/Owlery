@@ -13,6 +13,7 @@ import { Drawer } from '../components/Drawer'
 import { controlCls } from '../components/Popover'
 import { AddDevice, RenameDevice, RevokeDevice } from '../components/AwgDevice'
 import { AwgHosts, RemoveContainer } from '../components/AwgContainers'
+import { DeviceLimits, LimitLine } from '../components/AwgLimits'
 import { GhostButton } from '../components/Modal'
 
 interface Peer {
@@ -21,6 +22,7 @@ interface Peer {
   download_total: number; upload_total: number; download_range: number; upload_range: number
   total_download: number; total_upload: number; total_since: string | null
   last_seen_at: string | null; last_seen_source?: 'live' | 'recorded' | 'panel'
+  expires_at: string | null; traffic_limit_bytes: number | null; used_bytes: number; auto_revoked?: string
 }
 interface Instance {
   id: string; container: string; interface: string; port?: number; variant?: string; mode: string
@@ -88,6 +90,7 @@ export default function Awg() {
   const [adding, setAdding] = useState<Instance | null>(null)
   const [removingServer, setRemovingServer] = useState<Instance | null>(null)
   const [revoking, setRevoking] = useState<Peer | null>(null)
+  const [limiting, setLimiting] = useState<Peer | null>(null)
   const [renaming, setRenaming] = useState<Peer | null>(null)
   const q = useLoad((s) => api.get<AwgResponse>(`/api/v1/awg?period=${period}`, s), [period], 30_000)
   const { state: auth } = useAuth()
@@ -150,6 +153,7 @@ export default function Awg() {
                     <td className="px-2 py-2">
                       <button type="button" onClick={() => setOpen(p)} className="font-medium underline-offset-2 hover:text-cyan hover:underline">{p.label}</button>
                       {p.gone && <span className="ml-2 text-xs text-muted">{t('awg.gone')}</span>}
+                      <LimitLine p={p} tz={tz} />
                     </td>
                     <td className="px-2 py-2 font-mono text-xs text-muted">{p.tunnel_ip ?? '—'}</td>
                     <td className="px-2 py-2"><Chip tone={TONE[p.state]}>{t(`awg.state.${p.state}` as MsgKey)}</Chip></td>
@@ -159,6 +163,7 @@ export default function Awg() {
                     {canForget && (
                       <td className="whitespace-nowrap px-2 py-2 text-right">
                         {!p.gone && <button type="button" onClick={() => setRenaming(p)} className="mr-3 text-xs text-muted underline-offset-2 hover:text-cyan hover:underline" aria-label={`${t('awg.rename')}: ${p.label}`}>{t('awg.rename')}</button>}
+                        {!p.gone && in_.mode === 'managed' && <button type="button" onClick={() => setLimiting(p)} className="mr-3 text-xs text-muted underline-offset-2 hover:text-cyan hover:underline" aria-label={`${t('awgl.limits')}: ${p.label}`}>{t('awgl.limits')}</button>}
                         {!p.gone && in_.mode === 'managed' && <button type="button" onClick={() => setRevoking(p)} className="text-xs text-muted underline-offset-2 hover:text-red hover:underline" aria-label={`${t('awg.revoke')}: ${p.label}`}>{t('awg.revoke')}</button>}
                         {p.gone && <button type="button" onClick={() => void forget(p)} className="text-xs text-muted underline-offset-2 hover:text-red hover:underline" aria-label={`${t('awg.forget')}: ${p.label}`}>{t('awg.forget')}</button>}
                       </td>
@@ -180,6 +185,7 @@ export default function Awg() {
       {adding && <AddDevice instanceId={adding.id} container={adding.container} onClose={() => setAdding(null)} onDone={() => q.reload()} />}
       {removingServer && <RemoveContainer instanceId={removingServer.id} container={removingServer.container} onClose={() => setRemovingServer(null)} onDone={() => q.reload()} />}
       {revoking && <RevokeDevice peerId={revoking.id} label={revoking.label} onClose={() => setRevoking(null)} onDone={() => q.reload()} />}
+      {limiting && <DeviceLimits peerId={limiting.id} label={limiting.label} current={limiting} onClose={() => setLimiting(null)} onDone={() => q.reload()} />}
       {renaming && <RenameDevice peerId={renaming.id} label={renaming.label} onClose={() => setRenaming(null)} onDone={() => q.reload()} />}
       {open && <Drawer title={open.label} onClose={() => setOpen(null)}><PeerDetail peer={open} range={period} /></Drawer>}
     </div>
