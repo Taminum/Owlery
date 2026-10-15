@@ -212,12 +212,15 @@ func (s *Server) patchVPS(w http.ResponseWriter, r *http.Request, a auth.Actor, 
 		Note      *string   `json:"note"`
 		Enabled   *bool     `json:"enabled"`
 		Addresses *[]string `json:"addresses"`
+		// DiscoveryScan turns on the daily scan of common ports on this server's own IP addresses.
+		DiscoveryScan *bool `json:"discovery_scan"`
 	}
 	if !s.decode(w, r, &in) {
 		return
 	}
 	var p store.VPSPatch
 	p.Enabled = in.Enabled
+	p.DiscoveryScan = in.DiscoveryScan
 	if in.Name != nil {
 		n, ok := validName(*in.Name)
 		if !ok {

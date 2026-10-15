@@ -249,6 +249,7 @@ export interface VPSLink { id: string; panel_id: string; node_id: string | null;
 export interface VPS {
   id: string; name: string; origin: string; enabled: boolean; note: string
   created_at: string; updated_at: string; addresses: VPSAddress[]; links: VPSLink[]; can_edit: boolean
+  discovery_scan?: boolean; discovery_scan_at?: string | null
   summary?: VPSSummary
 }
 export interface VPSSummary {
@@ -268,7 +269,7 @@ export interface SecEvent { id: string; category: string; type: string; severity
 
 export interface Vantage { id: string; name?: string; independent: boolean }
 export interface PublicPort {
-  id: string; host: string; port: number; expected: boolean; source: 'manual' | 'local_listener'; enabled: boolean
+  id: string; host: string; port: number; expected: boolean; source: 'manual' | 'local_listener' | 'discovered'; enabled: boolean
   last_checked_at: string | null; last_result: 'reachable' | 'refused' | 'timeout' | 'filtered_or_unknown' | 'error' | null
   last_error: string | null; last_ip: string | null; last_rtt_ms: number | null; changed_at: string | null
   vantage: Vantage | null
@@ -281,7 +282,7 @@ export interface TLSObs {
 export interface TLSEndpoint {
   id: string; host: string; port: number; sni: string; enabled: boolean; last_checked_at: string | null; last_state: string | null
   last_ip: string | null; last_fingerprint: string | null; last_not_after: string | null; last_obs: TLSObs
-  vantage: Vantage | null
+  vantage: Vantage | null; source?: 'manual' | 'auto'
 }
 export interface TLSResponse { items: TLSEndpoint[]; vantage: Vantage; interval_hours: number }
 

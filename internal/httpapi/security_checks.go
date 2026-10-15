@@ -71,10 +71,15 @@ func (s *Server) listPublicPorts(w http.ResponseWriter, r *http.Request, a auth.
 		s.checkStoreErr(w, r, err)
 		return
 	}
+	discovery := "off"
+	if v.DiscoveryScan {
+		discovery = "on" // a bounded list of common ports, once a day; still not "every port"
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"items": items, "vantage": vantageOut(), "interval_minutes": int(secchecks.PortEvery / time.Minute),
-		// Only endpoints already known are checked. Nothing here says that other ports are closed.
-		"coverage": map[string]any{"kind": "known_endpoints", "discovery": "off"},
+		// Only endpoints already known are checked, and ports found by the opt-in scan. Nothing here says that
+		// other ports are closed.
+		"coverage": map[string]any{"kind": "known_endpoints", "discovery": discovery},
 	})
 }
 

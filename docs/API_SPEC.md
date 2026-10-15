@@ -68,7 +68,9 @@ administrator role on a linked panel; creating and archiving one is the owner's.
 - Journal: `GET /vps/{id}/events` and `GET /events` (all visible servers). Filters `vps_id, category, type, severity,
   q, from, to`; paging with `before_ts` + `before_id`; `limit` 1 to 200.
 - `GET /settings`: the fixed intervals, retention and the checker's vantage.
-Not built: firewall changes (never), a discovery scan of unknown ports.
+- Discovery: `PATCH /vps/{id}` with `discovery_scan: true` opts a server in to the daily bounded scan (off by default; an administrator of a linked panel only). A TLS endpoint can also appear on its own (`source: auto`) when a handshake on a registered domain's 443, or on a known listener at a well-known TLS port, presented a certificate.
+
+Not built: firewall changes (never).
 
 ## As built: DNS Map (`/api/v1/intel/dns/maps`, owner only)
 - `GET/POST /maps` (create needs `confirm_scope: true`), `GET/PATCH/DELETE /maps/{id}`, `POST /maps/{id}/refresh`
