@@ -75,6 +75,8 @@ func main() {
 			*awgManage = os.Getenv("REMNASCOPE_AWG_MANAGE") // set by a systemd drop-in: removing it switches management off
 		}
 		cfg.AWGManage = strings.Fields(*awgManage)
+		// Container administration is a separate, deliberate drop-in: without this variable install and remove are refused.
+		cfg.AWGContainer = strings.Fields(os.Getenv("REMNASCOPE_AWG_CONTAINER"))
 		if *awgSensor == "" {
 			*awgSensor = os.Getenv("REMNASCOPE_AWG_SENSOR_SOCKET")
 		}

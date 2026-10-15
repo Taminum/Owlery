@@ -58,7 +58,7 @@ func (a *AWGSource) once(ctx context.Context) {
 		return
 	}
 	snap := ParseAWGSnapshot(out.String())
-	if len(snap.Instances) > 0 && a.Emit != nil {
+	if (len(snap.Instances) > 0 || snap.ContainerAdmin) && a.Emit != nil {
 		a.Emit(snap)
 	}
 }
@@ -131,6 +131,10 @@ func ParseAWGSnapshot(text string) ingestproto.AWG {
 			}
 		case "M":
 			managed[f[1]] = true
+		case "X":
+			if f[1] == "container_admin" {
+				snap.ContainerAdmin = true
+			}
 		case "T":
 			if len(f) < 3 {
 				continue

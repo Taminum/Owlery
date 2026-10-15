@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -21,9 +22,11 @@ import (
 )
 
 var (
-	opContainerRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$`)
-	opNameRe      = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 ._()-]{0,39}$`)
-	opKeyRe       = regexp.MustCompile(`^[A-Za-z0-9+/]{43}=$`)
+	opNewContainerRe = regexp.MustCompile(`^amnezia-awg[0-9]{0,2}$`)
+	opSubnetRe       = regexp.MustCompile(`^10\.([0-9]{1,3})\.([0-9]{1,3})\.0/24$`)
+	opContainerRe    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$`)
+	opNameRe         = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 ._()-]{0,39}$`)
+	opKeyRe          = regexp.MustCompile(`^[A-Za-z0-9+/]{43}=$`)
 )
 
 // AWGLink is the whole connection of an AmneziaWG agent. It has no spool and no ordered stream: it
@@ -38,9 +41,12 @@ type AWGLink struct {
 	// ManageArgv is the helper command (run without a shell). Empty means management is off and every
 	// command is refused.
 	ManageArgv []string
-	PingEvery  time.Duration
-	AckTimeout time.Duration
-	Log        *slog.Logger
+	// ContainerArgv is the helper that creates and removes containers. Empty means the host did not opt in:
+	// install and remove are refused here whatever the server asks.
+	ContainerArgv []string
+	PingEvery     time.Duration
+	AckTimeout    time.Duration
+	Log           *slog.Logger
 	// RunCmd replaces the process execution in tests.
 	RunCmd func(ctx context.Context, argv []string) ([]byte, error)
 
@@ -117,7 +123,7 @@ func (l *AWGLink) session(ctx context.Context) error {
 	if w.Type != "welcome" {
 		return fmt.Errorf("agent: unexpected %q instead of welcome", w.Type)
 	}
-	l.log().Info("connected", "management", len(l.ManageArgv) > 0)
+	l.log().Info("connected", "management", len(l.ManageArgv) > 0, "container_admin", len(l.ContainerArgv) > 0)
 
 	ctx, cancel = context.WithCancel(ctx)
 	defer cancel()
@@ -218,8 +224,77 @@ func (l *AWGLink) handleOp(ctx context.Context, c *websocket.Conn, op ingestprot
 	}
 }
 
+// containerOp runs install or remove. The agent re-checks every field: the helper does it once more.
+func (l *AWGLink) containerOp(ctx context.Context, op ingestproto.AWGOp) ingestproto.AWGOpResult {
+	fail := func(code string) ingestproto.AWGOpResult { return ingestproto.AWGOpResult{Status: "error", Code: code} }
+	if len(l.ContainerArgv) == 0 {
+		return fail("container_admin_off")
+	}
+	if !opNewContainerRe.MatchString(op.Container) {
+		return fail("bad_container")
+	}
+	var args []string
+	switch op.Op {
+	case "install":
+		if op.Port < 1024 || op.Port > 65535 {
+			return fail("bad_port")
+		}
+		m := opSubnetRe.FindStringSubmatch(op.Subnet)
+		if m == nil {
+			return fail("bad_subnet")
+		}
+		for _, o := range m[1:] {
+			if n, _ := strconv.Atoi(o); n > 255 {
+				return fail("bad_subnet")
+			}
+		}
+		args = []string{"install", op.Container, strconv.Itoa(op.Port), op.Subnet}
+	case "remove":
+		if op.Confirm != "yes-delete-all-devices" {
+			return fail("not_confirmed")
+		}
+		args = []string{"remove", op.Container, op.Confirm}
+	default:
+		return fail("bad_operation")
+	}
+	// Building the image takes a while: minutes, not seconds.
+	rctx, cancel := context.WithTimeout(ctx, 12*time.Minute)
+	defer cancel()
+	run := l.RunCmd
+	if run == nil {
+		run = runArgv
+	}
+	out, err := run(rctx, append(append([]string{}, l.ContainerArgv...), args...))
+	if err != nil && len(out) == 0 {
+		return fail("helper_failed")
+	}
+	first, _, _ := strings.Cut(string(out), "\n")
+	f := strings.Split(strings.TrimRight(first, "\r"), "\t")
+	if len(f) < 3 || f[0] != "RESULT" {
+		return fail("bad_helper_output")
+	}
+	if f[1] != "ok" {
+		if !regexp.MustCompile(`^[a-z0-9_]{1,40}$`).MatchString(f[2]) {
+			return fail("helper_error")
+		}
+		return fail(f[2])
+	}
+	res := ingestproto.AWGOpResult{Status: "ok"}
+	if op.Op == "install" {
+		if len(f) < 5 || !opKeyRe.MatchString(f[3]) {
+			return fail("bad_helper_output")
+		}
+		res.Key = f[3]
+		res.Port, _ = strconv.Atoi(f[4])
+	}
+	return res
+}
+
 func (l *AWGLink) runOp(ctx context.Context, op ingestproto.AWGOp) ingestproto.AWGOpResult {
 	fail := func(code string) ingestproto.AWGOpResult { return ingestproto.AWGOpResult{Status: "error", Code: code} }
+	if op.Op == "install" || op.Op == "remove" {
+		return l.containerOp(ctx, op)
+	}
 	if len(l.ManageArgv) == 0 {
 		return fail("management_off")
 	}
