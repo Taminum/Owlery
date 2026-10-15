@@ -249,6 +249,11 @@ export interface VPSLink { id: string; panel_id: string; node_id: string | null;
 export interface VPS {
   id: string; name: string; origin: string; enabled: boolean; note: string
   created_at: string; updated_at: string; addresses: VPSAddress[]; links: VPSLink[]; can_edit: boolean
+  summary?: VPSSummary
+}
+export interface VPSSummary {
+  agent: 'none' | 'waiting' | 'online' | 'offline'
+  fail2ban: { state: string; banned: number; total_banned: number; jails: number; observed_at: string | null }
 }
 export interface VPSList { items: VPS[]; can_create: boolean }
 
