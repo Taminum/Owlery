@@ -402,7 +402,11 @@ func readValue(p *dnsmessage.Parser, h dnsmessage.ResourceHeader) (string, bool,
 		if err != nil {
 			return "", false, err
 		}
-		return fmt.Sprintf("%d %s", r.Pref, fqdn(r.MX)), true, nil
+		host := fqdn(r.MX)
+		if host == "" { // the root name: a "null MX" says the domain takes no mail
+			host = "."
+		}
+		return fmt.Sprintf("%d %s", r.Pref, host), true, nil
 	case dnsmessage.TypeSOA:
 		r, err := p.SOAResource()
 		if err != nil {

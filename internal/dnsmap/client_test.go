@@ -217,6 +217,15 @@ func TestRecordTypesAreReadWithTTLAndCanonicalValues(t *testing.T) {
 	}
 }
 
+func TestANullMXIsShownAsOne(t *testing.T) {
+	null := dnsmessage.Resource{Header: hdr("example.com", dnsmessage.TypeMX, 60), Body: &dnsmessage.MXResource{Pref: 0, MX: dnsmessage.MustNewName(".")}}
+	f, c := newFake(t, map[string]spec{"example.com|MX": {answers: []dnsmessage.Resource{null}}})
+	a := q(c, f, "example.com", TypeMX)
+	if a.Outcome != OutcomeAnswer || len(a.RRs) != 1 || a.RRs[0].Value != "0 ." {
+		t.Fatalf("%+v", a)
+	}
+}
+
 func TestOnlyWhatAnswersTheQuestionIsKept(t *testing.T) {
 	f, c := newFake(t, map[string]spec{"www.example.com|A": {answers: []dnsmessage.Resource{
 		rrCNAME("www.example.com", "cdn.example.net", 60), rrA("cdn.example.net", "198.51.100.7", 30),
