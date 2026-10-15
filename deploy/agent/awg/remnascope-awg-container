@@ -22,6 +22,11 @@
 set -u
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 DOCKER="${DOCKER:-/usr/bin/docker}"
+# The docker client wants a writable configuration directory. Under the agent's sandbox the home directory is
+# not writable (ProtectHome, ProtectSystem=strict), which made every build fail, so it gets one of its own.
+DOCKER_CONFIG="${DOCKER_CONFIG:-/tmp/remnascope-docker-config}"
+export DOCKER_CONFIG
+mkdir -p -m 0700 "$DOCKER_CONFIG" 2>/dev/null
 MANAGE_CONF="${MANAGE_CONF:-/etc/remnascope/awg-manage.conf}"
 LOCKFILE="${LOCKFILE:-/run/lock/remnascope-awg-container.lock}"
 SYSTEMCTL="${SYSTEMCTL:-systemctl}"
@@ -73,7 +78,7 @@ remove)
   "$DOCKER" rm -f "$name" >/dev/null 2>&1 || fail remove_failed
   "$DOCKER" rmi "$name" >/dev/null 2>&1 || true
   $SYSTEMCTL disable --now "remnascope-awg-sensor@$name" >/dev/null 2>&1 || true
-  for v in MANAGED SENSE CONTAINERS; do conf_list "$v" del "$name"; done
+  for v in MANAGED SENSE CONTAINERS; do conf_list "$v" del "$name" || fail conf_not_writable; done
   printf 'RESULT\tok\t%s\n' "$name"
   exit 0
   ;;
@@ -87,6 +92,9 @@ printf '%s' "$subnet" | grep -Eq '^10\.([0-9]{1,3})\.([0-9]{1,3})\.0/24$' || fai
 for o in $(printf '%s' "${subnet%/*}" | tr '.' ' '); do [ "$o" -le 255 ] || fail bad_subnet; done
 subnet_ip="${subnet%/*}"; cidr="${subnet#*/}"
 
+# Without being able to record the container the helper would create one that RemnaScope never learns about.
+probe=$(mktemp "${MANAGE_CONF}.XXXXXX" 2>/dev/null) || fail conf_not_writable
+rm -f "$probe"
 "$DOCKER" inspect "$name" >/dev/null 2>&1 && fail container_exists
 "$DOCKER" ps -a --format '{{.Ports}}' 2>/dev/null | grep -Eq "(:|^)$port->" && fail port_published
 "$SS" -H -lun 2>/dev/null | awk '{print $4}' | grep -Eq "[:.]$port\$" && fail port_in_use
@@ -166,6 +174,8 @@ done
 [ $up -eq 1 ] || { cleanup_failed; fail interface_not_up; }
 pub=$("$DOCKER" exec "$name" cat /opt/amnezia/awg/wireguard_server_public_key.key 2>/dev/null | tr -d '\r\n')
 
-for v in MANAGED SENSE CONTAINERS; do conf_list "$v" add "$name"; done
+for v in MANAGED SENSE CONTAINERS; do conf_list "$v" add "$name" || { cleanup_failed; fail conf_not_writable; }; done
+# The traffic sensor follows the config through remnascope-awg-sensors.path (outside this sandbox); on a host
+# without it, enable the sensor directly when that is possible.
 $SYSTEMCTL enable --now "remnascope-awg-sensor@$name" >/dev/null 2>&1 || true
 printf 'RESULT\tok\t%s\t%s\t%s\n' "$name" "$pub" "$port"

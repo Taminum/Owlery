@@ -84,6 +84,9 @@ func main() {
 			*awgSensed = os.Getenv("REMNASCOPE_AWG_SENSOR_CONTAINERS")
 		}
 		cfg.AWGSensorSock = strings.TrimSpace(*awgSensor)
+		if cfg.AWGSensorSock != "" {
+			cfg.AWGSensorConf = "/etc/remnascope/awg-manage.conf" // its SENSE list is accepted as well
+		}
 		for _, c := range strings.Split(*awgSensed, ",") {
 			if c = strings.TrimSpace(c); c != "" {
 				cfg.AWGSensorOf = append(cfg.AWGSensorOf, c)

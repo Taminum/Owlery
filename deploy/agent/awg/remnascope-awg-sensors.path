@@ -1,0 +1,11 @@
+# Starts remnascope-awg-sensors.service when the RemnaScope configuration directory changes, so that the traffic
+# sensors follow the list of containers the container helper writes there.
+[Unit]
+Description=Watch the RemnaScope AmneziaWG configuration
+
+[Path]
+PathChanged=/etc/remnascope
+Unit=remnascope-awg-sensors.service
+
+[Install]
+WantedBy=multi-user.target
