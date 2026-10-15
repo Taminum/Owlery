@@ -16,8 +16,10 @@
 set -u
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 DOCKER="${DOCKER:-/usr/bin/docker}"
-CONTAINERS="${CONTAINERS:-amnezia-awg2 amnezia-awg3}"
 MANAGE_CONF="${MANAGE_CONF:-/etc/remnascope/awg-manage.conf}"
+# The container list: the environment, else CONTAINERS in the helper config (written by the installer), else the old default.
+CFG_CONTAINERS=$(sed -n 's/^CONTAINERS="\(.*\)"$//p' "$MANAGE_CONF" 2>/dev/null | head -1)
+CONTAINERS="${CONTAINERS:-${CFG_CONTAINERS:-amnezia-awg2 amnezia-awg3}}"
 # Containers the management helper may change (read from its config, never executed).
 MANAGED=$(sed -n 's/^MANAGED="\(.*\)"$/\1/p' "$MANAGE_CONF" 2>/dev/null | head -1)
 
