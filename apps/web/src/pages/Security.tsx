@@ -1,6 +1,6 @@
 import type React from 'react'
 import { useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Plus, Unlink } from 'lucide-react'
 import { t, type MsgKey } from '../i18n'
 import { api } from '../lib/api'
@@ -14,12 +14,12 @@ import { Card, Chip } from '../components/ui'
 import { PageHead, TableSkeleton } from '../components/Analyzer'
 import { Journal } from '../components/SecurityJournal'
 import { PublicPorts, TLSTab } from '../components/SecurityChecks'
-import { AgentCard, EventsTab, Fail2banTab, FirewallTab, PortsTab } from '../components/SecurityPanels'
+import { AgentCard, EventsTab, Fail2banTab, FirewallTab, OverviewTab, PortsTab } from '../components/SecurityPanels'
 import { DangerButton, Field, GhostButton, Modal, PrimaryButton, inputCls } from '../components/Modal'
 
-type Tab = 'fail2ban' | 'ports' | 'tls' | 'firewall' | 'events'
-const TABS: Tab[] = ['fail2ban', 'ports', 'tls', 'firewall', 'events']
-const TAB_LABEL: Record<Tab, MsgKey> = { fail2ban: 'sec.fail2ban', ports: 'sec.ports', tls: 'sec.tls', firewall: 'sec.firewall', events: 'sec.tab.events' }
+type Tab = 'overview' | 'fail2ban' | 'ports' | 'tls' | 'firewall' | 'events'
+const TABS: Tab[] = ['overview', 'fail2ban', 'ports', 'tls', 'firewall', 'events']
+const TAB_LABEL: Record<Tab, MsgKey> = { overview: 'sec.tab.overview', fail2ban: 'sec.fail2ban', ports: 'sec.ports', tls: 'sec.tls', firewall: 'sec.firewall', events: 'sec.tab.events' }
 
 const lines = (s: string) => s.split('\n').map((x) => x.trim()).filter(Boolean)
 
@@ -144,7 +144,9 @@ export function SecurityDetail() {
   const [panel, setPanel] = useState('')
   const [node, setNode] = useState('')
   const [confirm, setConfirm] = useState(false)
-  const [tab, setTab] = useState<Tab>('fail2ban')
+  const [params] = useSearchParams()
+  const wanted = params.get('tab') as Tab | null
+  const [tab, setTab] = useState<Tab>(wanted && TABS.includes(wanted) ? wanted : 'overview')
 
   const linkable = me ? panels.filter((p) => !p.demo && can(me, p.id, 'admin')) : []
   const panelId = panel || linkable[0]?.id || ''
@@ -218,6 +220,7 @@ export function SecurityDetail() {
             className={`h-8 rounded-control border px-3 text-[13px] ${tab === x ? 'border-cyan bg-elevated text-fg' : 'border-line text-muted hover:text-fg'}`}>{t(TAB_LABEL[x])}</button>
         ))}
       </div>
+      {tab === 'overview' && <OverviewTab vpsId={v.id} />}
       {tab === 'fail2ban' && <Fail2banTab vpsId={v.id} />}
       {tab === 'ports' && <><PortsTab vpsId={v.id} /><PublicPorts vpsId={v.id} canEdit={v.can_edit} /></>}
       {tab === 'tls' && <TLSTab vpsId={v.id} canEdit={v.can_edit} />}
