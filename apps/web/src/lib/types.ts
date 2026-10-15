@@ -243,3 +243,11 @@ export interface AutoDryRun {
   run: AutoRun | null; items: AutoItem[]
   summary: { total: number; valid: number; undetermined: number; invalid: number; with_service: number; low_confidence: number; by_category: Record<string, number>; issues: Record<string, number> }
 }
+
+export interface VPSAddress { address: string; kind: 'ipv4' | 'ipv6' | 'domain' }
+export interface VPSLink { id: string; panel_id: string; node_id: string | null; provenance: string; created_at: string }
+export interface VPS {
+  id: string; name: string; origin: string; enabled: boolean; note: string
+  created_at: string; updated_at: string; addresses: VPSAddress[]; links: VPSLink[]; can_edit: boolean
+}
+export interface VPSList { items: VPS[]; can_create: boolean }

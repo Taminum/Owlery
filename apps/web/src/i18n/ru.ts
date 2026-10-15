@@ -2,6 +2,7 @@ import { m1 } from './ru.m1'
 import { intel } from './ru.intel'
 import { intel2 } from './ru.intel2'
 import { awgText } from './ru.awg'
+import { securityText } from './ru.security'
 // All UI text lives here so a second locale can be added without touching components.
 const base = {
   'app.name': 'RemnaScope',
@@ -138,6 +139,6 @@ const base = {
   'a11y.statusLag': 'отстаёт',
 } as const
 
-export const ru = { ...base, ...m1, ...intel, ...intel2, ...awgText } as const
+export const ru = { ...base, ...m1, ...intel, ...intel2, ...awgText, ...securityText } as const
 
 export type MsgKey = keyof typeof ru
