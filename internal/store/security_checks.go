@@ -585,3 +585,14 @@ func (s *Store) SecCheckers(ctx context.Context) ([]Checker, error) {
 	}
 	return out, rows.Err()
 }
+
+// AcceptOpenPorts marks every enabled port of a server that answered at its last check as expected, and
+// returns how many were changed. It is the one step that says "what is open now is as it should be".
+func (s *Store) AcceptOpenPorts(ctx context.Context, sc Scope, vpsID string) (int, error) {
+	if _, err := s.GetVPS(ctx, sc, vpsID); err != nil {
+		return 0, err
+	}
+	tag, err := s.pool.Exec(ctx, `UPDATE security_port_endpoints SET expected=true, unexpected_since=NULL
+		WHERE vps_id=$1 AND enabled AND NOT expected AND last_result='reachable'`, uuid.MustParse(vpsID))
+	return int(tag.RowsAffected()), err
+}

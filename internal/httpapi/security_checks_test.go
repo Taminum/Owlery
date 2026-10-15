@@ -155,3 +155,33 @@ func TestDiscoveryScanIsOffUntilAnAdministratorTurnsItOn(t *testing.T) {
 		t.Fatalf("%d %s", st, b)
 	}
 }
+
+func TestAcceptOpenPortsMarksOnlyWhatAnswersAndOnlyForAnAdministrator(t *testing.T) {
+	w := newAgentWorld(t)
+	v := mkVPS(t, w, "Open", "203.0.113.70", w.work.ID)
+	for _, q := range []string{
+		`INSERT INTO security_port_endpoints (vps_id, host, port, expected, source, enabled, last_result) VALUES ($1,'203.0.113.70',22,false,'local_listener',true,'reachable')`,
+		`INSERT INTO security_port_endpoints (vps_id, host, port, expected, source, enabled, last_result) VALUES ($1,'203.0.113.70',80,false,'local_listener',true,'timeout')`,
+		`INSERT INTO security_port_endpoints (vps_id, host, port, expected, source, enabled, last_result) VALUES ($1,'203.0.113.70',8080,false,'local_listener',false,'reachable')`,
+	} {
+		if _, err := w.h.st.Pool().Exec(ctx, q, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	path := "/api/v1/security/vps/" + v + "/public-ports/accept-open"
+	if st, _ := w.viewer.do("POST", path, nil); st != 403 {
+		t.Fatalf("a viewer accepted ports: %d", st)
+	}
+	st, b := w.owner.do("POST", path, nil)
+	var r struct {
+		Changed int `json:"changed"`
+	}
+	if st != 200 || json.Unmarshal(b, &r) != nil || r.Changed != 1 {
+		t.Fatalf("%d %s", st, b)
+	}
+	var exp int
+	_ = w.h.st.Pool().QueryRow(ctx, `SELECT count(*) FROM security_port_endpoints WHERE vps_id=$1 AND expected`, v).Scan(&exp)
+	if exp != 1 {
+		t.Fatalf("only the answering, enabled port becomes expected: %d", exp)
+	}
+}

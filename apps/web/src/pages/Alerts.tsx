@@ -1,5 +1,5 @@
 import { AlertTriangle, CheckCircle2, FileWarning, Network, Radar, ServerOff, ShieldAlert, Waypoints } from 'lucide-react'
-import { t } from '../i18n'
+import { t, type MsgKey } from '../i18n'
 import { api } from '../lib/api'
 import { useApp } from '../lib/context'
 import { formatDateTime } from '../lib/format'
@@ -9,6 +9,14 @@ import { Card, Chip } from '../components/ui'
 import { PageHead, TableSkeleton } from '../components/Analyzer'
 
 const ICON = { agent_silent: ServerOff, panel_sync: Waypoints, sec_agent_silent: ShieldAlert, sec_tls: FileWarning, sec_port: Network, dns_check_failed: Radar, dns_change: Radar } as const
+
+/** A short "what to do" for the kinds that have one, so a red card explains itself. */
+function TodoLine({ kind }: { kind: string }) {
+  const key = `al.todo.${kind}` as MsgKey
+  const text = t(key) // a kind with no text gives undefined and shows nothing
+  if (!text) return null
+  return <p className="mt-1 text-[13px] text-muted"><span className="font-medium text-fg/80">{t('al.todo')}:</span> {text}</p>
+}
 
 export default function Alerts() {
   const { filters } = useApp()
@@ -43,6 +51,7 @@ export default function Alerts() {
                         <span className="text-xs text-muted">{a.panel_name}</span>
                       </div>
                       <p className="mt-0.5 text-[13px] text-fg/90">{a.detail}</p>
+                      <TodoLine kind={a.kind} />
                       <p className="tnum mt-1 text-xs text-muted">{t('al.since')} {formatDateTime(a.opened_at, tz)}</p>
                     </div>
                   </div>
