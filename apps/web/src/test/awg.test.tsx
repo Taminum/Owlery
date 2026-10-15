@@ -206,3 +206,23 @@ describe('Container administration', () => {
     expect(post.body).toEqual({ container: 'amnezia-awg', port: 55555, subnet: '10.8.1.0/24' })
   })
 })
+
+describe('Device limits', () => {
+  it('says what a limit does and sends the expiry and the allowance', async () => {
+    const api = mockApi({ me: owner, handler: (r: Req) => {
+      if (r.path === '/api/v1/awg') return { status: 200, body: { instances: [inst({ mode: 'managed', peers: [peer({})] })], period: '24h' } }
+      if (r.path === '/api/v1/awg/hosts') return { status: 200, body: { hosts: [] } }
+      if (r.path === '/api/v1/awg/peers/p1/limits' && r.method === 'PUT') return { status: 204 }
+    } })
+    renderAwg()
+    await userEvent.click(await screen.findByRole('button', { name: 'Лимиты: RouterOne' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(/отзовёт устройство на сервере/)).toBeInTheDocument()
+    await userEvent.type(within(dialog).getByLabelText('Лимит трафика, ГиБ'), '50')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+    await vi.waitFor(() => expect(api.find('PUT', '/api/v1/awg/peers/p1/limits')).toHaveLength(1))
+    const sent = api.find('PUT', '/api/v1/awg/peers/p1/limits')[0].body as { expires_at: string | null; traffic_limit_bytes: number | null }
+    expect(sent.traffic_limit_bytes).toBe(50 * 1024 ** 3)
+    expect(sent.expires_at).toBeNull()
+  })
+})

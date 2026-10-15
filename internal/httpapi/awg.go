@@ -41,6 +41,12 @@ type awgPeerOut struct {
 	// latest RemnaScope recorded, else what the Amnezia panel had recorded. The source says which.
 	LastSeenAt     *time.Time `json:"last_seen_at"`
 	LastSeenSource string     `json:"last_seen_source,omitempty"` // live | recorded | panel
+	// Expiry and allowance, when the owner set them. UsedBytes counts from LimitFrom.
+	ExpiresAt         *time.Time `json:"expires_at"`
+	TrafficLimitBytes *int64     `json:"traffic_limit_bytes"`
+	LimitFrom         *time.Time `json:"limit_from"`
+	UsedBytes         int64      `json:"used_bytes"`
+	AutoRevoked       string     `json:"auto_revoked,omitempty"` // expired | traffic_limit: RemnaScope revoked it
 	// What the Amnezia panel had recorded (a snapshot as of the instance's legacy_at).
 	// The running total: what the old table recorded for the device, plus what RemnaScope has seen
 	// since (which includes what the server's counters held when RemnaScope first looked).
@@ -83,6 +89,15 @@ func (s *Server) awgList(w http.ResponseWriter, r *http.Request, a auth.Actor, _
 		return
 	}
 	now := time.Now()
+	var instIDs []string
+	for _, in := range rows {
+		instIDs = append(instIDs, in.ID)
+	}
+	limits, err := s.Store.AWGPeerLimits(r.Context(), instIDs)
+	if err != nil {
+		s.writeErr(w, r, http.StatusInternalServerError, "internal", "internal error")
+		return
+	}
 	out := struct {
 		Instances []awgInstanceOut `json:"instances"`
 		Period    string           `json:"period"`
@@ -112,6 +127,9 @@ func (s *Server) awgList(w http.ResponseWriter, r *http.Request, a auth.Actor, _
 			}
 			po := awgPeerOut{ID: p.ID, Label: label, TunnelIP: p.TunnelIP, KeyShort: shortKey(p.Key), State: state, FirstSeen: p.FirstSeen.UTC(), Gone: p.Gone,
 				DownloadTotal: p.TX, UploadTotal: p.RX, DownloadRange: p.PeriodTX, UploadRange: p.PeriodRX, TrackedDownload: p.TrackedTX, TrackedUpload: p.TrackedRX, TrackedFrom: p.TrackedFrom}
+			if l, ok := limits[p.ID]; ok {
+				po.ExpiresAt, po.TrafficLimitBytes, po.LimitFrom, po.UsedBytes, po.AutoRevoked = l.ExpiresAt, l.TrafficLimitBytes, l.LimitFrom, l.UsedBytes, l.AutoRevokedReason
+			}
 			if p.Handshake != nil {
 				t := p.Handshake.UTC()
 				po.HandshakeAt = &t
