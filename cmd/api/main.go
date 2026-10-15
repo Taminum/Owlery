@@ -219,13 +219,6 @@ func serve(log *slog.Logger) error {
 			log.Info("site backfill", "rows", n)
 		}
 	}()
-	go func() { // rows from before the site column existed
-		if n, err := st.BackfillSites(ctx); err != nil {
-			log.Error("site backfill failed", "err", err)
-		} else if n > 0 {
-			log.Info("site backfill", "rows", n)
-		}
-	}()
 	go func() {
 		log.Info("api listening", "addr", c.ListenAddr, "cookie_secure", c.CookieSecure, "sync", c.SyncEnabled, "demo", c.SeedDemo)
 		if err := hs.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
