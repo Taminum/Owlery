@@ -1,0 +1,171 @@
+#!/bin/sh
+# remnascope-awg-container: creates or removes ONE AmneziaWG container in the layout the official Amnezia client
+# uses (container amnezia-awg*, config /opt/amnezia/awg/awg0.conf, network amnezia-dns-net), so that the Amnezia
+# apps keep working with the server and every other RemnaScope helper (snapshot, manage, sensor) works on it.
+#
+#   remnascope-awg-container install <container> <port> <subnet, a /24 like 10.8.1.0/24>
+#   remnascope-awg-container remove  <container> yes-delete-all-devices
+#
+# The server scripts are Amnezia's (GPL-3.0). They are NOT copied into RemnaScope: they are fetched from the
+# upstream repository at one pinned commit, and each file is checked against the SHA-256 recorded below before
+# it is used. Nothing else is downloaded or run from the network.
+#
+# This is the one RemnaScope helper that creates containers, so it is the most restricted:
+#   * only names amnezia-awg or amnezia-awg<digits>, only a numeric port, only a /24 in 10.0.0.0/8;
+#   * it refuses a container that already exists and a port that is already published or listening;
+#   * it never touches a container it did not create in this call, except `remove` of a name that is listed
+#     in MANAGED, and then only with the explicit confirmation word (a removal deletes every device in it);
+#   * after creating, it checks that the awg0 interface is up and rolls the container back if it is not.
+#
+# Output, first line: "RESULT<TAB>ok<TAB><container><TAB><server public key><TAB><port>" or
+# "RESULT<TAB>error<TAB><code>".
+set -u
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+DOCKER="${DOCKER:-/usr/bin/docker}"
+MANAGE_CONF="${MANAGE_CONF:-/etc/remnascope/awg-manage.conf}"
+LOCKFILE="${LOCKFILE:-/run/lock/remnascope-awg-container.lock}"
+SYSTEMCTL="${SYSTEMCTL:-systemctl}"
+SS="${SS:-ss}"
+
+UPSTREAM_SHA="30ff3451c7a0db60f6306582c700ef9fc916a49e"
+UPSTREAM_BASE="${UPSTREAM_BASE:-https://raw.githubusercontent.com/amnezia-vpn/amnezia-client/$UPSTREAM_SHA/client/server_scripts/awg}"
+SHA_DOCKERFILE="9a2330227d9950f20c03022885710d5982ed6e13c80dc4acefb0b0526c30b60a"
+SHA_START="25410e31cd6cdaff9fe5ab9440526693395083018392b9f805a4d1c45a29d89c"
+SHA_CONFIGURE="2da679ca4c65e51ae42279fc2b14f948d8736f1b8d0ccdcac7da8f63a8f159b6"
+# Tests point this at a directory that already holds the three files, so that nothing is fetched.
+SRC_DIR="${SRC_DIR:-}"
+
+DNS_NET="amnezia-dns-net"
+IMAGE_BASE="${IMAGE_BASE:-}"   # tests may pre-build; empty means "build from the Dockerfile"
+
+fail() { printf 'RESULT\terror\t%s\n' "$1"; exit 0; }
+conf_value() { sed -n "s/^$1=\"\(.*\)\"\$/\1/p" "$MANAGE_CONF" 2>/dev/null | head -1; }
+
+op="${1:-}"; name="${2:-}"; a3="${3:-}"; a4="${4:-}"
+printf '%s' "$name" | grep -Eq '^amnezia-awg[0-9]{0,2}$' || fail bad_container
+
+# Rewrites one list variable of the helper config (MANAGED, SENSE, CONTAINERS): adds or removes one name.
+conf_list() { # <var> <add|del> <name>
+  var="$1"; act="$2"; nm="$3"
+  cur=$(conf_value "$var")
+  new=""
+  for w in $cur; do [ "$w" = "$nm" ] || new="${new:+$new }$w"; done
+  [ "$act" = add ] && new="${new:+$new }$nm"
+  tmp=$(mktemp "${MANAGE_CONF}.XXXXXX") || return 1
+  if grep -q "^$var=" "$MANAGE_CONF" 2>/dev/null; then
+    sed "s|^$var=.*|$var=\"$new\"|" "$MANAGE_CONF" > "$tmp"
+  else
+    { cat "$MANAGE_CONF" 2>/dev/null; printf '%s="%s"\n' "$var" "$new"; } > "$tmp"
+  fi
+  chmod 0644 "$tmp"; mv "$tmp" "$MANAGE_CONF"
+}
+
+( : >> "$LOCKFILE" ) 2>/dev/null || fail no_lock
+exec 9>"$LOCKFILE"
+"${FLOCK:-flock}" -n 9 || fail busy
+"$DOCKER" version >/dev/null 2>&1 || fail docker_unavailable
+
+case "$op" in
+remove)
+  [ "$a3" = "yes-delete-all-devices" ] || fail not_confirmed
+  case " $(conf_value MANAGED) " in *" $name "*) ;; *) fail not_managed ;; esac
+  "$DOCKER" inspect "$name" >/dev/null 2>&1 || fail no_such_container
+  "$DOCKER" rm -f "$name" >/dev/null 2>&1 || fail remove_failed
+  "$DOCKER" rmi "$name" >/dev/null 2>&1 || true
+  $SYSTEMCTL disable --now "remnascope-awg-sensor@$name" >/dev/null 2>&1 || true
+  for v in MANAGED SENSE CONTAINERS; do conf_list "$v" del "$name"; done
+  printf 'RESULT\tok\t%s\n' "$name"
+  exit 0
+  ;;
+install) ;;
+*) fail bad_operation ;;
+esac
+
+port="$a3"; subnet="$a4"
+printf '%s' "$port" | grep -Eq '^[0-9]{4,5}$' && [ "$port" -ge 1024 ] && [ "$port" -le 65535 ] || fail bad_port
+printf '%s' "$subnet" | grep -Eq '^10\.([0-9]{1,3})\.([0-9]{1,3})\.0/24$' || fail bad_subnet
+for o in $(printf '%s' "${subnet%/*}" | tr '.' ' '); do [ "$o" -le 255 ] || fail bad_subnet; done
+subnet_ip="${subnet%/*}"; cidr="${subnet#*/}"
+
+"$DOCKER" inspect "$name" >/dev/null 2>&1 && fail container_exists
+"$DOCKER" ps -a --format '{{.Ports}}' 2>/dev/null | grep -Eq "(:|^)$port->" && fail port_published
+"$SS" -H -lun 2>/dev/null | awk '{print $4}' | grep -Eq "[:.]$port\$" && fail port_in_use
+# A subnet another Amnezia container already serves would route two servers' clients into each other.
+for c in $("$DOCKER" ps -a --format '{{.Names}}' 2>/dev/null | grep -E '^amnezia-awg[0-9]{0,2}$'); do
+  "$DOCKER" exec "$c" sh -c "grep -E '^Address' /opt/amnezia/awg/awg0.conf /opt/amnezia/awg/wg0.conf 2>/dev/null" 2>/dev/null | grep -q "${subnet_ip%.*}\." && fail subnet_in_use
+done
+
+work=$(mktemp -d) || fail no_workdir
+trap 'rm -rf "$work"' EXIT
+fetch() {
+  if [ -n "$SRC_DIR" ]; then cp "$SRC_DIR/$1" "$work/$1" 2>/dev/null; return $?; fi
+  if command -v curl >/dev/null 2>&1; then curl -fsSL --max-time 60 -o "$work/$1" "$UPSTREAM_BASE/$1"
+  elif command -v wget >/dev/null 2>&1; then wget -q -T 60 -O "$work/$1" "$UPSTREAM_BASE/$1"
+  else return 1; fi
+}
+for f in Dockerfile start.sh configure_container.sh; do fetch "$f" || fail download_failed; done
+check() { [ "$(sha256sum "$work/$1" | cut -d' ' -f1)" = "$2" ] || fail checksum_mismatch; }
+check Dockerfile "$SHA_DOCKERFILE"; check start.sh "$SHA_START"; check configure_container.sh "$SHA_CONFIGURE"
+
+# Parameters, as the official client generates them for the current AmneziaWG: a few random junk packets,
+# fixed sizes and headers, a header-protection key made inside the container, ranges for the timers.
+rnd() { od -An -N2 -tu2 /dev/urandom | tr -d ' '; }
+JC=$(( 4 + $(rnd) % 3 ))
+export AWG_SUBNET_IP="$subnet_ip" WIREGUARD_SUBNET_CIDR="$cidr" AWG_SERVER_PORT="$port"
+export JUNK_PACKET_COUNT="$JC" JUNK_PACKET_MIN_SIZE=10 JUNK_PACKET_MAX_SIZE=50
+export INIT_PACKET_JUNK_SIZE=12 RESPONSE_PACKET_JUNK_SIZE=12 COOKIE_REPLY_PACKET_JUNK_SIZE=12 TRANSPORT_PACKET_JUNK_SIZE=12
+export INIT_PACKET_MAGIC_HEADER=1 RESPONSE_PACKET_MAGIC_HEADER=2 UNDERLOAD_PACKET_MAGIC_HEADER=3 TRANSPORT_PACKET_MAGIC_HEADER=4
+export HEADER_PROTECTION_KEY='$(awg genkey)' CONTENT_PADDING_ADDITION='10-100' REKEY_AFTER_TIME='100-120' REKEY_TIMEOUT='3-7'
+export REJECT_AFTER_TIME='150-180' KEEPALIVE_TIMEOUT='5-15' MAX_HANDSHAKE_ATTEMPTS='15-20' RANDOM_TRAILERS=on DISABLE_COOKIES=on
+export SPECIAL_JUNK_1='<r 2><b 0x858000010001000000000669636c6f756403636f6d0000010001c00c000100010000105a00044d583737>'
+export SPECIAL_JUNK_2='' SPECIAL_JUNK_3='' SPECIAL_JUNK_4='' SPECIAL_JUNK_5=''
+
+# Replaces $NAME for the variables above, and only those. Anything else in the script is left as it is.
+render() {
+  awk '
+    BEGIN {
+      n = split("AWG_SUBNET_IP WIREGUARD_SUBNET_CIDR AWG_SERVER_PORT JUNK_PACKET_COUNT JUNK_PACKET_MIN_SIZE JUNK_PACKET_MAX_SIZE INIT_PACKET_JUNK_SIZE RESPONSE_PACKET_JUNK_SIZE COOKIE_REPLY_PACKET_JUNK_SIZE TRANSPORT_PACKET_JUNK_SIZE INIT_PACKET_MAGIC_HEADER RESPONSE_PACKET_MAGIC_HEADER UNDERLOAD_PACKET_MAGIC_HEADER TRANSPORT_PACKET_MAGIC_HEADER HEADER_PROTECTION_KEY CONTENT_PADDING_ADDITION REKEY_AFTER_TIME REKEY_TIMEOUT REJECT_AFTER_TIME KEEPALIVE_TIMEOUT MAX_HANDSHAKE_ATTEMPTS RANDOM_TRAILERS DISABLE_COOKIES SPECIAL_JUNK_1 SPECIAL_JUNK_2 SPECIAL_JUNK_3 SPECIAL_JUNK_4 SPECIAL_JUNK_5", names, " ")
+      for (i = 1; i <= n; i++) ok[names[i]] = 1
+    }
+    {
+      line = $0; out = ""
+      while (match(line, /\$[A-Z][A-Z0-9_]*/)) {
+        v = substr(line, RSTART + 1, RLENGTH - 1)
+        out = out substr(line, 1, RSTART - 1)
+        out = out (v in ok ? ENVIRON[v] : substr(line, RSTART, RLENGTH))
+        line = substr(line, RSTART + RLENGTH)
+      }
+      print out line
+    }'
+}
+render < "$work/start.sh" > "$work/start.rendered"
+render < "$work/configure_container.sh" > "$work/configure.rendered"
+
+mkdir -p "$work/ctx" && cp "$work/Dockerfile" "$work/ctx/Dockerfile"
+cleanup_failed() {
+  "$DOCKER" rm -f "$name" >/dev/null 2>&1 || true
+  "$DOCKER" rmi "$name" >/dev/null 2>&1 || true
+}
+
+"$DOCKER" network inspect "$DNS_NET" >/dev/null 2>&1 || \
+  "$DOCKER" network create --driver bridge --subnet=172.29.172.0/24 --opt com.docker.network.bridge.name=amn0 "$DNS_NET" >/dev/null 2>&1 || fail network_failed
+"$DOCKER" build -q -t "$name" "$work/ctx" >/dev/null 2>&1 || { cleanup_failed; fail build_failed; }
+"$DOCKER" run -d --log-driver none --restart always --privileged --cap-add=NET_ADMIN --cap-add=SYS_MODULE \
+  -p "$port:$port/udp" -v /lib/modules:/lib/modules --sysctl="net.ipv4.conf.all.src_valid_mark=1" --name "$name" "$name" >/dev/null 2>&1 \
+  || { cleanup_failed; fail run_failed; }
+"$DOCKER" network connect "$DNS_NET" "$name" >/dev/null 2>&1 || true
+"$DOCKER" exec -i "$name" sh -c 'cat > /opt/amnezia/start.sh && chmod a+x /opt/amnezia/start.sh' < "$work/start.rendered" || { cleanup_failed; fail upload_failed; }
+"$DOCKER" exec -i "$name" bash -s < "$work/configure.rendered" >/dev/null 2>&1 || { cleanup_failed; fail configure_failed; }
+"$DOCKER" restart "$name" >/dev/null 2>&1 || { cleanup_failed; fail restart_failed; }
+
+up=0; i=0
+while [ $i -lt 20 ]; do
+  "$DOCKER" exec "$name" awg show interfaces 2>/dev/null | grep -qw awg0 && { up=1; break; }
+  i=$((i + 1)); sleep 1
+done
+[ $up -eq 1 ] || { cleanup_failed; fail interface_not_up; }
+pub=$("$DOCKER" exec "$name" cat /opt/amnezia/awg/wireguard_server_public_key.key 2>/dev/null | tr -d '\r\n')
+
+for v in MANAGED SENSE CONTAINERS; do conf_list "$v" add "$name"; done
+$SYSTEMCTL enable --now "remnascope-awg-sensor@$name" >/dev/null 2>&1 || true
+printf 'RESULT\tok\t%s\t%s\t%s\n' "$name" "$pub" "$port"
