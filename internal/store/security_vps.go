@@ -358,3 +358,34 @@ func (s *Store) RemoveVPSLink(ctx context.Context, vpsID, linkID string) error {
 	}
 	return err
 }
+
+// VPSMatch is a registered server that holds an address.
+type VPSMatch struct {
+	VPSID string `json:"vps_id"`
+	Name  string `json:"name"`
+}
+
+// VPSByAddresses finds, among the servers the scope can see, the ones that hold each of the given
+// addresses. Only a registered address matches: an IP that merely shares a network with a server is not one.
+func (s *Store) VPSByAddresses(ctx context.Context, sc Scope, addrs []string) (map[string]VPSMatch, error) {
+	pred, args := vpsVisible(sc, 1)
+	args = append([]any{addrs}, args...)
+	rows, err := s.pool.Query(ctx, `SELECT a.address, v.id, v.name FROM security_vps_addresses a JOIN security_vps v ON v.id = a.vps_id
+		WHERE a.address = ANY($1) AND `+pred+` ORDER BY v.created_at`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]VPSMatch{}
+	for rows.Next() {
+		var addr, name string
+		var id uuid.UUID
+		if err := rows.Scan(&addr, &id, &name); err != nil {
+			return nil, err
+		}
+		if _, dup := out[addr]; !dup {
+			out[addr] = VPSMatch{VPSID: id.String(), Name: name}
+		}
+	}
+	return out, rows.Err()
+}

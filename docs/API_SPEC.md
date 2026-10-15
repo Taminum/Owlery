@@ -56,6 +56,7 @@ administrator role on a linked panel; creating and archiving one is the owner's.
   `/ingest/security/v1`, see SECURITY_AGENT.md.
 - State read from the agent: `GET /vps/{id}/fail2ban|ports|firewall` (state, observed time, staleness).
 - Overview: `GET /vps/{id}/overview` returns `health` (`healthy` | `attention` | `unknown` | `disabled`), the `reasons` for attention, the agent and category states, what the external checks cover and the last event. `unknown` means nothing was read or checked yet; `healthy` is only "nothing alarming among what is read", and the coverage block says what that is.
+- `GET /security/vps-by-address?a=<ip>&a=<ip>` (at most 100) answers which of the addresses are registered on a server the caller can see. The DNS Map uses it to link an A or AAAA value to its server; an address that is not registered never links.
 - One event: `GET /security/events/{id}` returns it with the server's name and what else was recorded on that server within ten minutes.
 - Firewall history and comparison: `GET /vps/{id}/firewall/history?limit=` (stored readings, no rule text) and `GET /vps/{id}/firewall/diff[?from=&to=]` (line difference of two complete readings, by default the two newest; `available:false` with a `reason` otherwise). The `firewall` category also carries `model` (tables, chains, policies, rules) read from the rule text.
 - External checks: `GET/POST /vps/{id}/public-ports`, `PATCH /vps/{id}/public-ports/{eid}`,

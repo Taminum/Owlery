@@ -17,6 +17,20 @@ const STATUS_TONE: Record<string, Tone> = { ok: 'green', partial: 'amber', faile
 const lines = (s: string) => s.split('\n').map((x) => x.trim()).filter(Boolean)
 const BASE = '/api/v1/intel/dns/maps'
 
+/** Which of these addresses are a registered server in "Security". Only a registered address links;
+ *  an IP that merely looks related to a server is not shown as one. */
+function useServerLinks(ips: string[]): Record<string, { vps_id: string; name: string }> {
+  const list = [...new Set(ips)].sort().slice(0, 100)
+  const qs = list.map((x) => `a=${encodeURIComponent(x)}`).join('&')
+  const { data } = useLoad((s) => (list.length === 0 ? Promise.resolve(null) : api.get<{ items: Record<string, { vps_id: string; name: string }> }>(`/api/v1/security/vps-by-address?${qs}`, s)), [qs])
+  return data?.items ?? {}
+}
+
+function ServerLink({ m }: { m?: { vps_id: string; name: string } }) {
+  if (!m) return null
+  return <Link to={`/security/${m.vps_id}`} className="ml-2 font-sans text-xs text-cyan hover:underline">{t('dns.vps.link', { name: m.name })}</Link>
+}
+
 function statusOf(m: DnsMap): string {
   if (m.last_run?.status === 'running') return 'running'
   return m.last_status ?? 'none'
@@ -231,10 +245,11 @@ function NodeDetails({ id, node, graph }: { id: string; node: DnsGraphNode; grap
   const isName = node.kind === 'name'
   const { data } = useLoad((s) => (isName ? api.get<{ items: DnsRecord[] }>(`${BASE}/${id}/records?name=${encodeURIComponent(node.label)}&limit=100`, s) : Promise.resolve(null)), [id, node.id])
   const related = graph.edges.filter((e) => e.from === node.id || e.to === node.id)
+  const links = useServerLinks(node.kind === 'ip' ? [node.label] : [])
   return (
     <div className="mt-4 rounded-control border border-line p-3 text-[13px]">
       <h3 className="mb-2 font-medium">{t('dns.map.node')}: <span className="font-mono">{node.label}</span> <span className="text-muted">({t(`dns.map.kind.${node.kind}` as MsgKey)})</span></h3>
-      {node.kind === 'ip' && <Link className="text-cyan hover:underline" to={`/intel?target=${encodeURIComponent(node.label)}`}>{t('dns.map.open')}</Link>}
+      {node.kind === 'ip' && <><Link className="text-cyan hover:underline" to={`/intel?target=${encodeURIComponent(node.label)}`}>{t('dns.map.open')}</Link><ServerLink m={links[node.label]} /></>}
       {isName && data && (
         <ul className="space-y-1">
           {data.items.map((r) => (
@@ -251,8 +266,8 @@ function NodeDetails({ id, node, graph }: { id: string; node: DnsGraphNode; grap
 
 const TYPES = ['A', 'AAAA', 'CNAME', 'MX', 'NS', 'SOA', 'TXT', 'CAA', 'DS', 'DNSKEY']
 
-function ValueText({ r, v }: { r: DnsRecord; v: string }) {
-  if (r.type === 'A' || r.type === 'AAAA') return <Link className="hover:text-cyan hover:underline" to={`/intel?target=${encodeURIComponent(v)}`}>{v}</Link>
+function ValueText({ r, v, links }: { r: DnsRecord; v: string; links: Record<string, { vps_id: string; name: string }> }) {
+  if (r.type === 'A' || r.type === 'AAAA') return <><Link className="hover:text-cyan hover:underline" to={`/intel?target=${encodeURIComponent(v)}`}>{v}</Link><ServerLink m={links[v]} /></>
   return <>{v}</>
 }
 
@@ -275,6 +290,7 @@ function RecordsTab({ id, rk }: { id: string; rk: string }) {
   const added = extra.key === key ? extra : { key, items: [], more: null }
   const items = [...(first.data?.items ?? []), ...added.items]
   const more = added.more ?? first.data?.more ?? false
+  const links = useServerLinks(items.filter((r) => r.type === 'A' || r.type === 'AAAA').flatMap((r) => r.values))
   async function loadMore() {
     const last = items[items.length - 1]
     setErr('')
@@ -310,7 +326,7 @@ function RecordsTab({ id, rk }: { id: string; rk: string }) {
                     <td className="py-2 pr-4 font-mono text-[12px]"><button type="button" className="text-left hover:text-cyan" aria-expanded={open === k} onClick={() => setOpen(open === k ? '' : k)}>{r.name}</button></td>
                     <td className="pr-4">{r.type}</td>
                     <td className="break-all pr-4 font-mono text-[12px]">
-                      {r.values.length === 0 ? <span className="font-sans text-muted">{t(`dns.out.${r.result ?? r.last_result}` as MsgKey)}</span> : r.values.map((v) => <div key={v}><ValueText r={r} v={v} /></div>)}
+                      {r.values.length === 0 ? <span className="font-sans text-muted">{t(`dns.out.${r.result ?? r.last_result}` as MsgKey)}</span> : r.values.map((v) => <div key={v}><ValueText r={r} v={v} links={links} /></div>)}
                       {open === k && (
                         <div className="mt-2 rounded-control border border-line p-2 font-sans text-xs text-muted">
                           <p className="font-medium text-fg">{t('dns.rec.views')}</p>
@@ -342,11 +358,27 @@ const KINDS = ['dns.record_added', 'dns.record_removed', 'dns.value_changed', 'd
 function HistoryTab({ id, rk }: { id: string; rk: string }) {
   const [kind, setKind] = useState('')
   const [type, setType] = useState('')
+  const [period, setPeriod] = useState<'all' | '24h' | '7d' | '30d'>('all')
+  const [name, setName] = useState('')
+  const [dname, setDname] = useState('')
   const [extra, setExtra] = useState<{ key: string; items: DnsChange[]; more: boolean | null }>({ key: '', items: [], more: null })
   const [err, setErr] = useState('')
+  useEffect(() => {
+    const h = window.setTimeout(() => setDname(name.trim().toLowerCase()), 350)
+    return () => window.clearTimeout(h)
+  }, [name])
+  // The lower bound is fixed when the period is chosen, so the query does not change on every render.
+  const [since, setSince] = useState('')
+  function choosePeriod(p: typeof period) {
+    const h = { all: 0, '24h': 24, '7d': 24 * 7, '30d': 24 * 30 }[p]
+    setPeriod(p)
+    setSince(h ? new Date(Date.now() - h * 3_600_000).toISOString() : '')
+  }
   const qs = new URLSearchParams({ limit: '50' })
   if (kind) qs.set('kind', kind)
   if (type) qs.set('type', type)
+  if (since) qs.set('from', since)
+  if (dname) qs.set('name', dname)
   const key = qs.toString()
   const first = useLoad((s) => api.get<{ items: DnsChange[]; more: boolean }>(`${BASE}/${id}/changes?${key}`, s), [id, key, rk], 30_000)
   const added = extra.key === key ? extra : { key, items: [], more: null }
@@ -374,6 +406,12 @@ function HistoryTab({ id, rk }: { id: string; rk: string }) {
         <Field label={t('dns.rec.type')} htmlFor="dns-ht">
           <select id="dns-ht" className={inputCls} value={type} onChange={(e) => setType(e.target.value)}><option value="">{t('dns.rec.allTypes')}</option>{TYPES.map((x) => <option key={x} value={x}>{x}</option>)}</select>
         </Field>
+        <Field label={t('dns.hist.period')} htmlFor="dns-hp">
+          <select id="dns-hp" className={inputCls} value={period} onChange={(e) => choosePeriod(e.target.value as typeof period)}>
+            {(['all', '24h', '7d', '30d'] as const).map((p) => <option key={p} value={p}>{t(`dns.hist.period.${p}` as MsgKey)}</option>)}
+          </select>
+        </Field>
+        <Field label={t('dns.hist.name')} htmlFor="dns-hn"><input id="dns-hn" className={inputCls} value={name} onChange={(e) => setName(e.target.value)} maxLength={253} spellCheck={false} /></Field>
       </div>
       {first.error && <p role="alert" className="text-[13px] text-red">{first.error}</p>}
       {first.data && items.length === 0 && <p className="text-[13px] text-muted">{t('dns.hist.none')}</p>}
