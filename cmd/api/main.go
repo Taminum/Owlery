@@ -168,6 +168,7 @@ func serve(log *slog.Logger) error {
 	srv.DNSWorker = dnsWorker
 	secHub := secops.New()
 	srv.SecOps = secHub
+	secChecker.Probes = secHub // a security agent set up as a checker can run the external checks
 	srv.SecChecks = secChecker
 	srv.SecIngest = (&secingest.Server{Store: st, Log: log, Limiter: auth.NewLimiter(1, 10), ClientIP: srv.ClientAddr, Ops: secHub}).Handler()
 	srv.Ingest = (&ingest.Server{Store: st, Log: log, Limiter: auth.NewLimiter(1, 10), ClientIP: srv.ClientAddr, Live: srv.Live, Ops: srv.AWGOps}).Handler()

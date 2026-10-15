@@ -189,3 +189,61 @@ type CommandResult struct {
 	Code     string `json:"code,omitempty"` // a short machine word for the reason
 	Verified bool   `json:"verified"`       // the state was read again after the command and is as wanted
 }
+
+// --- probes --------------------------------------------------------------------------------------
+//
+// An agent that its host set up as a checker ("probe" capability) is asked to look at a public address from
+// where it stands: connect to a TCP port, or read the certificate a TLS endpoint presents. It sends no data on
+// a TCP probe, dials only public addresses (re-checked on the agent, whatever the server asks), and never
+// returns more than the fields below. A probe is delivered over the live connection or not at all.
+
+const CapProbe = "probe"
+
+const (
+	ProbeTCP = "tcp"
+	ProbeTLS = "tls"
+)
+
+type Probe struct {
+	Type string `json:"type"` // "probe"
+	ID   string `json:"id"`   // chosen by the server; an answer for any other ID is dropped
+	Kind string `json:"kind"` // tcp | tls
+	Host string `json:"host"` // an IP address or a domain name
+	Port int    `json:"port"`
+	SNI  string `json:"sni,omitempty"`
+}
+
+// ProbeTLS is what a TLS endpoint presented, as the agent saw it.
+type ProbeTLSResult struct {
+	State       string    `json:"state"`
+	IP          string    `json:"ip"`
+	Resolved    []string  `json:"resolved,omitempty"`
+	SNI         string    `json:"sni"`
+	NameChecked bool      `json:"name_checked"`
+	Version     string    `json:"version,omitempty"`
+	Fingerprint string    `json:"fingerprint,omitempty"`
+	Subject     string    `json:"subject,omitempty"`
+	Issuer      string    `json:"issuer,omitempty"`
+	DNSNames    []string  `json:"dns_names,omitempty"`
+	Serial      string    `json:"serial,omitempty"`
+	NotBefore   time.Time `json:"not_before"`
+	NotAfter    time.Time `json:"not_after"`
+	DaysLeft    int       `json:"days_left"`
+	HasCert     bool      `json:"has_cert"`
+	Error       string    `json:"error,omitempty"`
+}
+
+type ProbeResult struct {
+	Type string `json:"type"` // "probe_result"
+	ID   string `json:"id"`
+	Kind string `json:"kind"`
+	// Refused is set when the agent would not run the probe at all: bad_request, busy.
+	Refused string `json:"refused,omitempty"`
+	// TCP
+	Result string `json:"result,omitempty"`
+	IP     string `json:"ip,omitempty"`
+	RTTms  int    `json:"rtt_ms,omitempty"`
+	Error  string `json:"error,omitempty"`
+	// TLS
+	TLS *ProbeTLSResult `json:"tls,omitempty"`
+}
