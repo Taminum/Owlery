@@ -239,3 +239,75 @@ func TestAWGRevokeAndRename(t *testing.T) {
 	}
 	_ = store.ErrNotFound
 }
+
+func TestAWGContainersCanBeCreatedAndRemovedOnlyOnAHostThatOptedIn(t *testing.T) {
+	w, host, inst := managedWorld(t)
+	if _, err := w.h.st.Pool().Exec(context.Background(), `UPDATE awg_instances SET container='amnezia-awg2'`); err != nil {
+		t.Fatal(err)
+	}
+	// The host list says that nobody has opted in yet.
+	_, hb := w.owner.get("/api/v1/awg/hosts")
+	var hosts struct {
+		Hosts []struct {
+			ID             string `json:"id"`
+			Online         bool   `json:"online"`
+			ContainerAdmin bool   `json:"container_admin"`
+		} `json:"hosts"`
+	}
+	if err := json.Unmarshal(hb, &hosts); err != nil || len(hosts.Hosts) != 1 || !hosts.Hosts[0].Online || hosts.Hosts[0].ContainerAdmin {
+		t.Fatalf("%s", hb)
+	}
+	path := "/api/v1/awg/hosts/" + host.id + "/containers"
+	body := map[string]any{"container": "amnezia-awg3", "port": 55555, "subnet": "10.9.1.0/24"}
+	if st, b := w.owner.do("POST", path, body); st != 409 || !strings.Contains(string(b), "container_admin_off") {
+		t.Fatalf("a host that did not opt in must be refused: %d %s", st, b)
+	}
+	host.hub.SetContainerAdmin(host.id, true)
+
+	// A viewer cannot, and bad fields never reach the host.
+	if st, _ := w.viewer.do("POST", path, body); st != 403 {
+		t.Fatalf("a viewer created a container: %d", st)
+	}
+	for name, bad := range map[string]map[string]any{
+		"name":   {"container": "amnezia-awg3; rm -rf /", "port": 55555, "subnet": "10.9.1.0/24"},
+		"other":  {"container": "nginx", "port": 55555, "subnet": "10.9.1.0/24"},
+		"port":   {"container": "amnezia-awg3", "port": 80, "subnet": "10.9.1.0/24"},
+		"subnet": {"container": "amnezia-awg3", "port": 55555, "subnet": "192.168.1.0/24"},
+	} {
+		if st, _ := w.owner.do("POST", path, bad); st != 422 {
+			t.Errorf("%s was accepted: %d", name, st)
+		}
+	}
+	host.mu.Lock()
+	n := len(host.ops)
+	host.mu.Unlock()
+	if n != 0 {
+		t.Fatalf("a refused request reached the host: %d", n)
+	}
+
+	st, b := w.owner.do("POST", path, body)
+	if st != 201 {
+		t.Fatalf("%d %s", st, b)
+	}
+	host.mu.Lock()
+	op := host.ops[len(host.ops)-1]
+	host.mu.Unlock()
+	if op.Op != "install" || op.Container != "amnezia-awg3" || op.Port != 55555 || op.Subnet != "10.9.1.0/24" {
+		t.Fatalf("%+v", op)
+	}
+
+	// Removing needs the container's own name typed back.
+	rm := "/api/v1/awg/instances/" + inst + "/remove"
+	if st, _ := w.owner.do("POST", rm, map[string]string{"confirm": "yes"}); st != 422 {
+		t.Fatalf("removal without the name: %d", st)
+	}
+	if st, _ := w.owner.do("POST", rm, map[string]string{"confirm": "amnezia-awg2"}); st != 204 {
+		t.Fatalf("removal: %d", st)
+	}
+	host.mu.Lock()
+	op = host.ops[len(host.ops)-1]
+	host.mu.Unlock()
+	if op.Op != "remove" || op.Container != "amnezia-awg2" || op.Confirm != "yes-delete-all-devices" {
+		t.Fatalf("%+v", op)
+	}
+}

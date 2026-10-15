@@ -178,3 +178,31 @@ describe('source marks in Sites and Domains', () => {
     expect(hasAwg([{ sources: ['node'] }, {}])).toBe(false)
   })
 })
+
+describe('Container administration', () => {
+  it('offers installation only where the host opted in, and sends the chosen fields', async () => {
+    const api = mockApi({ me: owner, handler: (r: Req) => {
+      if (r.path === '/api/v1/awg') return { status: 200, body: { instances: [], period: '24h' } }
+      if (r.path === '/api/v1/awg/hosts') return { status: 200, body: { hosts: [
+        { id: 'a1', node_name: 'Helsinki', online: true, container_admin: true, containers: ['amnezia-awg2'] },
+        { id: 'a2', node_name: 'Steal', online: true, container_admin: false, containers: [] },
+      ] } }
+      if (r.path === '/api/v1/awg/hosts/a1/containers' && r.method === 'POST') return { status: 201, body: { container: 'amnezia-awg', port: 55555 } }
+    } })
+    renderAwg()
+    expect(await screen.findByText('Helsinki')).toBeInTheDocument()
+    // Only the host that opted in has the button; the other says why not.
+    expect(screen.getAllByRole('button', { name: 'Установить контейнер' })).toHaveLength(1)
+    expect(screen.getByText('установка не включена')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Установить контейнер' }))
+    const dialog = await screen.findByRole('dialog')
+    // A name the host already has is not offered as a free one.
+    expect(within(dialog).getByRole('option', { name: /amnezia-awg2/ })).toBeDisabled()
+    await userEvent.clear(within(dialog).getByLabelText('UDP-порт'))
+    await userEvent.type(within(dialog).getByLabelText('UDP-порт'), '55555')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Установить' }))
+    await screen.findByText('Контейнер установлен')
+    const post = api.find('POST', '/api/v1/awg/hosts/a1/containers')[0]
+    expect(post.body).toEqual({ container: 'amnezia-awg', port: 55555, subnet: '10.8.1.0/24' })
+  })
+})

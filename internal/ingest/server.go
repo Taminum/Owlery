@@ -217,6 +217,9 @@ func (s *Server) session(ctx context.Context, c *websocket.Conn, agent store.Age
 			// Same rules as "live": best effort, unanswered, a bad snapshot is dropped.
 			var f ingestproto.AWG
 			if agent.Kind == "awg" && json.Unmarshal(data, &f) == nil {
+				if s.Ops != nil {
+					s.Ops.SetContainerAdmin(agent.ID, f.ContainerAdmin)
+				}
 				if err := s.Store.SaveAWG(ctx, agent, f, time.Now()); err != nil {
 					s.log().Error("saving awg snapshot", "agent", agent.ID)
 				}
