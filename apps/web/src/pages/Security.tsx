@@ -1,3 +1,4 @@
+import type React from 'react'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Plus, Unlink } from 'lucide-react'
@@ -58,6 +59,33 @@ function VPSDialog({ vps, onClose, onDone }: { vps?: VPS; onClose: () => void; o
   )
 }
 
+/** One line on a card: how many addresses Fail2ban has blocked, or why that is not known. */
+function Fail2banLine({ v }: { v: VPS }) {
+  const s = v.summary
+  if (!s) return null
+  const f = s.fail2ban
+  const agent = <span className={s.agent === 'online' ? 'text-green' : 'text-muted'}>{t(`sec.card.agent.${s.agent}` as MsgKey)}</span>
+  let body: React.ReactNode
+  if (f.state === 'ok' || f.state === 'stale') {
+    body = (
+      <>
+        {f.state === 'stale'
+          ? <span className="text-amber">{t('sec.card.stale')}: {f.banned}</span>
+          : <span className="font-medium text-fg">{t('sec.card.banned', { n: f.banned })}</span>}
+        <span className="text-muted"> · {t('sec.card.total', { n: f.total_banned })} · {t('sec.card.jails', { n: f.jails })}</span>
+      </>
+    )
+  } else {
+    body = <span className="text-muted">{t(`sec.state.${f.state}` as MsgKey)}</span>
+  }
+  return (
+    <div className="mt-3 text-[13px]">
+      <div><span className="text-muted">{t('sec.card.f2b')}:</span> {body}</div>
+      <div className="mt-1 text-[12px]">{agent}</div>
+    </div>
+  )
+}
+
 export default function Security() {
   const nav = useNavigate()
   const { data, error } = useLoad((s) => api.get<VPSList>('/api/v1/security/vps', s), [], 30_000)
@@ -92,7 +120,8 @@ export default function Security() {
                   <Chip tone={v.enabled ? 'green' : 'muted'}>{v.enabled ? t('sec.enabled') : t('sec.disabled')}</Chip>
                 </div>
                 <p className="mt-2 break-words font-mono text-[12px] text-muted">{v.addresses.map((a) => a.address).join(' · ') || '—'}</p>
-                <p className="mt-3 text-[12px] text-muted">{t('sec.links')}: {v.links.length} · {t('sec.collectors')}: {t('sec.unknown')}</p>
+                <Fail2banLine v={v} />
+                <p className="mt-2 text-[12px] text-muted">{t('sec.links')}: {v.links.length}</p>
               </Link>
             </li>
           ))}
