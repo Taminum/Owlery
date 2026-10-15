@@ -23,6 +23,10 @@ CONTAINERS="${CONTAINERS:-${CFG_CONTAINERS:-amnezia-awg2 amnezia-awg3}}"
 # Containers the management helper may change (read from its config, never executed).
 MANAGED=$(sed -n 's/^MANAGED="\(.*\)"$/\1/p' "$MANAGE_CONF" 2>/dev/null | head -1)
 
+# A host that has the container helper installed says so, even with no container yet: that is how an empty
+# server is set up from RemnaScope.
+[ -x /usr/local/sbin/remnascope-awg-container ] && printf 'X\tcontainer_admin\n'
+
 for c in $CONTAINERS; do
   "$DOCKER" inspect -f '{{.State.Running}}' "$c" 2>/dev/null | grep -qx true || continue
   started=$(date -d "$("$DOCKER" inspect -f '{{.State.StartedAt}}' "$c" 2>/dev/null)" +%s 2>/dev/null || echo 0)
