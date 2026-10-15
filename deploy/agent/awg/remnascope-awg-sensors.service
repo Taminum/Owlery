@@ -1,0 +1,6 @@
+[Unit]
+Description=Match the RemnaScope AmneziaWG traffic sensors to the configured containers
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/remnascope-awg-sensors-sync

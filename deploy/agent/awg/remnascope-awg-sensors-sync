@@ -1,0 +1,22 @@
+#!/bin/sh
+# remnascope-awg-sensors-sync: makes the running traffic sensors match SENSE in /etc/remnascope/awg-manage.conf.
+# It runs as root, outside the agent's sandbox, started by remnascope-awg-sensors.path whenever the directory
+# changes (the container helper rewrites the config when it creates or removes a container). It accepts only
+# names that look like Amnezia containers, and it only enables or disables the sensor unit of that name.
+set -u
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+CONF="${MANAGE_CONF:-/etc/remnascope/awg-manage.conf}"
+SYSTEMCTL="${SYSTEMCTL:-systemctl}"
+want=$(sed -n 's/^SENSE="\(.*\)"$/\1/p' "$CONF" 2>/dev/null | head -1)
+
+for c in $want; do
+  printf '%s' "$c" | grep -Eq '^amnezia-awg[0-9]{0,2}$' || continue
+  $SYSTEMCTL enable --now "remnascope-awg-sensor@$c" >/dev/null 2>&1 || true
+done
+
+# Sensors that are enabled but no longer wanted are switched off.
+for u in $($SYSTEMCTL list-unit-files 'remnascope-awg-sensor@*.service' --state=enabled --no-legend 2>/dev/null | awk '{print $1}'); do
+  c=${u#remnascope-awg-sensor@}; c=${c%.service}
+  printf '%s' "$c" | grep -Eq '^amnezia-awg[0-9]{0,2}$' || continue
+  case " $want " in *" $c "*) ;; *) $SYSTEMCTL disable --now "$u" >/dev/null 2>&1 || true ;; esac
+done
