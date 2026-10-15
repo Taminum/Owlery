@@ -71,6 +71,8 @@ type Server struct {
 	SecIngest    http.Handler // the security agents' endpoint, with its own credentials
 	SecChecks    Nudger       // the external checker, woken by a manual request (nil = none)
 	SecOps       *secops.Hub  // carries ban/unban to security agents that are connected (nil = commands off)
+	DNSWorker    Nudger       // the DNS Map worker, woken by a refresh (nil = none)
+	dnsLimit     *auth.Limiter
 	checkLimit   *auth.Limiter
 	cmdLimit     *auth.Limiter
 	Limits       Limits
@@ -95,6 +97,9 @@ type Server struct {
 }
 
 func (s *Server) init() {
+	if s.dnsLimit == nil {
+		s.dnsLimit = auth.NewLimiter(1.0/60, 1)
+	}
 	if s.cmdLimit == nil {
 		s.cmdLimit = auth.NewLimiter(1.0/6, 5)
 	}
@@ -208,6 +213,16 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/v1/autoclassify/backfill", s.session(s.autoBackfill))
 	mux.Handle("POST /api/v1/autoclassify/dryrun", s.session(s.autoDryRunStart))
 	mux.Handle("GET /api/v1/autoclassify/dryrun", s.session(s.autoDryRunLatest))
+	mux.Handle("GET /api/v1/intel/dns/maps", s.session(s.listDNSMaps))
+	mux.Handle("POST /api/v1/intel/dns/maps", s.session(s.createDNSMap))
+	mux.Handle("GET /api/v1/intel/dns/maps/{id}", s.session(s.getDNSMap))
+	mux.Handle("PATCH /api/v1/intel/dns/maps/{id}", s.session(s.patchDNSMap))
+	mux.Handle("DELETE /api/v1/intel/dns/maps/{id}", s.session(s.archiveDNSMap))
+	mux.Handle("POST /api/v1/intel/dns/maps/{id}/refresh", s.session(s.refreshDNSMap))
+	mux.Handle("GET /api/v1/intel/dns/maps/{id}/records", s.session(s.dnsRecords))
+	mux.Handle("GET /api/v1/intel/dns/maps/{id}/graph", s.session(s.dnsGraph))
+	mux.Handle("GET /api/v1/intel/dns/maps/{id}/changes", s.session(s.dnsChanges))
+	mux.Handle("GET /api/v1/intel/dns/maps/{id}/checks", s.session(s.dnsChecks))
 	mux.Handle("GET /api/v1/intel/lookup", s.session(s.intelLookup))
 	mux.Handle("GET /api/v1/intel/dns", s.session(s.intelDNS))
 	mux.Handle("GET /api/v1/intel/subdomains", s.session(s.intelSubdomains))
