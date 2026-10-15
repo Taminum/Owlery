@@ -92,6 +92,34 @@ func diffFail2ban(prev, cur Snap) []Event {
 			out = append(out, jail(name, "removed"))
 		}
 	}
+	// Fail2ban counts every ban it has made. When the count grew by more than the new addresses that are now
+	// visibly banned, some bans came and went between two reads: they are not named (that needs the log), but
+	// they are counted, so a burst of attacks that the 30 second reads missed is not silently lost.
+	total := func(f *secproto.Fail2ban) map[string]int {
+		m := map[string]int{}
+		for _, j := range f.Jails {
+			m[j.Name] = j.TotalBanned
+		}
+		return m
+	}
+	pt, ct := total(prev.F2B), total(cur.F2B)
+	for _, name := range sortedKeys(cj) {
+		before, known := pj[name]
+		if !known {
+			continue
+		}
+		visible := 0
+		for ip := range cj[name] {
+			if !before[ip] {
+				visible++
+			}
+		}
+		// A negative growth is Fail2ban having been restarted with a fresh counter: nothing to say.
+		if missed := ct[name] - pt[name] - visible; missed > 0 {
+			out = append(out, Event{Category: secproto.CatFail2ban, Type: "fail2ban.bans_unobserved", Severity: SevInfo, Key: fmt.Sprintf("%s|%d", name, ct[name]),
+				Payload: map[string]any{"jail": name, "count": missed, "source": SourceStateDiff}})
+		}
+	}
 	ban := func(typ, name, ip string) Event {
 		return Event{Category: secproto.CatFail2ban, Type: typ, Severity: SevInfo, Key: name + "|" + ip,
 			Payload: map[string]any{"jail": name, "ip": ip, "source": SourceStateDiff}}
