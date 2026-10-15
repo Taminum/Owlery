@@ -5,8 +5,8 @@ import { useSyncExternalStore } from 'react'
 export type KawaiiTheme = 'kawaii_dark' | 'sakura_light' | 'neko_terminal'
 export const KAWAII_THEMES: KawaiiTheme[] = ['kawaii_dark', 'sakura_light', 'neko_terminal']
 
-export type MascotSize = 'm' | 'l' | 'xl'
-export const MASCOT_SIZES: Record<MascotSize, number> = { m: 200, l: 280, xl: 360 }
+export type MascotSize = 's' | 'm' | 'l' | 'xl'
+export const MASCOT_SIZES: Record<MascotSize, number> = { s: 200, m: 280, l: 420, xl: 520 }
 
 export interface KawaiiSettings {
   enabled: boolean
@@ -40,7 +40,7 @@ function read(): KawaiiSettings {
       animations: p.animations !== false,
       itemStorm: p.itemStorm !== false,
       reduced: p.reduced === true,
-      size: p.size === 'm' || p.size === 'xl' ? p.size : 'l',
+      size: p.size === 's' || p.size === 'm' || p.size === 'xl' ? p.size : 'l',
       pos: p.pos && Number.isFinite(p.pos.x) && Number.isFinite(p.pos.y) ? { x: Math.round(p.pos.x), y: Math.round(p.pos.y) } : null,
     }
   } catch {
