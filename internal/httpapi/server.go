@@ -28,6 +28,7 @@ import (
 	"github.com/Taminum/RemnaScope/internal/netintel"
 	"github.com/Taminum/RemnaScope/internal/remnawave"
 	"github.com/Taminum/RemnaScope/internal/safehttp"
+	"github.com/Taminum/RemnaScope/internal/secops"
 	"github.com/Taminum/RemnaScope/internal/secproto"
 	"github.com/Taminum/RemnaScope/internal/secrets"
 	"github.com/Taminum/RemnaScope/internal/store"
@@ -69,7 +70,9 @@ type Server struct {
 	Ingest       http.Handler // the agents' WebSocket endpoint; authenticates by agent credential, not by session
 	SecIngest    http.Handler // the security agents' endpoint, with its own credentials
 	SecChecks    Nudger       // the external checker, woken by a manual request (nil = none)
+	SecOps       *secops.Hub  // carries ban/unban to security agents that are connected (nil = commands off)
 	checkLimit   *auth.Limiter
+	cmdLimit     *auth.Limiter
 	Limits       Limits
 	Live         *live.Hub // present-moment router snapshots (nil = none)
 	Gemini       *gemini.Client
@@ -92,6 +95,9 @@ type Server struct {
 }
 
 func (s *Server) init() {
+	if s.cmdLimit == nil {
+		s.cmdLimit = auth.NewLimiter(1.0/6, 5)
+	}
 	if s.checkLimit == nil {
 		s.checkLimit = auth.NewLimiter(1.0/30, 1)
 	}
@@ -236,6 +242,9 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("DELETE /api/v1/security/vps/{id}/links/{link}", s.session(s.removeVPSLink))
 	mux.Handle("GET /api/v1/security/events", s.session(s.secJournal))
 	mux.Handle("GET /api/v1/security/settings", s.session(s.secSettings))
+	mux.Handle("POST /api/v1/security/vps/{id}/fail2ban/{action}", s.session(s.fail2banCommand))
+	mux.Handle("GET /api/v1/security/vps/{id}/commands", s.session(s.listCommands))
+	mux.Handle("GET /api/v1/security/commands/{id}", s.session(s.getCommand))
 	mux.Handle("GET /api/v1/security/vps/{id}/agent", s.session(s.getSecAgent))
 	mux.Handle("POST /api/v1/security/vps/{id}/agent", s.session(s.createSecAgent))
 	mux.Handle("DELETE /api/v1/security/vps/{id}/agent", s.session(s.revokeSecAgent))

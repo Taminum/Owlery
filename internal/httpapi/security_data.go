@@ -108,6 +108,7 @@ type secCategoryOut struct {
 	ClockSkewMS int64           `json:"clock_skew_ms"`
 	Data        json.RawMessage `json:"data"`
 	Agent       *secAgentOut    `json:"agent"`
+	Manage      *manageInfo     `json:"manage,omitempty"` // fail2ban only: whether a ban or unban can be sent
 }
 
 // secCategory serves the latest snapshot of one category. A server with no agent says so; a snapshot
@@ -141,6 +142,9 @@ func (s *Server) secCategory(category string) authedHandler {
 			if s.Now().Sub(rec) > secproto.StaleAfter {
 				out.State = "stale"
 			}
+		}
+		if category == secproto.CatFail2ban {
+			out.Manage = s.manageFor(r.Context(), a, v.ID)
 		}
 		writeJSON(w, http.StatusOK, out)
 	}

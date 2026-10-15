@@ -21,6 +21,7 @@ import (
 	"github.com/Taminum/RemnaScope/internal/remnawave"
 	"github.com/Taminum/RemnaScope/internal/safehttp"
 	"github.com/Taminum/RemnaScope/internal/secingest"
+	"github.com/Taminum/RemnaScope/internal/secops"
 	"github.com/Taminum/RemnaScope/internal/secrets"
 	"github.com/Taminum/RemnaScope/internal/store"
 	"github.com/Taminum/RemnaScope/internal/store/storetest"
@@ -165,7 +166,9 @@ func newHarness(t *testing.T, opts ...harnessOpt) *harness {
 		o(h.srv)
 	}
 	h.srv.Ingest = (&ingest.Server{Store: st}).Handler() // the agents' route, as in production
-	h.srv.SecIngest = (&secingest.Server{Store: st}).Handler()
+	hub := secops.New()
+	h.srv.SecOps = hub
+	h.srv.SecIngest = (&secingest.Server{Store: st, Ops: hub}).Handler()
 	h.ts = httptest.NewServer(h.srv.Handler())
 	t.Cleanup(h.ts.Close)
 	return h

@@ -34,6 +34,7 @@ import (
 	"github.com/Taminum/RemnaScope/internal/safehttp"
 	"github.com/Taminum/RemnaScope/internal/secchecks"
 	"github.com/Taminum/RemnaScope/internal/secingest"
+	"github.com/Taminum/RemnaScope/internal/secops"
 	"github.com/Taminum/RemnaScope/internal/secrets"
 	"github.com/Taminum/RemnaScope/internal/store"
 	"github.com/Taminum/RemnaScope/internal/syncer"
@@ -162,8 +163,10 @@ func serve(log *slog.Logger) error {
 		}
 	}()
 	secChecker := secchecks.New(st, log)
+	secHub := secops.New()
+	srv.SecOps = secHub
 	srv.SecChecks = secChecker
-	srv.SecIngest = (&secingest.Server{Store: st, Log: log, Limiter: auth.NewLimiter(1, 10), ClientIP: srv.ClientAddr}).Handler()
+	srv.SecIngest = (&secingest.Server{Store: st, Log: log, Limiter: auth.NewLimiter(1, 10), ClientIP: srv.ClientAddr, Ops: secHub}).Handler()
 	srv.Ingest = (&ingest.Server{Store: st, Log: log, Limiter: auth.NewLimiter(1, 10), ClientIP: srv.ClientAddr, Live: srv.Live, Ops: srv.AWGOps}).Handler()
 
 	hs := &http.Server{
