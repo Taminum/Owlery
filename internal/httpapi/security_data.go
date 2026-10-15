@@ -11,6 +11,7 @@ import (
 
 	"github.com/Taminum/RemnaScope/internal/auth"
 	"github.com/Taminum/RemnaScope/internal/secchecks"
+	"github.com/Taminum/RemnaScope/internal/secfw"
 	"github.com/Taminum/RemnaScope/internal/secproto"
 	"github.com/Taminum/RemnaScope/internal/store"
 )
@@ -109,6 +110,7 @@ type secCategoryOut struct {
 	Data        json.RawMessage `json:"data"`
 	Agent       *secAgentOut    `json:"agent"`
 	Manage      *manageInfo     `json:"manage,omitempty"` // fail2ban only: whether a ban or unban can be sent
+	Model       *secfw.Model    `json:"model,omitempty"`  // firewall only: the rules read into tables and chains
 }
 
 // secCategory serves the latest snapshot of one category. A server with no agent says so; a snapshot
@@ -145,6 +147,9 @@ func (s *Server) secCategory(category string) authedHandler {
 		}
 		if category == secproto.CatFail2ban {
 			out.Manage = s.manageFor(r.Context(), a, v.ID)
+		}
+		if category == secproto.CatFirewall && out.Status == secproto.StatusOK {
+			out.Model = fwModel(out.Data)
 		}
 		writeJSON(w, http.StatusOK, out)
 	}

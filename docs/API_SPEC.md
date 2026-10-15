@@ -55,6 +55,7 @@ administrator role on a linked panel; creating and archiving one is the owner's.
 - Agent: `GET/POST/DELETE /vps/{id}/agent` (POST returns the secret once). Reports arrive on the WebSocket
   `/ingest/security/v1`, see SECURITY_AGENT.md.
 - State read from the agent: `GET /vps/{id}/fail2ban|ports|firewall` (state, observed time, staleness).
+- Firewall history and comparison: `GET /vps/{id}/firewall/history?limit=` (stored readings, no rule text) and `GET /vps/{id}/firewall/diff[?from=&to=]` (line difference of two complete readings, by default the two newest; `available:false` with a `reason` otherwise). The `firewall` category also carries `model` (tables, chains, policies, rules) read from the rule text.
 - External checks: `GET/POST /vps/{id}/public-ports`, `PATCH /vps/{id}/public-ports/{eid}`,
   `GET/POST /vps/{id}/tls`, `PATCH /vps/{id}/tls/{eid}`, `POST /vps/{id}/checks/{ports|tls}/run` (202, one per 30 s).
   Targets must be registered on the server. See SECURITY_CHECKS.md.
