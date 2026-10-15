@@ -22,6 +22,7 @@ import (
 	"github.com/Taminum/RemnaScope/internal/awgops"
 	"github.com/Taminum/RemnaScope/internal/config"
 	"github.com/Taminum/RemnaScope/internal/demo"
+	"github.com/Taminum/RemnaScope/internal/dnsworker"
 	"github.com/Taminum/RemnaScope/internal/gemini"
 	"github.com/Taminum/RemnaScope/internal/geoip"
 	"github.com/Taminum/RemnaScope/internal/httpapi"
@@ -32,6 +33,9 @@ import (
 	"github.com/Taminum/RemnaScope/internal/probe"
 	"github.com/Taminum/RemnaScope/internal/remnawave"
 	"github.com/Taminum/RemnaScope/internal/safehttp"
+	"github.com/Taminum/RemnaScope/internal/secchecks"
+	"github.com/Taminum/RemnaScope/internal/secingest"
+	"github.com/Taminum/RemnaScope/internal/secops"
 	"github.com/Taminum/RemnaScope/internal/secrets"
 	"github.com/Taminum/RemnaScope/internal/store"
 	"github.com/Taminum/RemnaScope/internal/syncer"
@@ -159,6 +163,13 @@ func serve(log *slog.Logger) error {
 			}
 		}
 	}()
+	secChecker := secchecks.New(st, log)
+	dnsWorker := dnsworker.New(st, log, srv.Intel)
+	srv.DNSWorker = dnsWorker
+	secHub := secops.New()
+	srv.SecOps = secHub
+	srv.SecChecks = secChecker
+	srv.SecIngest = (&secingest.Server{Store: st, Log: log, Limiter: auth.NewLimiter(1, 10), ClientIP: srv.ClientAddr, Ops: secHub}).Handler()
 	srv.Ingest = (&ingest.Server{Store: st, Log: log, Limiter: auth.NewLimiter(1, 10), ClientIP: srv.ClientAddr, Live: srv.Live, Ops: srv.AWGOps}).Handler()
 
 	hs := &http.Server{
@@ -174,6 +185,8 @@ func serve(log *slog.Logger) error {
 		go sy.Run(ctx)
 	}
 	go alerts.Run(ctx, st, time.Minute, log)
+	go secChecker.Run(ctx)
+	go dnsWorker.Run(ctx)
 	go probe.Run(ctx, st, time.Minute, log)
 	go func() {
 		t := time.NewTicker(time.Hour)
@@ -195,6 +208,16 @@ func serve(log *slog.Logger) error {
 				} else if n > 0 {
 					log.Info("retention purge", "traffic_samples_deleted", n)
 				}
+				if n, err := st.PurgeDNS(ctx, time.Now().UTC()); err != nil {
+					log.Error("dns retention purge failed", "err", err)
+				} else if n > 0 {
+					log.Info("retention purge", "dns_rows_deleted", n)
+				}
+				if n, err := st.PurgeSecurity(ctx, time.Now().UTC()); err != nil {
+					log.Error("security retention purge failed", "err", err)
+				} else if n > 0 {
+					log.Info("retention purge", "security_rows_deleted", n)
+				}
 				if n, err := st.PurgeExpiredDevices(ctx, time.Now().UTC()); err != nil {
 					log.Error("device retention purge failed", "err", err)
 				} else if n > 0 {
@@ -208,13 +231,6 @@ func serve(log *slog.Logger) error {
 			log.Error("country backfill failed", "err", err)
 		} else if n > 0 {
 			log.Info("country backfill", "rows", n)
-		}
-	}()
-	go func() { // rows from before the site column existed
-		if n, err := st.BackfillSites(ctx); err != nil {
-			log.Error("site backfill failed", "err", err)
-		} else if n > 0 {
-			log.Info("site backfill", "rows", n)
 		}
 	}()
 	go func() { // rows from before the site column existed

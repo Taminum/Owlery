@@ -243,3 +243,72 @@ export interface AutoDryRun {
   run: AutoRun | null; items: AutoItem[]
   summary: { total: number; valid: number; undetermined: number; invalid: number; with_service: number; low_confidence: number; by_category: Record<string, number>; issues: Record<string, number> }
 }
+
+export interface VPSAddress { address: string; kind: 'ipv4' | 'ipv6' | 'domain' }
+export interface VPSLink { id: string; panel_id: string; node_id: string | null; provenance: string; created_at: string }
+export interface VPS {
+  id: string; name: string; origin: string; enabled: boolean; note: string
+  created_at: string; updated_at: string; addresses: VPSAddress[]; links: VPSLink[]; can_edit: boolean
+}
+export interface VPSList { items: VPS[]; can_create: boolean }
+
+export interface SecAgent { id: string; status: string; agent_version: string | null; hostname: string | null; capabilities: string[]; last_seen: string | null; online: boolean }
+export interface SecJail { name: string; currently_failed: number; total_failed: number; currently_banned: number; total_banned: number; banned_ips: string[] }
+export interface SecListener { proto: string; addr: string; port: number; state?: string; process?: string; pid?: number }
+export interface SecCategory<T> {
+  category: string; state: string; status?: string; observed_at: string | null; received_at: string | null; clock_skew_ms: number
+  data: T | null; agent: SecAgent | null; manage?: SecManage
+}
+export interface SecEvent { id: string; category: string; type: string; severity: 'info' | 'warning' | 'critical'; source: string; observed_at: string; payload: Record<string, unknown> }
+
+export interface Vantage { id: string; independent: boolean }
+export interface PublicPort {
+  id: string; host: string; port: number; expected: boolean; source: 'manual' | 'local_listener'; enabled: boolean
+  last_checked_at: string | null; last_result: 'reachable' | 'refused' | 'timeout' | 'filtered_or_unknown' | 'error' | null
+  last_error: string | null; last_ip: string | null; last_rtt_ms: number | null; changed_at: string | null
+}
+export interface PublicPortsResponse { items: PublicPort[]; vantage: Vantage; interval_minutes: number; coverage: { kind: string; discovery: string } }
+export interface TLSObs {
+  state?: string; ip?: string; sni?: string; name_checked?: boolean; version?: string; fingerprint?: string; subject?: string; issuer?: string
+  dns_names?: string[] | null; not_before?: string | null; not_after?: string | null; days_left?: number; has_cert?: boolean; error?: string
+}
+export interface TLSEndpoint {
+  id: string; host: string; port: number; sni: string; enabled: boolean; last_checked_at: string | null; last_state: string | null
+  last_ip: string | null; last_fingerprint: string | null; last_not_after: string | null; last_obs: TLSObs
+}
+export interface TLSResponse { items: TLSEndpoint[]; vantage: Vantage; interval_hours: number }
+
+export interface JournalEvent extends SecEvent { vps_id: string; vps_name: string }
+export interface SecSettings {
+  agent_interval_seconds: number; stale_after_seconds: number; port_check_minutes: number; tls_check_hours: number
+  tls_warn_days: number[]; retention_days: number; vantage: Vantage; discovery_scan: string
+}
+
+export interface SecManage { allowed: boolean; ready: boolean; reason?: string }
+export interface SecCommand {
+  id: string; vps_id: string; action: 'ban' | 'unban'; jail: string; ip: string; state: string; requested_at: string
+  sent_at: string | null; deadline: string; finished_at: string | null; result_code: string | null; verified: boolean; final: boolean
+}
+
+export interface DnsCoverage {
+  discovery: string; names_total: number; names_checked: number; names_dropped: number; types: string[] | null; resolvers: string[] | null
+  questions: number; failures: number; unconfirmed: number; dnssec: string; authoritative_asked: number
+}
+export interface DnsAuth { ns: string; addr?: string; skipped?: string; answers?: Record<string, { outcome: string; values?: string[]; aa: boolean }> }
+export interface DnsRun {
+  id: string; trigger: string; started_at: string; finished_at: string | null; status: string
+  coverage: DnsCoverage | Record<string, never>; auth: DnsAuth[]; mismatch: string[]; error: string | null
+}
+export interface DnsMap {
+  id: string; domain: string; display: string; enabled: boolean; interval_hours: number; extra_names: string[]; use_ct: boolean
+  created_at: string; last_run_at: string | null; next_run_at: string | null; last_status: string | null; baseline_done: boolean; last_run: DnsRun | null
+}
+export interface DnsView { server: string; outcome: string; values?: string[] }
+export interface DnsRecord {
+  name: string; type: string; result: string | null; values: string[]; ttl: number; confirmed: boolean; last_result: string; views: DnsView[]
+  first_seen: string; last_seen: string | null; last_checked: string; last_changed: string | null; no_longer_observed: boolean
+}
+export interface DnsChange { id: string; name: string; type: string; kind: string; before: string[]; after: string[]; observed_at: string; volatile: boolean }
+export interface DnsGraphNode { id: string; kind: 'name' | 'ip' | 'mail' | 'ns'; label: string; group?: string; provenance?: string }
+export interface DnsGraphEdge { from: string; to: string; type: string; label?: string; unverified?: boolean; no_longer_observed?: boolean }
+export interface DnsGraph { nodes: DnsGraphNode[]; edges: DnsGraphEdge[]; total_nodes: number; truncated: boolean; note: string }
