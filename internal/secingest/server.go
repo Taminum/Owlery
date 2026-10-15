@@ -125,7 +125,7 @@ func closeWith(c *websocket.Conn, code int, reason string) {
 	_ = c.Close(websocket.StatusCode(code), reason)
 }
 
-var knownCaps = map[string]bool{"fail2ban_read": true, "socket_read": true, "firewall_read": true, secproto.CapFail2banBan: true}
+var knownCaps = map[string]bool{"fail2ban_read": true, "socket_read": true, "firewall_read": true, secproto.CapFail2banBan: true, secproto.CapProbe: true}
 
 func (s *Server) session(ctx context.Context, c *websocket.Conn, agent store.SecAgent) {
 	hctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -136,7 +136,7 @@ func (s *Server) session(ctx context.Context, c *websocket.Conn, agent store.Sec
 	}
 	var hello secproto.Hello
 	if json.Unmarshal(data, &hello) != nil || hello.Type != "hello" || hello.ProtoVersion != secproto.Version ||
-		hello.Epoch == "" || len(hello.Epoch) > 64 || len(hello.AgentVersion) > 64 || len(hello.Hostname) > 253 || len(hello.Capabilities) > 8 {
+		hello.Epoch == "" || len(hello.Epoch) > 64 || len(hello.AgentVersion) > 64 || len(hello.Hostname) > 253 || len(hello.Capabilities) > 12 {
 		_ = send(ctx, c, secproto.Error{Type: "error", Code: "bad_message"})
 		closeWith(c, secproto.CloseProtocol, "bad hello")
 		return
@@ -195,6 +195,11 @@ func (s *Server) session(ctx context.Context, c *websocket.Conn, agent store.Sec
 			}
 		case "command_result":
 			s.commandResult(ctx, agent, data)
+		case "probe_result":
+			var r secproto.ProbeResult
+			if len(data) <= 16<<10 && json.Unmarshal(data, &r) == nil && s.Ops != nil {
+				s.Ops.Deliver(agent.ID, r)
+			}
 		default:
 			_ = send(ctx, c, secproto.Error{Type: "error", Code: "bad_message"})
 			closeWith(c, secproto.CloseProtocol, "unknown message")
