@@ -47,16 +47,16 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with: { go-version-file: go.mod }
-      - name: Build agent and AmneziaWG sensor
+      - name: Build agent, AmneziaWG sensor and security agent
         run: |
           mkdir dist
           for arch in amd64 arm64; do
-            for cmd in agent awgsensor; do
+            for cmd in agent awgsensor secagent; do
               name=remnascope-$cmd; [ "$cmd" = awgsensor ] && name=remnascope-awg-sensor
               CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath -ldflags="-s -w -X main.version=${GITHUB_REF_NAME}" -o "dist/$name-linux-$arch" "./cmd/$cmd"
             done
           done
-          tar -czf dist/remnascope-deploy-files.tar.gz deploy/agent deploy/router
+          tar -czf dist/remnascope-deploy-files.tar.gz deploy/agent deploy/router deploy/secagent
           (cd dist && sha256sum * > SHA256SUMS)
       - uses: softprops/action-gh-release@v2
         with:

@@ -251,3 +251,12 @@ export interface VPS {
   created_at: string; updated_at: string; addresses: VPSAddress[]; links: VPSLink[]; can_edit: boolean
 }
 export interface VPSList { items: VPS[]; can_create: boolean }
+
+export interface SecAgent { id: string; status: string; agent_version: string | null; hostname: string | null; capabilities: string[]; last_seen: string | null; online: boolean }
+export interface SecJail { name: string; currently_failed: number; total_failed: number; currently_banned: number; total_banned: number; banned_ips: string[] }
+export interface SecListener { proto: string; addr: string; port: number; state?: string; process?: string; pid?: number }
+export interface SecCategory<T> {
+  category: string; state: string; status?: string; observed_at: string | null; received_at: string | null; clock_skew_ms: number
+  data: T | null; agent: SecAgent | null
+}
+export interface SecEvent { id: string; category: string; type: string; severity: 'info' | 'warning' | 'critical'; source: string; observed_at: string; payload: Record<string, unknown> }
