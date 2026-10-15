@@ -79,3 +79,7 @@ Not built: firewall changes (never).
   `GET /maps/{id}/changes?kind=&type=&name=&from=&to=&before_ts=&before_id=&limit=`, `GET /maps/{id}/checks`.
 Every answer says how it was obtained: `confirmed` (two resolvers agreed), the views of each resolver, and the
 run's coverage. See DNS_MAP.md.
+
+## Digest
+
+`GET /api/v1/analytics/digest?range=24h` (or `from`/`to`, plus `panel_ids`) answers "what changed" in one place: new sites (`new_only` view of Sites, top 10), the five busiest devices behind the router, devices not seen before the period (only for periods up to 14 days), the security journal counted by type for the servers the caller can see, DNS change counts (owner only, `null` otherwise) and the number of open alerts. Empty parts are empty arrays, not missing.
