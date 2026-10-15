@@ -65,3 +65,11 @@ administrator role on a linked panel; creating and archiving one is the owner's.
   q, from, to`; paging with `before_ts` + `before_id`; `limit` 1 to 200.
 - `GET /settings`: the fixed intervals, retention and the checker's vantage.
 Not built: firewall changes (never), a discovery scan of unknown ports.
+
+## As built: DNS Map (`/api/v1/intel/dns/maps`, owner only)
+- `GET/POST /maps` (create needs `confirm_scope: true`), `GET/PATCH/DELETE /maps/{id}`, `POST /maps/{id}/refresh`
+  (202; one per minute per map; 409 `running` while a run is in progress).
+- `GET /maps/{id}/records?type=&name=&q=&after_name=&after_type=&limit=`, `GET /maps/{id}/graph?max_nodes=`,
+  `GET /maps/{id}/changes?kind=&type=&name=&from=&to=&before_ts=&before_id=&limit=`, `GET /maps/{id}/checks`.
+Every answer says how it was obtained: `confirmed` (two resolvers agreed), the views of each resolver, and the
+run's coverage. See DNS_MAP.md.
