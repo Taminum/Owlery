@@ -1,6 +1,6 @@
 // Package f2bhelper is the one place that talks to Fail2ban's control socket on behalf of the security
 // agent. The agent itself has no access to that socket: it can only ask this helper, over a Unix socket,
-// for four things (the status, the status of one jail, ban one address, unban one address), and the helper
+// for five things (the status, the status of one jail, the listing of banned addresses, ban one address, unban one address), and the helper
 // checks every field before it runs anything.
 //
 // The helper runs as its own unprivileged user that is allowed to use Fail2ban's socket. It runs
@@ -28,6 +28,7 @@ import (
 const (
 	OpStatus = "status" // "fail2ban-client status"
 	OpJail   = "jail"   // "fail2ban-client status <jail>"
+	OpBanned = "banned" // "fail2ban-client banned": every banned address, in one listing
 	OpBan    = "ban"    // "fail2ban-client set <jail> banip <ip>"
 	OpUnban  = "unban"  // "fail2ban-client set <jail> unbanip <ip>"
 )
@@ -97,6 +98,8 @@ func (s *Server) Handle(ctx context.Context, rq Request) Response {
 	switch rq.Op {
 	case OpStatus:
 		return s.passThrough(ctx, "status")
+	case OpBanned:
+		return s.passThrough(ctx, "banned")
 	case OpJail:
 		if !ValidJail(rq.Jail) {
 			return Response{Code: CodeBadRequest}
@@ -278,6 +281,8 @@ func (r Runner) Run(ctx context.Context, name string, args ...string) seccollect
 	rq := Request{Op: OpStatus}
 	switch {
 	case len(args) == 1 && args[0] == "status":
+	case len(args) == 1 && args[0] == "banned":
+		rq = Request{Op: OpBanned}
 	case len(args) == 2 && args[0] == "status":
 		rq = Request{Op: OpJail, Jail: args[1]}
 	default:
