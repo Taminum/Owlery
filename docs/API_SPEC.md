@@ -58,7 +58,10 @@ administrator role on a linked panel; creating and archiving one is the owner's.
 - External checks: `GET/POST /vps/{id}/public-ports`, `PATCH /vps/{id}/public-ports/{eid}`,
   `GET/POST /vps/{id}/tls`, `PATCH /vps/{id}/tls/{eid}`, `POST /vps/{id}/checks/{ports|tls}/run` (202, one per 30 s).
   Targets must be registered on the server. See SECURITY_CHECKS.md.
+- Ban and unban (owner only): `POST /vps/{id}/fail2ban/{ban|unban}` with `{jail, ip, idempotency_key, acknowledge_risk?}`
+  answers 202 with a command, or 409 `risk` (needs `acknowledge_risk`), `agent_offline`, `state_stale`, `no_capability`;
+  `GET /commands/{id}`, `GET /vps/{id}/commands`. `GET /vps/{id}/fail2ban` carries `manage: {allowed, ready, reason}`.
 - Journal: `GET /vps/{id}/events` and `GET /events` (all visible servers). Filters `vps_id, category, type, severity,
   q, from, to`; paging with `before_ts` + `before_id`; `limit` 1 to 200.
 - `GET /settings`: the fixed intervals, retention and the checker's vantage.
-Not built: ban/unban, firewall changes (never), a discovery scan of unknown ports.
+Not built: firewall changes (never), a discovery scan of unknown ports.

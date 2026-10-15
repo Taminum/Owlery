@@ -7,6 +7,7 @@ import { formatDateTime } from '../lib/format'
 import { useLoad } from '../hooks/useLoad'
 import type { SecAgent, SecCategory, SecEvent, SecJail, SecListener } from '../lib/types'
 import { Card, Chip } from './ui'
+import { CommandHistory, useBanControls } from './SecurityBan'
 import { DangerButton, GhostButton, Modal, PrimaryButton } from './Modal'
 
 type Tone = 'muted' | 'amber' | 'green' | 'red' | 'cyan'
@@ -41,10 +42,14 @@ function useCategory<T>(vpsId: string, cat: string) {
 const hasData = (c: SecCategory<unknown>) => c.data != null && c.status === 'ok'
 
 export function Fail2banTab({ vpsId }: { vpsId: string }) {
-  const { data: c, error } = useCategory<{ jails: SecJail[] }>(vpsId, 'fail2ban')
+  const { data: c, error, reload } = useCategory<{ jails: SecJail[] }>(vpsId, 'fail2ban')
+  const [changed, setChanged] = useState(0)
+  const jails = c && hasData(c) ? c.data!.jails.map((j) => j.name) : []
+  const { unban, form, dialog } = useBanControls(vpsId, c?.manage, jails, () => { setChanged((n) => n + 1); reload() })
   if (error) return <p role="alert" className="text-[13px] text-red">{error}</p>
   if (!c) return null
   return (
+    <>
     <Card title="Fail2ban" note={t('sec.f2b.readonly')}>
       <Freshness c={c} />
       {hasData(c) && c.data!.jails.length === 0 && <p className="text-[13px] text-muted">{t('sec.f2b.noJails')}</p>}
@@ -60,7 +65,10 @@ export function Fail2banTab({ vpsId }: { vpsId: string }) {
                   <td className="tnum pr-4">{j.currently_banned} / {j.total_banned}</td>
                   <td className="font-mono text-[12px]">
                     {j.banned_ips.length === 0 ? '—' : j.banned_ips.map((ip) => (
-                      <Link key={ip} to={`/intel?target=${encodeURIComponent(ip)}`} title={t('sec.openIntel')} className="mr-3 inline-block hover:text-cyan hover:underline">{ip}</Link>
+                      <span key={ip} className="mr-3 inline-block">
+                        <Link to={`/intel?target=${encodeURIComponent(ip)}`} title={t('sec.openIntel')} className="hover:text-cyan hover:underline">{ip}</Link>
+                        {unban(j.name, ip)}
+                      </span>
                     ))}
                   </td>
                 </tr>
@@ -69,7 +77,11 @@ export function Fail2banTab({ vpsId }: { vpsId: string }) {
           </table>
         </div>
       )}
+      {hasData(c) && form}
     </Card>
+    <CommandHistory vpsId={vpsId} refreshKey={changed} />
+    {dialog}
+    </>
   )
 }
 
@@ -225,13 +237,13 @@ export function AgentCard({ vpsId, canEdit }: { vpsId: string; canEdit: boolean 
           <div className="space-y-3 text-[13px]">
             <p className="text-muted">{t('sec.onb.intro')}</p>
             <p>{t('sec.onb.s1')}</p>
-            <Code>{'useradd --system --no-create-home --shell /usr/sbin/nologin remnascope-sec'}</Code>
+            <Code>{'useradd --system --no-create-home --shell /usr/sbin/nologin remnascope-sec\nuseradd --system --no-create-home --shell /usr/sbin/nologin remnascope-f2b'}</Code>
             <p>{t('sec.onb.s2')}</p>
             <Code>{`install -d -m 0755 /etc/remnascope && umask 077 && echo '${token}' > /etc/remnascope/secagent.token && chown root:remnascope-sec /etc/remnascope/secagent.token && chmod 0640 /etc/remnascope/secagent.token`}</Code>
             <p>{t('sec.onb.s3')}</p>
             <Code>{`install -m 0755 remnascope-secagent-linux-amd64 /usr/local/bin/remnascope-secagent
 sed -i 's#wss://SCOPE_HOST#wss://${window.location.host}#' remnascope-secagent.service
-cp remnascope-secagent.service /etc/systemd/system/ && systemctl daemon-reload && systemctl enable --now remnascope-secagent`}</Code>
+cp remnascope-secagent.service remnascope-secagent-f2b.service /etc/systemd/system/ && systemctl daemon-reload && systemctl enable --now remnascope-secagent-f2b remnascope-secagent`}</Code>
             <p className="text-muted">{t('sec.onb.s4')}</p>
           </div>
           <div className="mt-4 flex justify-end"><PrimaryButton onClick={() => setToken('')}>{t('sec.agent.tokenSaved')}</PrimaryButton></div>

@@ -1,21 +1,28 @@
-# RemnaScope security agent. Read-only: it reads Fail2ban, listening sockets and firewall rules and reports
-# them. It listens on nothing and runs no command the server sends. See docs/SECURITY_AGENT.md.
+# RemnaScope security agent. It reads Fail2ban (through the helper), listening sockets and firewall rules
+# and reports them; on an owner's request it asks the helper to ban or unban one address. It listens on
+# nothing and runs no command the server sends. See docs/SECURITY_AGENT.md.
 [Unit]
-Description=RemnaScope security agent (read-only)
-After=network-online.target
-Wants=network-online.target
+Description=RemnaScope security agent
+After=network-online.target remnascope-secagent-f2b.service
+Wants=network-online.target remnascope-secagent-f2b.service
 
 [Service]
 User=remnascope-sec
 Group=remnascope-sec
+# Leave out -helper-socket and -state-dir for a read-only agent that cannot ban or unban (Fail2ban is then
+# read directly, which needs its own access to Fail2ban's socket).
 ExecStart=/usr/local/bin/remnascope-secagent \
   -server wss://SCOPE_HOST \
-  -token-file /etc/remnascope/secagent.token
+  -token-file /etc/remnascope/secagent.token \
+  -helper-socket /run/remnascope-sec/f2b.sock \
+  -state-dir /var/lib/remnascope-secagent
 Restart=always
 RestartSec=5
+StateDirectory=remnascope-secagent
+StateDirectoryMode=0700
 
-# Not root. Two capabilities are enough to read the firewall and to see which process owns a socket;
-# reading Fail2ban needs one more decision from you, described in docs/SECURITY_AGENT.md.
+# Not root. Two capabilities are enough to read the firewall and to see which process owns a socket.
+# Fail2ban's socket is not reachable from here at all: only the helper has it.
 AmbientCapabilities=CAP_NET_ADMIN CAP_SYS_PTRACE CAP_DAC_READ_SEARCH
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_SYS_PTRACE CAP_DAC_READ_SEARCH
 NoNewPrivileges=yes
