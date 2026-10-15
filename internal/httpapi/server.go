@@ -246,6 +246,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("DELETE /api/v1/rules/{id}", s.session(s.deleteRule))
 	mux.Handle("GET /api/v1/analytics/traffic", s.session(s.analyticsTraffic))
 	mux.Handle("GET /api/v1/analytics/devices", s.session(s.analyticsDevices))
+	mux.Handle("GET /api/v1/analytics/digest", s.session(s.analyticsDigest))
 	mux.Handle("GET /api/v1/analytics/devices/detail", s.session(s.analyticsDeviceDetail))
 
 	mux.Handle("GET /api/v1/security/vps", s.session(s.listVPS))
