@@ -255,6 +255,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("DELETE /api/v1/security/vps/{id}", s.session(s.archiveVPS))
 	mux.Handle("POST /api/v1/security/vps/{id}/links", s.session(s.addVPSLink))
 	mux.Handle("DELETE /api/v1/security/vps/{id}/links/{link}", s.session(s.removeVPSLink))
+	mux.Handle("GET /api/v1/security/vps-by-address", s.session(s.vpsByAddress))
 	mux.Handle("GET /api/v1/security/events", s.session(s.secJournal))
 	mux.Handle("GET /api/v1/security/events/{id}", s.session(s.secEventDetail))
 	mux.Handle("GET /api/v1/security/vps/{id}/overview", s.session(s.secOverview))
