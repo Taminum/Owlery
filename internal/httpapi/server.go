@@ -216,6 +216,14 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/analytics/devices", s.session(s.analyticsDevices))
 	mux.Handle("GET /api/v1/analytics/devices/detail", s.session(s.analyticsDeviceDetail))
 
+	mux.Handle("GET /api/v1/security/vps", s.session(s.listVPS))
+	mux.Handle("POST /api/v1/security/vps", s.session(s.createVPS))
+	mux.Handle("GET /api/v1/security/vps/{id}", s.session(s.getVPS))
+	mux.Handle("PATCH /api/v1/security/vps/{id}", s.session(s.patchVPS))
+	mux.Handle("DELETE /api/v1/security/vps/{id}", s.session(s.archiveVPS))
+	mux.Handle("POST /api/v1/security/vps/{id}/links", s.session(s.addVPSLink))
+	mux.Handle("DELETE /api/v1/security/vps/{id}/links/{link}", s.session(s.removeVPSLink))
+
 	mux.Handle("GET /api/v1/accounts", s.session(s.listAccounts))
 	mux.Handle("POST /api/v1/accounts", s.session(s.createAccount))
 	mux.Handle("PATCH /api/v1/accounts/{id}", s.session(s.patchAccount))
