@@ -257,7 +257,7 @@ export interface SecJail { name: string; currently_failed: number; total_failed:
 export interface SecListener { proto: string; addr: string; port: number; state?: string; process?: string; pid?: number }
 export interface SecCategory<T> {
   category: string; state: string; status?: string; observed_at: string | null; received_at: string | null; clock_skew_ms: number
-  data: T | null; agent: SecAgent | null
+  data: T | null; agent: SecAgent | null; manage?: SecManage
 }
 export interface SecEvent { id: string; category: string; type: string; severity: 'info' | 'warning' | 'critical'; source: string; observed_at: string; payload: Record<string, unknown> }
 
@@ -282,4 +282,10 @@ export interface JournalEvent extends SecEvent { vps_id: string; vps_name: strin
 export interface SecSettings {
   agent_interval_seconds: number; stale_after_seconds: number; port_check_minutes: number; tls_check_hours: number
   tls_warn_days: number[]; retention_days: number; vantage: Vantage; discovery_scan: string
+}
+
+export interface SecManage { allowed: boolean; ready: boolean; reason?: string }
+export interface SecCommand {
+  id: string; vps_id: string; action: 'ban' | 'unban'; jail: string; ip: string; state: string; requested_at: string
+  sent_at: string | null; deadline: string; finished_at: string | null; result_code: string | null; verified: boolean; final: boolean
 }

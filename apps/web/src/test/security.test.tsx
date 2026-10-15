@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from '../lib/auth'
@@ -169,5 +169,88 @@ describe('Security page', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Секрет сохранён' }))
     expect(screen.queryByText(/AGENTID\.SECRETVALUE/)).toBeNull()
     expect(await screen.findByText('ожидает первого подключения')).toBeInTheDocument()
+  })
+
+  describe('ban and unban', () => {
+    const f2b = (manage: object) => ({
+      category: 'fail2ban', state: 'ok', status: 'ok', observed_at: '2026-10-15T12:00:00Z', received_at: '2026-10-15T12:00:00Z', clock_skew_ms: 0, agent: null, manage,
+      data: { jails: [{ name: 'sshd', currently_failed: 0, total_failed: 3, currently_banned: 1, total_banned: 1, banned_ips: ['93.184.216.9'] }] },
+    })
+    const cmd = (over: object) => ({ id: 'c1', vps_id: 'v1', action: 'unban', jail: 'sshd', ip: '93.184.216.9', state: 'pending', requested_at: '2026-10-15T12:00:00Z', sent_at: null, deadline: '2026-10-15T12:00:30Z', finished_at: null, result_code: null, verified: false, final: false, ...over })
+    const base = (manage: object, extra?: (r: Req) => { status: number; body?: unknown } | undefined) => mockApi({ me: owner, handler: (r: Req) => {
+      if (r.path === '/api/v1/security/vps/v1') return { status: 200, body: vps() }
+      if (r.path === '/api/v1/security/vps/v1/agent') return { status: 200, body: { agent: null } }
+      if (r.path === '/api/v1/security/vps/v1/fail2ban') return { status: 200, body: f2b(manage) }
+      if (r.path === '/api/v1/security/vps/v1/commands') return { status: 200, body: { items: [] } }
+      return extra?.(r)
+    } })
+
+    it('asks to confirm, sends one command and follows it to the verified end', async () => {
+      const api = base({ allowed: true, ready: true }, (r) => {
+        if (r.path === '/api/v1/security/vps/v1/fail2ban/unban') return { status: 202, body: { command: cmd({}) } }
+        if (r.path === '/api/v1/security/commands/c1') return { status: 200, body: { command: cmd({ state: 'executed', verified: true, final: true }) } }
+      })
+      renderSec('/security/v1')
+      await userEvent.click(await screen.findByRole('button', { name: 'Разблокировать' }))
+      expect(screen.getByText(/Адрес 93\.184\.216\.9 будет разблокирован в jail sshd/)).toBeInTheDocument()
+      expect(api.find('POST', '/api/v1/security/vps/v1/fail2ban/unban')).toHaveLength(0) // nothing is sent before the confirmation
+      const dialog = screen.getByRole('dialog')
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Разблокировать' }))
+      expect(await screen.findByText('выполнено и проверено', {}, { timeout: 4000 })).toBeInTheDocument()
+      const sent = api.find('POST', '/api/v1/security/vps/v1/fail2ban/unban')
+      expect(sent).toHaveLength(1)
+      expect(sent[0].body).toMatchObject({ jail: 'sshd', ip: '93.184.216.9', acknowledge_risk: false })
+      expect(String((sent[0].body as { idempotency_key: string }).idempotency_key).length).toBeGreaterThanOrEqual(8)
+    })
+
+    it('shows the risk, needs it confirmed, and then sends the same request acknowledged', async () => {
+      let n = 0
+      const api = base({ allowed: true, ready: true }, (r) => {
+        if (r.path === '/api/v1/security/vps/v1/fail2ban/ban') {
+          n++
+          return n === 1 ? { status: 409, body: { code: 'risk', message: 'x', request_id: 'r', details: { reasons: ['private_address'] } } } : { status: 202, body: { command: cmd({ action: 'ban', state: 'executed', verified: true, final: true }) } }
+        }
+      })
+      renderSec('/security/v1')
+      await userEvent.type(await screen.findByLabelText('IP'), '10.0.0.5')
+      await userEvent.click(screen.getByRole('button', { name: 'Заблокировать' }))
+      const dialog = await screen.findByRole('dialog')
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Заблокировать' }))
+      expect(await screen.findByText(/Это не публичный адрес/)).toBeInTheDocument()
+      const go = within(dialog).getByRole('button', { name: 'Заблокировать' })
+      expect(go).toBeDisabled()
+      await userEvent.click(screen.getByLabelText('Понимаю риск, всё равно выполнить'))
+      await userEvent.click(go)
+      expect(await screen.findByText('выполнено и проверено')).toBeInTheDocument()
+      const calls = api.find('POST', '/api/v1/security/vps/v1/fail2ban/ban')
+      expect(calls).toHaveLength(2)
+      expect(calls[1].body).toMatchObject({ acknowledge_risk: true })
+      expect((calls[1].body as { idempotency_key: string }).idempotency_key).toBe((calls[0].body as { idempotency_key: string }).idempotency_key)
+    })
+
+    it('says an unanswered command is unknown, not done', async () => {
+      base({ allowed: true, ready: true }, (r) => {
+        if (r.path === '/api/v1/security/vps/v1/fail2ban/unban') return { status: 202, body: { command: cmd({ state: 'unknown', final: true }) } }
+      })
+      renderSec('/security/v1')
+      await userEvent.click(await screen.findByRole('button', { name: 'Разблокировать' }))
+      await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Разблокировать' }))
+      expect(await screen.findByText('результат неизвестен')).toBeInTheDocument()
+      expect(screen.getByText(/Это не значит ни «выполнено», ни «не выполнено»/)).toBeInTheDocument()
+    })
+
+    it('offers no controls to someone who may not manage, and explains why they are off when the agent cannot take a command', async () => {
+      base({ allowed: false, ready: false, reason: 'not_owner' })
+      const first = renderSec('/security/v1')
+      expect(await screen.findByText('sshd')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Разблокировать' })).toBeNull()
+      expect(screen.queryByLabelText('IP')).toBeNull()
+      first.unmount()
+
+      base({ allowed: true, ready: false, reason: 'agent_offline' })
+      renderSec('/security/v1')
+      expect(await screen.findByText(/Агент не на связи: команда не отправляется и не ставится в очередь/)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Разблокировать' })).toBeDisabled()
+    })
   })
 })
