@@ -27,6 +27,25 @@ describe('Kawaii settings', () => {
   })
 })
 
+describe('Mascot placement', () => {
+  it('is large by default, remembers where it was moved and ignores a broken position', () => {
+    expect(KAWAII_DEFAULTS.size).toBe('l')
+    expect(KAWAII_DEFAULTS.pos).toBeNull()
+    setKawaii({ enabled: true, pos: { x: 120.4, y: 80 }, size: 'xl' })
+    reloadKawaiiForTests()
+    const saved = JSON.parse(localStorage.getItem('remnascope.kawaii') ?? '{}')
+    expect(saved.pos).toEqual({ x: 120.4, y: 80 })
+    expect(saved.size).toBe('xl')
+    localStorage.setItem('remnascope.kawaii', JSON.stringify({ enabled: true, pos: { x: 'a', y: null }, size: 'huge' }))
+    reloadKawaiiForTests()
+    expect(JSON.parse(localStorage.getItem('remnascope.kawaii') ?? '{}').size).toBe('huge') // the raw text is untouched...
+    setKawaii({ mascot: true }) // ...and a write normalises it
+    const fixed = JSON.parse(localStorage.getItem('remnascope.kawaii') ?? '{}')
+    expect(fixed.size).toBe('l')
+    expect(fixed.pos).toBeNull()
+  })
+})
+
 describe('Director', () => {
   const idle = { typing: false, busy: false }
   it('keeps decoration quiet and lets an alert go first', () => {
