@@ -119,11 +119,14 @@ connection; see [SECURITY_CHECKS.md](SECURITY_CHECKS.md) for how the server uses
 
 ## Limits of this version
 
-- No journal tailing yet: Fail2ban history comes from comparing states every 30 seconds, so a ban and an
-  unban between two reads is not *named*. It is counted: Fail2ban's own ban counter is compared between reads,
-  and when it grew by more than the new addresses that are visible, the journal records
-  `fail2ban.bans_unobserved` with the number. Naming them needs read access to Fail2ban's log, which is a
-  privilege decision for the host owner (the log is readable by root and group `adm`), not something this
+- Fail2ban history comes from comparing states, not from its log. Besides the full read every 30 seconds, the
+  agent asks Fail2ban for its single list of banned addresses every 5 seconds (`fail2ban-client banned`,
+  through the helper) and reads and sends Fail2ban in full as soon as that list moved, so a ban or an unban is
+  named within seconds. A Fail2ban that does not have that listing falls back to the 30-second read. A ban and
+  an unban between two comparisons is still not *named*; it is counted: Fail2ban's own ban counter is compared
+  between reads, and when it grew by more than the new addresses that are visible, the journal records
+  `fail2ban.bans_unobserved` with the number. Naming those would need read access to Fail2ban's log, which is
+  a privilege decision for the host owner (the log is readable by root and group `adm`), not something this
   agent asks for on its own.
 - Firewall rules are stored as canonical text (counters, handles, timestamps and Fail2ban's bans removed).
   The screen reads them into tables, chains and policies, and compares two stored readings line by line;
