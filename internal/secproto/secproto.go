@@ -145,3 +145,47 @@ type Firewall struct {
 	Rules     string `json:"rules"`   // canonical text: counters, handles and timestamps removed
 	Truncated bool   `json:"truncated,omitempty"`
 }
+
+// --- commands ------------------------------------------------------------------------------------
+//
+// The server can ask an agent that announced "fail2ban_ban" to ban or unban one address in one jail. These
+// are the only two commands there are, they carry no free text, and the agent checks every field again.
+// A command is delivered over the live connection or not at all: nothing is queued for later.
+
+const CapFail2banBan = "fail2ban_ban"
+
+const (
+	OpBan   = "ban"
+	OpUnban = "unban"
+)
+
+// MaxCommandTTL bounds how long an agent may take to carry a command out, counted from when it arrives.
+const MaxCommandTTL = 60
+
+type Command struct {
+	Type       string `json:"type"` // "command"
+	ID         string `json:"id"`   // a UUID chosen by the server; the agent runs one ID at most once
+	Op         string `json:"op"`   // ban | unban
+	Jail       string `json:"jail"`
+	IP         string `json:"ip"`
+	TTLSeconds int    `json:"ttl"` // the agent refuses to start the command later than this after receiving it
+}
+
+// Command results. Only "executed" and "already_done" mean the address is in the wanted state, and only
+// when Verified says the agent saw it so afterwards.
+const (
+	CmdExecuted    = "executed"
+	CmdAlreadyDone = "already_done" // it was banned (or not banned) already, so nothing was changed
+	CmdRejected    = "rejected"     // refused before anything ran: a bad field, an unknown jail, a protected address
+	CmdFailed      = "failed"
+	CmdExpired     = "expired"
+	CmdDuplicate   = "duplicate" // this ID was already carried out, once, possibly before a restart
+)
+
+type CommandResult struct {
+	Type     string `json:"type"` // "command_result"
+	ID       string `json:"id"`
+	Status   string `json:"status"`
+	Code     string `json:"code,omitempty"` // a short machine word for the reason
+	Verified bool   `json:"verified"`       // the state was read again after the command and is as wanted
+}

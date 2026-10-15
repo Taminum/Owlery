@@ -1,9 +1,11 @@
 // Package secagent is the client side of the security channel: it collects the host's security state
-// and reports it over an outbound WebSocket. It listens on nothing and executes nothing it is told; the
-// only messages it accepts from the server are acknowledgements.
+// and reports it over an outbound WebSocket. It listens on nothing. The server may send it exactly one kind
+// of request, "ban or unban one address in one jail", and only when the host has set that up (a helper
+// socket and a state directory); everything else it is told is refused.
 package secagent
 
 import (
+	"bufio"
 	"context"
 	"crypto/rand"
 	"crypto/tls"
@@ -16,11 +18,15 @@ import (
 	"math/big"
 	"net/http"
 	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/coder/websocket"
 
+	"github.com/Taminum/RemnaScope/internal/f2bhelper"
 	"github.com/Taminum/RemnaScope/internal/seccollect"
 	"github.com/Taminum/RemnaScope/internal/secproto"
 )
@@ -39,6 +45,11 @@ type Config struct {
 	SSBin       string
 	NftBin      string
 	IptablesBin string
+	// HelperSocket is the Unix socket of the Fail2ban helper. With it the agent reads Fail2ban through the
+	// helper instead of running fail2ban-client itself, and, if StateDir is also set, accepts ban and unban.
+	HelperSocket string
+	// StateDir holds the list of command IDs already carried out, so that a restart cannot run one twice.
+	StateDir string
 	// Disabled categories are neither collected nor announced as capabilities.
 	NoFail2ban, NoSockets, NoFirewall bool
 }
@@ -58,20 +69,6 @@ func (c *Config) defaults() {
 			*p = d
 		}
 	}
-}
-
-func (c *Config) capabilities() []string {
-	var caps []string
-	if !c.NoFail2ban {
-		caps = append(caps, "fail2ban_read")
-	}
-	if !c.NoSockets {
-		caps = append(caps, "socket_read")
-	}
-	if !c.NoFirewall {
-		caps = append(caps, "firewall_read")
-	}
-	return caps
 }
 
 func (c *Config) endpoint() (string, error) {
@@ -122,6 +119,18 @@ func Run(ctx context.Context, cfg Config) error {
 		return err
 	}
 	a := &agent{cfg: cfg, url: url, hc: hc, epoch: newEpoch()}
+	if cfg.HelperSocket != "" {
+		a.helper = f2bhelper.Client{Path: cfg.HelperSocket}
+		// Fail2ban is read through the helper, and the agent never runs fail2ban-client itself.
+		a.cfg.Runner = f2bhelper.Runner{Client: a.helper, Bin: cfg.Fail2banBin, Next: cfg.Runner}
+		if cfg.StateDir != "" {
+			a.done, err = openExecuted(cfg.StateDir)
+			if err != nil {
+				return fmt.Errorf("secagent: the state directory is not usable, commands stay off: %w", err)
+			}
+			defer a.done.Close()
+		}
+	}
 	delay := time.Second
 	for ctx.Err() == nil {
 		start := time.Now()
@@ -145,11 +154,14 @@ func Run(ctx context.Context, cfg Config) error {
 }
 
 type agent struct {
-	cfg   Config
-	url   string
-	hc    *http.Client
-	epoch string
-	seq   int64
+	cfg    Config
+	url    string
+	hc     *http.Client
+	epoch  string
+	seq    int64
+	helper f2bhelper.Client
+	done   *executed
+	cmdMu  sync.Mutex // one command at a time, in the order they arrive
 }
 
 func (a *agent) token() (string, error) {
@@ -158,6 +170,29 @@ func (a *agent) token() (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(string(b)), nil
+}
+
+// canBan is true when this host has been set up to carry out ban and unban: a helper that answers and a
+// place to remember what has been done. It is decided when the connection starts.
+func (a *agent) canBan(ctx context.Context) bool {
+	return a.done != nil && !a.cfg.NoFail2ban && a.helper.Available(ctx)
+}
+
+func (a *agent) capabilities(ban bool) []string {
+	var caps []string
+	if !a.cfg.NoFail2ban {
+		caps = append(caps, "fail2ban_read")
+	}
+	if !a.cfg.NoSockets {
+		caps = append(caps, "socket_read")
+	}
+	if !a.cfg.NoFirewall {
+		caps = append(caps, "firewall_read")
+	}
+	if ban {
+		caps = append(caps, secproto.CapFail2banBan)
+	}
+	return caps
 }
 
 func (a *agent) session(ctx context.Context) error {
@@ -175,9 +210,10 @@ func (a *agent) session(ctx context.Context) error {
 	defer c.CloseNow()
 	c.SetReadLimit(secproto.MaxMessageBytes)
 
+	ban := a.canBan(ctx)
 	host, _ := os.Hostname()
 	if err := write(ctx, c, secproto.Hello{Type: "hello", ProtoVersion: secproto.Version, AgentVersion: a.cfg.Version, Epoch: a.epoch,
-		Hostname: host, Capabilities: a.cfg.capabilities()}); err != nil {
+		Hostname: host, Capabilities: a.capabilities(ban)}); err != nil {
 		return err
 	}
 	var w secproto.Welcome
@@ -187,14 +223,21 @@ func (a *agent) session(ctx context.Context) error {
 	if a.seq < w.AckSeq {
 		a.seq = w.AckSeq
 	}
-	interval := a.cfg.Interval
-	a.cfg.Log.Info("connected", "ack_seq", w.AckSeq, "server_interval_s", w.IntervalSeconds)
+	a.cfg.Log.Info("connected", "ack_seq", w.AckSeq, "server_interval_s", w.IntervalSeconds, "can_ban", ban)
 
-	t := time.NewTicker(interval)
+	// From here on one goroutine reads every frame: acknowledgements go to the sender, commands to the
+	// executor, and anything else ends the session.
+	sctx, stop := context.WithCancel(ctx)
+	defer stop()
+	acks := make(chan secproto.Ack, 16)
+	errc := make(chan error, 1)
+	go a.reader(sctx, c, ban, acks, errc)
+
+	t := time.NewTicker(a.cfg.Interval)
 	defer t.Stop()
 	for {
-		for _, s := range a.collect(ctx) {
-			if err := a.send(ctx, c, s); err != nil {
+		for _, s := range a.collect(sctx) {
+			if err := a.send(sctx, c, s, acks, errc); err != nil {
 				return err
 			}
 		}
@@ -202,7 +245,64 @@ func (a *agent) session(ctx context.Context) error {
 		case <-ctx.Done():
 			_ = c.Close(websocket.StatusNormalClosure, "bye")
 			return nil
+		case err := <-errc:
+			return err
 		case <-t.C:
+		}
+	}
+}
+
+func (a *agent) reader(ctx context.Context, c *websocket.Conn, ban bool, acks chan<- secproto.Ack, errc chan<- error) {
+	fail := func(err error) {
+		select {
+		case errc <- err:
+		default:
+		}
+	}
+	for {
+		_, b, err := c.Read(ctx)
+		if err != nil {
+			fail(err)
+			return
+		}
+		received := time.Now()
+		var head struct {
+			Type string `json:"type"`
+			Code string `json:"code"`
+		}
+		if json.Unmarshal(b, &head) != nil {
+			fail(errors.New("secagent: an unreadable message from the server"))
+			return
+		}
+		switch head.Type {
+		case "ack":
+			var ack secproto.Ack
+			if json.Unmarshal(b, &ack) != nil {
+				fail(errors.New("secagent: a bad acknowledgement"))
+				return
+			}
+			select {
+			case acks <- ack:
+			default:
+			}
+		case "command":
+			var cmd secproto.Command
+			if json.Unmarshal(b, &cmd) != nil {
+				fail(errors.New("secagent: a bad command"))
+				return
+			}
+			go func() {
+				res := a.carryOut(ctx, cmd, received, ban)
+				if err := write(ctx, c, res); err != nil {
+					a.cfg.Log.Warn("could not report a command result", "id", cmd.ID, "err", err)
+				}
+			}()
+		case "error":
+			fail(fmt.Errorf("secagent: the server refused: %s", head.Code))
+			return
+		default:
+			fail(fmt.Errorf("secagent: unexpected message %q", head.Type))
+			return
 		}
 	}
 }
@@ -221,7 +321,7 @@ func (a *agent) collect(ctx context.Context) []seccollect.Snapshot {
 	return out
 }
 
-func (a *agent) send(ctx context.Context, c *websocket.Conn, s seccollect.Snapshot) error {
+func (a *agent) send(ctx context.Context, c *websocket.Conn, s seccollect.Snapshot, acks <-chan secproto.Ack, errc <-chan error) error {
 	a.seq++
 	m := secproto.Snapshot{Type: "snapshot", Seq: a.seq, Category: s.Category, Schema: 1, ObservedAt: time.Now().UTC(), Status: s.Status}
 	if s.Data != nil {
@@ -234,14 +334,22 @@ func (a *agent) send(ctx context.Context, c *websocket.Conn, s seccollect.Snapsh
 	if err := write(ctx, c, m); err != nil {
 		return err
 	}
-	var ack secproto.Ack
-	if err := read(ctx, c, &ack, "ack"); err != nil {
-		return err
+	timeout := time.NewTimer(20 * time.Second)
+	defer timeout.Stop()
+	for {
+		select {
+		case ack := <-acks:
+			if ack.AckSeq >= a.seq {
+				return nil
+			}
+		case err := <-errc:
+			return err
+		case <-timeout.C:
+			return errors.New("secagent: the server did not acknowledge a snapshot")
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
-	if ack.AckSeq < a.seq {
-		return fmt.Errorf("secagent: server acknowledged %d, expected %d", ack.AckSeq, a.seq)
-	}
-	return nil
 }
 
 func write(ctx context.Context, c *websocket.Conn, v any) error {
@@ -254,8 +362,7 @@ func write(ctx context.Context, c *websocket.Conn, v any) error {
 	return c.Write(ctx, websocket.MessageText, b)
 }
 
-// read waits for one message of the expected type. Anything else from the server is an error: the
-// server has nothing else to say to this agent.
+// read waits for one message of the expected type, used only before the reader goroutine starts.
 func read(ctx context.Context, c *websocket.Conn, into any, want string) error {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
@@ -274,4 +381,135 @@ func read(ctx context.Context, c *websocket.Conn, into any, want string) error {
 		return fmt.Errorf("secagent: unexpected message %q, wanted %q", head.Type, want)
 	}
 	return json.Unmarshal(b, into)
+}
+
+// --- commands ------------------------------------------------------------------------------------
+
+var cmdIDRe = regexp.MustCompile(`^[0-9a-fA-F-]{8,64}$`)
+
+// carryOut checks a command again from scratch, makes sure this ID has never been carried out before
+// (also across a restart), and asks the helper. The ID is written down before anything runs: a crash in
+// the middle then leaves a command that is not repeated, and the server learns the outcome from the next
+// state it reads, not from a guess.
+func (a *agent) carryOut(ctx context.Context, cmd secproto.Command, received time.Time, enabled bool) secproto.CommandResult {
+	res := func(status, code string, verified bool) secproto.CommandResult {
+		return secproto.CommandResult{Type: "command_result", ID: cmd.ID, Status: status, Code: code, Verified: verified}
+	}
+	if !cmdIDRe.MatchString(cmd.ID) {
+		return secproto.CommandResult{Type: "command_result", ID: "", Status: secproto.CmdRejected, Code: "bad_id"}
+	}
+	if !enabled {
+		return res(secproto.CmdRejected, "not_enabled", false)
+	}
+	if cmd.Type != "command" || (cmd.Op != secproto.OpBan && cmd.Op != secproto.OpUnban) || !f2bhelper.ValidJail(cmd.Jail) {
+		return res(secproto.CmdRejected, f2bhelper.CodeBadRequest, false)
+	}
+	if _, code := f2bhelper.ParseIP(cmd.IP); code != "" {
+		return res(secproto.CmdRejected, code, false)
+	}
+	if cmd.TTLSeconds < 1 || cmd.TTLSeconds > secproto.MaxCommandTTL {
+		return res(secproto.CmdRejected, "bad_ttl", false)
+	}
+	a.cmdMu.Lock()
+	defer a.cmdMu.Unlock()
+	deadline := received.Add(time.Duration(cmd.TTLSeconds) * time.Second)
+	if time.Now().After(deadline) {
+		return res(secproto.CmdExpired, "", false)
+	}
+	first, err := a.done.claim(cmd.ID)
+	if err != nil {
+		return res(secproto.CmdFailed, "state_unwritable", false)
+	}
+	if !first {
+		return res(secproto.CmdDuplicate, "", false)
+	}
+	rctx, cancel := context.WithDeadline(ctx, deadline)
+	defer cancel()
+	op := f2bhelper.OpBan
+	if cmd.Op == secproto.OpUnban {
+		op = f2bhelper.OpUnban
+	}
+	rs, err := a.helper.Do(rctx, f2bhelper.Request{Op: op, Jail: cmd.Jail, IP: cmd.IP})
+	if err != nil {
+		return res(secproto.CmdFailed, f2bhelper.CodeUnavailable, false)
+	}
+	switch rs.Code {
+	case f2bhelper.CodeExecuted:
+		return res(secproto.CmdExecuted, "", rs.Verified)
+	case f2bhelper.CodeAlreadyDone:
+		return res(secproto.CmdAlreadyDone, "", rs.Verified)
+	case f2bhelper.CodeNoSuchJail, f2bhelper.CodeBadRequest, f2bhelper.CodeProtectedIP:
+		return res(secproto.CmdRejected, rs.Code, false)
+	}
+	code := rs.Code
+	if code == "" {
+		code = f2bhelper.CodeCommandError
+	}
+	return res(secproto.CmdFailed, code, false)
+}
+
+// executed remembers command IDs on disk, one per line, appended and synced before a command runs.
+type executed struct {
+	mu   sync.Mutex
+	ids  map[string]bool
+	file *os.File
+}
+
+const keepExecuted = 2000
+
+func openExecuted(dir string) (*executed, error) {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, err
+	}
+	path := filepath.Join(dir, "executed-commands")
+	e := &executed{ids: map[string]bool{}}
+	var order []string
+	if f, err := os.Open(path); err == nil {
+		sc := bufio.NewScanner(f)
+		for sc.Scan() {
+			if id := strings.TrimSpace(sc.Text()); cmdIDRe.MatchString(id) && !e.ids[id] {
+				e.ids[id] = true
+				order = append(order, id)
+			}
+		}
+		f.Close()
+	}
+	// Keep the file bounded: rewrite it with the most recent IDs when it has grown.
+	if len(order) > keepExecuted {
+		order = order[len(order)-keepExecuted:]
+		e.ids = map[string]bool{}
+		for _, id := range order {
+			e.ids[id] = true
+		}
+		if err := os.WriteFile(path, []byte(strings.Join(order, "\n")+"\n"), 0o600); err != nil {
+			return nil, err
+		}
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	e.file = f
+	return e, nil
+}
+
+// Close releases the file.
+func (e *executed) Close() error { return e.file.Close() }
+
+// claim records the ID and reports whether this is the first time it was seen. If it cannot be written
+// down, the command must not run.
+func (e *executed) claim(id string) (bool, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.ids[id] {
+		return false, nil
+	}
+	if _, err := e.file.WriteString(id + "\n"); err != nil {
+		return false, err
+	}
+	if err := e.file.Sync(); err != nil {
+		return false, err
+	}
+	e.ids[id] = true
+	return true, nil
 }

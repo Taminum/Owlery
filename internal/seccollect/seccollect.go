@@ -377,3 +377,10 @@ func Firewall(ctx context.Context, r Runner, nft, iptables string) Snapshot {
 	}
 	return snap
 }
+
+// ErrNotInstalled is what a Runner returns when the command does not exist.
+var ErrNotInstalled = exec.ErrNotFound
+
+// NotFound and Denied let other packages classify a Result the way the collectors do.
+func NotFound(r Result) bool { return r.notFound() }
+func Denied(r Result) bool   { return r.denied() }
