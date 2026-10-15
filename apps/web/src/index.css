@@ -40,3 +40,30 @@ body {
 
 /* Slim scrollbars to match the dark surface */
 * { scrollbar-width: thin; scrollbar-color: var(--color-line) transparent; }
+
+/* Kawaii Mode: an optional look. Only surfaces, lines, text and the accent change; the status colours
+   (green, amber, red) keep their meaning in every theme. Nothing here applies unless the attribute is set. */
+:root[data-kawaii-theme='kawaii_dark'] {
+  --color-canvas: #150f1f; --color-sidebar: #1b1328; --color-surface: #221833; --color-elevated: #2b2040; --color-line: #3d2f57;
+  --color-fg: #f4eefb; --color-muted: #b7aacd; --color-cyan: #c9a6ff; --color-blue: #93a9ff;
+}
+:root[data-kawaii-theme='sakura_light'] {
+  color-scheme: light;
+  --color-canvas: #fff7f9; --color-sidebar: #ffeef3; --color-surface: #ffffff; --color-elevated: #fff0f5; --color-line: #efcad8;
+  --color-fg: #3a2230; --color-muted: #765868; --color-cyan: #c93a76; --color-blue: #6f52c9;
+  --color-green: #17855a; --color-amber: #9a6200; --color-red: #c0303b;
+}
+:root[data-kawaii-theme='neko_terminal'] {
+  --color-canvas: #07161a; --color-sidebar: #0a1e24; --color-surface: #0e262d; --color-elevated: #12313a; --color-line: #1f4852;
+  --color-fg: #e3fbf6; --color-muted: #90bab4; --color-cyan: #55e6c4; --color-blue: #6aaeff;
+}
+
+.ember-root { position: fixed; right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); z-index: 30; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; pointer-events: none; }
+.ember-root > * { pointer-events: auto; }
+.ember-stage { position: relative; }
+.ember-body { display: block; border: 0; padding: 0; background-color: transparent; background-repeat: no-repeat; cursor: pointer; border-radius: 24px; }
+.ember-bubble { max-width: 240px; padding: 9px 12px; border-radius: 14px; border: 1px solid var(--color-line); background: var(--color-elevated); color: var(--color-fg); font-size: 13px; line-height: 1.35; box-shadow: 0 6px 20px rgb(0 0 0 / .25); cursor: pointer; }
+.ember-menu { display: flex; flex-direction: column; min-width: 190px; border: 1px solid var(--color-line); border-radius: 12px; background: var(--color-elevated); overflow: hidden; }
+.ember-menu > * { padding: 9px 12px; text-align: left; font-size: 13px; color: var(--color-fg); background: transparent; border: 0; cursor: pointer; text-decoration: none; }
+.ember-menu > *:hover, .ember-menu > *:focus-visible { background: var(--color-surface); }
+@media (max-width: 639px) { .ember-stage { transform: scale(.68); transform-origin: bottom right; margin: -28px -28px 0 0; } }
