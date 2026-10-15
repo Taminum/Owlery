@@ -327,3 +327,17 @@ export interface SecFwDiff {
   added?: number; removed?: number; truncated?: boolean; lines?: { op: string; text: string }[]
 }
 export interface SecFwSnapshot { id: string; observed_at: string; status: string; hash: string; backend: string }
+
+export interface SecOverview {
+  health: 'healthy' | 'attention' | 'unknown' | 'disabled'
+  reasons: { code: string; detail?: string }[]
+  agent: 'none' | 'waiting' | 'online' | 'offline'
+  categories: Record<string, { state: string; observed_at: string | null }>
+  checks: {
+    ports_total: number; ports_unexpected: number; ports_down: number
+    tls_total: number; tls_problems: number; tls_nearest_end: string | null; last_checked_at: string | null
+  }
+  last_event: SecEvent | null
+  events_24h: number
+}
+export interface SecEventDetail { event: JournalEvent; related: JournalEvent[] }
