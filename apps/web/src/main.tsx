@@ -11,6 +11,7 @@ import Live from './pages/Live'
 import Devices from './pages/Devices'
 import Awg from './pages/Awg'
 import Intel from './pages/Intel'
+import { DnsMapDetail } from './pages/DnsMap'
 import Security, { SecurityDetail } from './pages/Security'
 import Sites from './pages/Sites'
 import Traffic from './pages/Traffic'
@@ -34,6 +35,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="alerts" element={<Alerts />} />
             <Route path="sites" element={<Sites />} />
             <Route path="intel" element={<Intel />} />
+            <Route path="intel/dns/:id" element={<DnsMapDetail />} />
             <Route path="security" element={<Security />} />
             <Route path="security/:id" element={<SecurityDetail />} />
             <Route path="awg" element={<Awg />} />

@@ -289,3 +289,26 @@ export interface SecCommand {
   id: string; vps_id: string; action: 'ban' | 'unban'; jail: string; ip: string; state: string; requested_at: string
   sent_at: string | null; deadline: string; finished_at: string | null; result_code: string | null; verified: boolean; final: boolean
 }
+
+export interface DnsCoverage {
+  discovery: string; names_total: number; names_checked: number; names_dropped: number; types: string[] | null; resolvers: string[] | null
+  questions: number; failures: number; unconfirmed: number; dnssec: string; authoritative_asked: number
+}
+export interface DnsAuth { ns: string; addr?: string; skipped?: string; answers?: Record<string, { outcome: string; values?: string[]; aa: boolean }> }
+export interface DnsRun {
+  id: string; trigger: string; started_at: string; finished_at: string | null; status: string
+  coverage: DnsCoverage | Record<string, never>; auth: DnsAuth[]; mismatch: string[]; error: string | null
+}
+export interface DnsMap {
+  id: string; domain: string; display: string; enabled: boolean; interval_hours: number; extra_names: string[]; use_ct: boolean
+  created_at: string; last_run_at: string | null; next_run_at: string | null; last_status: string | null; baseline_done: boolean; last_run: DnsRun | null
+}
+export interface DnsView { server: string; outcome: string; values?: string[] }
+export interface DnsRecord {
+  name: string; type: string; result: string | null; values: string[]; ttl: number; confirmed: boolean; last_result: string; views: DnsView[]
+  first_seen: string; last_seen: string | null; last_checked: string; last_changed: string | null; no_longer_observed: boolean
+}
+export interface DnsChange { id: string; name: string; type: string; kind: string; before: string[]; after: string[]; observed_at: string; volatile: boolean }
+export interface DnsGraphNode { id: string; kind: 'name' | 'ip' | 'mail' | 'ns'; label: string; group?: string; provenance?: string }
+export interface DnsGraphEdge { from: string; to: string; type: string; label?: string; unverified?: boolean; no_longer_observed?: boolean }
+export interface DnsGraph { nodes: DnsGraphNode[]; edges: DnsGraphEdge[]; total_nodes: number; truncated: boolean; note: string }
