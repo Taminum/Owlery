@@ -95,9 +95,10 @@ if [ "$UNINSTALL" -eq 1 ]; then
       sysctl_run systemctl disable --now "remnascope-awg-sensor@$c" || true
     done
   fi
+  sysctl_run systemctl disable --now remnascope-awg-sensors.path || true
   sysctl_run systemctl disable --now remnascope-awg || true
   run rm -rf "$UNITS/remnascope-awg.service" "$UNITS/remnascope-awg.service.d" "$UNITS/remnascope-awg-sensor@.service" \
-    "$SUDOERS/remnascope-awg" "$SUDOERS/remnascope-awg-manage" "$SUDOERS/remnascope-awg-container" "$SBIN/remnascope-awg-container" "$BIN/remnascope-agent-awg" \
+    "$SUDOERS/remnascope-awg" "$SUDOERS/remnascope-awg-manage" "$SUDOERS/remnascope-awg-container" "$SBIN/remnascope-awg-container" "$SBIN/remnascope-awg-sensors-sync" "$UNITS/remnascope-awg-sensors.path" "$UNITS/remnascope-awg-sensors.service" "$BIN/remnascope-agent-awg" \
     "$SBIN/remnascope-awg-snapshot" "$SBIN/remnascope-awg-manage" "$SBIN/remnascope-awg-sensor" "$SBIN/remnascope-awg-sensor-run" \
     "$ETC/awg.token" "$CONF" "$R/var/lib/remnascope-awg"
   sysctl_run systemctl daemon-reload
@@ -147,7 +148,7 @@ say "files verified against SHA256SUMS"
 tar -xzf "$WORK/$A_TAR" -C "$WORK" deploy/agent/awg
 SRC="$WORK/deploy/agent/awg"
 REQUIRED="remnascope-awg-snapshot remnascope-awg-manage remnascope-awg-sensor-run remnascope-awg.service remnascope-awg-sensor@.service"
-[ "$CONTAINER_ADMIN" -eq 1 ] && REQUIRED="$REQUIRED remnascope-awg-container"
+[ "$CONTAINER_ADMIN" -eq 1 ] && REQUIRED="$REQUIRED remnascope-awg-container remnascope-awg-sensors-sync remnascope-awg-sensors.service remnascope-awg-sensors.path"
 for f in $REQUIRED; do
   [ -f "$SRC/$f" ] || die "the release does not contain $f"
 done
@@ -169,6 +170,11 @@ if [ "$CONTAINER_ADMIN" -eq 1 ]; then
   [ -n "$STAGE" ] || visudo -cf "$SUDOERS/remnascope-awg-container" >/dev/null || { rm -f "$SUDOERS/remnascope-awg-container"; die "sudoers check failed"; }
 fi
 run install -m 0644 "$SRC/remnascope-awg-sensor@.service" "$UNITS/remnascope-awg-sensor@.service"
+if [ "$CONTAINER_ADMIN" -eq 1 ]; then
+  run install -m 0755 "$SRC/remnascope-awg-sensors-sync" "$SBIN/remnascope-awg-sensors-sync"
+  run install -m 0644 "$SRC/remnascope-awg-sensors.service" "$UNITS/remnascope-awg-sensors.service"
+  run install -m 0644 "$SRC/remnascope-awg-sensors.path" "$UNITS/remnascope-awg-sensors.path"
+fi
 
 if [ -n "$TOKEN" ]; then
   umask 077
@@ -207,6 +213,8 @@ run install -d "$UNITS/remnascope-awg.service.d"
   printf 'Environment="REMNASCOPE_AWG_SENSOR_CONTAINERS=%s"\n' "$(printf '%s' "$SENSE" | tr ' ' ',')"
   if [ "$CONTAINER_ADMIN" -eq 1 ]; then
     echo 'Environment="REMNASCOPE_AWG_CONTAINER=/usr/bin/sudo -n /usr/local/sbin/remnascope-awg-container"'
+    # The container helper (root, inside the agent's sandbox) records containers in the config directory.
+    echo 'ReadWritePaths=/etc/remnascope'
   fi
 } > "$UNITS/remnascope-awg.service.d/10-remnascope.conf"
 chmod 0644 "$UNITS/remnascope-awg.service" "$UNITS/remnascope-awg.service.d/10-remnascope.conf"
@@ -217,6 +225,7 @@ chmod 0644 "$UNITS/remnascope-awg.service" "$UNITS/remnascope-awg.service.d/10-r
 sysctl_run systemctl daemon-reload
 sysctl_run systemctl enable --now remnascope-awg
 for c in $SENSE; do sysctl_run systemctl enable --now "remnascope-awg-sensor@$c"; done
+[ "$CONTAINER_ADMIN" -eq 1 ] && sysctl_run systemctl enable --now remnascope-awg-sensors.path
 
 if [ -z "$STAGE" ]; then
   sleep 3

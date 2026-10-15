@@ -14,7 +14,7 @@ rel="$tmp/release"; mkdir -p "$rel"
 printf 'fake agent\n' > "$rel/remnascope-agent-linux-$arch"
 printf 'fake sensor\n' > "$rel/remnascope-awg-sensor-linux-$arch"
 ( cd "$root" && tar -czf "$rel/remnascope-deploy-files.tar.gz" deploy/agent/awg/remnascope-awg-snapshot deploy/agent/awg/remnascope-awg-manage \
-    deploy/agent/awg/remnascope-awg-container deploy/agent/awg/remnascope-awg-sensor-run deploy/agent/awg/remnascope-awg.service 'deploy/agent/awg/remnascope-awg-sensor@.service' )
+    deploy/agent/awg/remnascope-awg-container deploy/agent/awg/remnascope-awg-sensors-sync deploy/agent/awg/remnascope-awg-sensors.service deploy/agent/awg/remnascope-awg-sensors.path deploy/agent/awg/remnascope-awg-sensor-run deploy/agent/awg/remnascope-awg.service 'deploy/agent/awg/remnascope-awg-sensor@.service' )
 ( cd "$rel" && sha256sum remnascope-* > SHA256SUMS )
 printf 'agentid.secretsecretsecretsecret\n' > "$tmp/token"
 
@@ -53,6 +53,9 @@ sh "$inst" --stage "$st4" --from "$rel" --server wss://scope.example.org/ingest/
 grep -qx 'remnascope ALL=(root) NOPASSWD: /usr/local/sbin/remnascope-awg-container' "$st4/etc/sudoers.d/remnascope-awg-container" || fail "container rule"
 grep -q 'REMNASCOPE_AWG_CONTAINER=/usr/bin/sudo -n /usr/local/sbin/remnascope-awg-container' "$st4/etc/systemd/system/remnascope-awg.service.d/10-remnascope.conf" || fail "container variable"
 grep -q 'REMNASCOPE_AWG_CONTAINER' "$st/etc/systemd/system/remnascope-awg.service.d/10-remnascope.conf" && fail "the container variable is set without being asked for"
+[ -f "$st4/etc/systemd/system/remnascope-awg-sensors.path" ] && [ -x "$st4/usr/local/sbin/remnascope-awg-sensors-sync" ] || fail "the sensor sync units"
+grep -q '^ReadWritePaths=/etc/remnascope$' "$st4/etc/systemd/system/remnascope-awg.service.d/10-remnascope.conf" || fail "the config directory is not writable for the helper"
+grep -q 'ReadWritePaths' "$st/etc/systemd/system/remnascope-awg.service.d/10-remnascope.conf" && fail "write access was granted without --container-admin"
 echo "container-admin ok"
 
 # A tampered file is refused and nothing is written.
