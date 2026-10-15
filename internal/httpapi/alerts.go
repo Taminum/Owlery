@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Taminum/RemnaScope/internal/auth"
@@ -63,6 +64,9 @@ func (s *Server) listAlerts(w http.ResponseWriter, r *http.Request, a auth.Actor
 			name := names[x.PanelID]
 			if x.PanelID == "" {
 				name = "Безопасность"
+				if strings.HasPrefix(x.Kind, "dns_") {
+					name = "Сетевая разведка"
+				}
 			}
 			out.Alerts = append(out.Alerts, alertOut{ID: x.ID, PanelID: x.PanelID, PanelName: name, Kind: x.Kind, Label: x.Label, Detail: x.Detail,
 				OpenedAt: x.OpenedAt.UTC(), LastSeenAt: x.LastSeenAt.UTC(), ResolvedAt: x.ResolvedAt})

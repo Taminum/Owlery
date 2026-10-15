@@ -19,6 +19,10 @@ const (
 	AlertSecAgent = "sec_agent_silent" // a security agent has stopped reporting
 	AlertSecTLS   = "sec_tls"          // a certificate is expiring, expired or not valid
 	AlertSecPort  = "sec_port"         // an unexpected port answers, or an expected one does not
+
+	// DNS Map. These belong to no panel: they are the owner's.
+	AlertDNSFailed = "dns_check_failed" // the last run could not settle even the apex's basic records
+	AlertDNSChange = "dns_change"       // an important record changed in the last day, confirmed by two resolvers
 )
 
 type Alert struct {

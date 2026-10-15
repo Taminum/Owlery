@@ -19,7 +19,7 @@ const (
 	PanelFailures = 3
 )
 
-var Kinds = []string{store.AlertAgentSilent, store.AlertPanelSync, store.AlertProbeDown, store.AlertSecAgent, store.AlertSecTLS, store.AlertSecPort}
+var Kinds = []string{store.AlertAgentSilent, store.AlertPanelSync, store.AlertProbeDown, store.AlertSecAgent, store.AlertSecTLS, store.AlertSecPort, store.AlertDNSFailed, store.AlertDNSChange}
 
 // ProbeFailures is how many probes in a row must fail before a channel counts as down: one lost
 // packet is not an outage.
@@ -107,7 +107,12 @@ func Evaluate(ctx context.Context, st *store.Store, now time.Time) (opened, clos
 	if err != nil {
 		return 0, 0, err
 	}
-	return st.ApplyConditions(ctx, Kinds, append(Conditions(agents, panels, probes, now), SecurityConditions(sec, now)...), now)
+	dns, err := st.DNSAlertStates(ctx, now)
+	if err != nil {
+		return 0, 0, err
+	}
+	conds := append(Conditions(agents, panels, probes, now), SecurityConditions(sec, now)...)
+	return st.ApplyConditions(ctx, Kinds, append(conds, DNSConditions(dns, now)...), now)
 }
 
 // Run evaluates every interval until ctx ends.
