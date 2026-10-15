@@ -37,6 +37,12 @@ func (f *fakeF2B) Run(_ context.Context, name string, args ...string) seccollect
 			names = append(names, n)
 		}
 		return seccollect.Result{Stdout: "Status\n|- Number of jail:\t1\n`- Jail list:\t" + strings.Join(names, ", ") + "\n"}
+	case len(args) == 1 && args[0] == "banned":
+		var all []string
+		for n, ips := range f.jails {
+			all = append(all, "{'"+n+"': ['"+strings.Join(ips, "', '")+"']}")
+		}
+		return seccollect.Result{Stdout: "[" + strings.Join(all, ", ") + "]\n"}
 	case len(args) == 2 && args[0] == "status":
 		ips, ok := f.jails[args[1]]
 		if !ok {
@@ -254,4 +260,19 @@ type runnerFunc func(name string)
 func (f runnerFunc) Run(_ context.Context, name string, _ ...string) seccollect.Result {
 	f(name)
 	return seccollect.Result{Err: seccollect.ErrNotInstalled}
+}
+
+func TestTheBannedListingIsOfferedAndTakesNoArguments(t *testing.T) {
+	f := newFake()
+	f.jails["sshd"] = []string{"203.0.113.5"}
+	s := &Server{Runner: f, Bin: "f2b"}
+	r := s.Handle(context.Background(), Request{Op: OpBanned})
+	if !r.OK || !strings.Contains(r.Out, "203.0.113.5") {
+		t.Fatalf("%+v", r)
+	}
+	// Through the runner the agent's collector uses, "banned" becomes that one request.
+	got := Runner{Client: Client{}, Bin: "f2b", Next: runnerFunc(func(string) {})}
+	if res := got.Run(context.Background(), "f2b", "banned", "extra"); res.Err == nil {
+		t.Fatal("a listing with arguments must not pass")
+	}
 }
