@@ -55,6 +55,9 @@ type Config struct {
 	// Probe makes this host a checker: the server may ask it to connect to a public TCP port or read a TLS
 	// certificate, so that a target is seen from somewhere other than the target. Off unless the host chooses it.
 	Probe bool
+	// FastInterval is how often the set of banned addresses is compared between full reads, so that a ban is
+	// named within seconds. Zero means 5 seconds; negative turns it off.
+	FastInterval time.Duration
 }
 
 func (c *Config) defaults() {
@@ -242,12 +245,26 @@ func (a *agent) session(ctx context.Context) error {
 
 	t := time.NewTicker(a.cfg.Interval)
 	defer t.Stop()
+	var fastC <-chan time.Time
+	if d := a.cfg.FastInterval; d >= 0 && !a.cfg.NoFail2ban {
+		if d == 0 {
+			d = 5 * time.Second
+		}
+		ft := time.NewTicker(d)
+		defer ft.Stop()
+		fastC = ft.C
+	}
+	var watch banWatch
+	full := true
 	for {
-		for _, s := range a.collect(sctx) {
-			if err := a.send(sctx, c, s, acks, errc); err != nil {
-				return err
+		if full {
+			for _, s := range a.collect(sctx) {
+				if err := a.send(sctx, c, s, acks, errc); err != nil {
+					return err
+				}
 			}
 		}
+		full = false
 		select {
 		case <-ctx.Done():
 			_ = c.Close(websocket.StatusNormalClosure, "bye")
@@ -255,6 +272,14 @@ func (a *agent) session(ctx context.Context) error {
 		case err := <-errc:
 			return err
 		case <-t.C:
+			full = true
+		case <-fastC:
+			// Only Fail2ban is read and sent, and only when the banned set moved.
+			if watch.changed(sctx, a.cfg.Runner, a.cfg.Fail2banBin) {
+				if err := a.send(sctx, c, seccollect.Fail2ban(sctx, a.cfg.Runner, a.cfg.Fail2banBin), acks, errc); err != nil {
+					return err
+				}
+			}
 		}
 	}
 }
