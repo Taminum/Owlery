@@ -205,6 +205,9 @@ run install -d "$UNITS/remnascope-awg.service.d"
   echo 'RuntimeDirectoryMode=0750'
   echo 'Environment="REMNASCOPE_AWG_SENSOR_SOCKET=/run/remnascope-awg/sensor.sock"'
   printf 'Environment="REMNASCOPE_AWG_SENSOR_CONTAINERS=%s"\n' "$(printf '%s' "$SENSE" | tr ' ' ',')"
+  if [ "$CONTAINER_ADMIN" -eq 1 ]; then
+    echo 'Environment="REMNASCOPE_AWG_CONTAINER=/usr/bin/sudo -n /usr/local/sbin/remnascope-awg-container"'
+  fi
 } > "$UNITS/remnascope-awg.service.d/10-remnascope.conf"
 chmod 0644 "$UNITS/remnascope-awg.service" "$UNITS/remnascope-awg.service.d/10-remnascope.conf"
 # The snapshot helper reads CONTAINERS from its environment; the agent's sudo rule runs it as is, so the

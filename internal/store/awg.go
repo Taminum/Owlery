@@ -422,3 +422,50 @@ func (s *Store) RecordAWGOperation(ctx context.Context, instanceID, kind, key, l
 		inst, kind, key, cleanText(label, 64), status, cleanText(code, 40), u)
 	return err
 }
+
+// AWGHost is an AmneziaWG agent: one host. It exists before it has any container, which is what lets an empty
+// server be set up from RemnaScope.
+type AWGHost struct {
+	AgentID    string     `json:"id"`
+	PanelID    string     `json:"panel_id"`
+	NodeName   string     `json:"node_name"`
+	LastSeen   *time.Time `json:"last_seen"`
+	Containers []string   `json:"containers"`
+}
+
+// AWGHosts lists the live AmneziaWG agents of the panels the scope can see, with the containers each reported.
+func (s *Store) AWGHosts(ctx context.Context, sc Scope) ([]AWGHost, error) {
+	rows, err := s.pool.Query(ctx, `SELECT a.id::text, a.panel_id::text, n.name, a.last_seen,
+			COALESCE((SELECT array_agg(i.container ORDER BY i.container) FROM awg_instances i WHERE i.agent_id = a.id), '{}')
+		FROM agents a JOIN nodes n ON n.id = a.node_id AND n.panel_id = a.panel_id
+		WHERE a.kind = 'awg' AND a.status <> 'revoked' AND ($1::bool OR a.panel_id = ANY($2::uuid[]))
+		ORDER BY lower(n.name), a.id`, sc.All, scopeIDs(sc))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []AWGHost{}
+	for rows.Next() {
+		var h AWGHost
+		if err := rows.Scan(&h.AgentID, &h.PanelID, &h.NodeName, &h.LastSeen, &h.Containers); err != nil {
+			return nil, err
+		}
+		out = append(out, h)
+	}
+	return out, rows.Err()
+}
+
+// AWGHostAgent returns the agent id if it is a live AmneziaWG agent the scope can see.
+func (s *Store) AWGHostAgent(ctx context.Context, sc Scope, agentID string) (string, error) {
+	id, err := ParseID(agentID)
+	if err != nil {
+		return "", ErrNotFound
+	}
+	var out string
+	err = s.pool.QueryRow(ctx, `SELECT a.id::text FROM agents a WHERE a.id=$1 AND a.kind='awg' AND a.status <> 'revoked' AND ($2::bool OR a.panel_id = ANY($3::uuid[]))`,
+		id, sc.All, scopeIDs(sc)).Scan(&out)
+	if err != nil {
+		return "", ErrNotFound
+	}
+	return out, nil
+}

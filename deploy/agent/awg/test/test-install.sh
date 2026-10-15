@@ -51,6 +51,8 @@ sh "$inst" --stage "$st4" --from "$rel" --server wss://scope.example.org/ingest/
   --endpoint-host 203.0.113.10 --managed amnezia-awg3 --container-admin >/dev/null 2>&1 || fail "install with --container-admin failed"
 [ -f "$st4/usr/local/sbin/remnascope-awg-container" ] || fail "container helper missing"
 grep -qx 'remnascope ALL=(root) NOPASSWD: /usr/local/sbin/remnascope-awg-container' "$st4/etc/sudoers.d/remnascope-awg-container" || fail "container rule"
+grep -q 'REMNASCOPE_AWG_CONTAINER=/usr/bin/sudo -n /usr/local/sbin/remnascope-awg-container' "$st4/etc/systemd/system/remnascope-awg.service.d/10-remnascope.conf" || fail "container variable"
+grep -q 'REMNASCOPE_AWG_CONTAINER' "$st/etc/systemd/system/remnascope-awg.service.d/10-remnascope.conf" && fail "the container variable is set without being asked for"
 echo "container-admin ok"
 
 # A tampered file is refused and nothing is written.
