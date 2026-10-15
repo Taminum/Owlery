@@ -116,6 +116,14 @@ func TestWorkerFindsKnownEndpointsAndExplainsChangesOnce(t *testing.T) {
 	if lost["conclusive"] != true || lost["vantage"] != "api_server" {
 		t.Fatalf("%v", lost)
 	}
+	// What the alert reads: the port that opened after the baseline is "unexpected since"; the one that was
+	// answering from the start never was, and one that stopped answering has nothing pending.
+	var sinceOpened, sinceBaseline *time.Time
+	_ = st.Pool().QueryRow(ctx, `SELECT unexpected_since FROM security_port_endpoints WHERE vps_id=$1 AND port=$2`, v.ID, gonePort).Scan(&sinceOpened)
+	_ = st.Pool().QueryRow(ctx, `SELECT unexpected_since FROM security_port_endpoints WHERE vps_id=$1 AND port=$2`, v.ID, openPort).Scan(&sinceBaseline)
+	if sinceOpened == nil || sinceBaseline != nil {
+		t.Fatalf("unexpected_since: opened %v, baseline %v", sinceOpened, sinceBaseline)
+	}
 	if _, err := st.RequestChecks(ctx, all, v.ID, "ports"); err != nil {
 		t.Fatal(err)
 	}

@@ -434,7 +434,12 @@ func (s *Store) RecordPortCheck(ctx context.Context, id string, o PortObservatio
 			return err
 		}
 		_, err := tx.Exec(ctx, `UPDATE security_port_endpoints SET last_checked_at=$2, next_due_at=$3, last_result=$4, last_error=NULLIF($5,''), last_ip=NULLIF($6,''),
-			last_rtt_ms=NULLIF($7,0), changed_at = CASE WHEN last_result IS DISTINCT FROM $4 THEN $2 ELSE changed_at END WHERE id=$1`,
+			last_rtt_ms=NULLIF($7,0), changed_at = CASE WHEN last_result IS DISTINCT FROM $4 THEN $2 ELSE changed_at END,
+			unexpected_since = CASE
+				WHEN $4 = 'reachable' AND last_result IS NOT NULL AND last_result NOT IN ('reachable', 'error') THEN COALESCE(unexpected_since, $2)
+				WHEN $4 NOT IN ('reachable', 'error') THEN NULL
+				ELSE unexpected_since END
+			WHERE id=$1`,
 			eid, now, next, o.Result, o.Error, o.IP, o.RTTms)
 		return err
 	})
