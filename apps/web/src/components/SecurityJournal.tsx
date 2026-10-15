@@ -7,7 +7,7 @@ import { formatDateTime } from '../lib/format'
 import { useLoad } from '../hooks/useLoad'
 import type { JournalEvent, SecSettings, VPSList } from '../lib/types'
 import { Card, Chip } from './ui'
-import { eventText } from './SecurityPanels'
+import { EventLink } from './SecurityPanels'
 import { Field, GhostButton, inputCls } from './Modal'
 
 const CATEGORIES = ['fail2ban', 'sockets', 'firewall', 'ports', 'tls'] as const
@@ -114,7 +114,7 @@ export function Journal() {
               <span>
                 <Chip tone={e.severity === 'info' ? 'muted' : e.severity === 'warning' ? 'amber' : 'red'}>{t(`sec.sev.${e.severity}` as MsgKey)}</Chip>
                 <Link to={`/security/${e.vps_id}`} className="ml-2 font-medium hover:text-cyan hover:underline">{e.vps_name}</Link>
-                <span className="ml-2">{eventText(e)}</span>
+                <EventLink e={e} className="ml-2" />
               </span>
               <span className="tnum text-xs text-muted">{formatDateTime(e.observed_at, 'local')} · {t(e.source === 'external_check' ? 'sec.ext.source' : 'sec.events.source')}</span>
             </li>

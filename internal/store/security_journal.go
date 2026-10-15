@@ -17,6 +17,7 @@ const SecurityRetention = 180 * 24 * time.Hour
 
 // JournalFilter narrows the all-servers journal. Zero values mean "any".
 type JournalFilter struct {
+	ID       string // one event, by id
 	VPSID    string
 	Category string
 	Type     string
@@ -43,6 +44,13 @@ func (s *Store) Journal(ctx context.Context, sc Scope, f JournalFilter) ([]Journ
 		n++
 		args = append(args, v)
 		where = append(where, strings.ReplaceAll(cond, "$#", "$"+strconv.Itoa(n)))
+	}
+	if f.ID != "" {
+		u, err := uuid.Parse(f.ID)
+		if err != nil {
+			return []JournalEvent{}, nil
+		}
+		add("e.id = $#", u)
 	}
 	if u, err := uuid.Parse(f.VPSID); err == nil {
 		add("e.vps_id = $#", u)

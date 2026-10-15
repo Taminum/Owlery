@@ -5,7 +5,7 @@ import { api } from '../lib/api'
 import { errorText } from '../lib/errors'
 import { formatDateTime } from '../lib/format'
 import { useLoad } from '../hooks/useLoad'
-import type { SecAgent, SecCategory, SecEvent, SecFwDiff, SecFwModel, SecFwSnapshot, SecJail, SecListener } from '../lib/types'
+import type { SecAgent, SecCategory, SecEvent, SecEventDetail, SecFwDiff, SecFwModel, SecFwSnapshot, SecJail, SecListener, SecOverview } from '../lib/types'
 import { Card, Chip } from './ui'
 import { CommandHistory, useBanControls } from './SecurityBan'
 import { DangerButton, GhostButton, Modal, PrimaryButton } from './Modal'
@@ -243,6 +243,127 @@ export function eventText(e: SecEvent): string {
   }
 }
 
+const SEV_TONE = { info: 'muted', warning: 'amber', critical: 'red' } as const
+
+/** An event's text that opens its detail: the full payload and what else happened around it. */
+export function EventLink({ e, className = '' }: { e: SecEvent; className?: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <button type="button" title={t('sec.ev.open')} onClick={() => setOpen(true)} className={`text-left hover:text-cyan hover:underline ${className}`}>{eventText(e)}</button>
+      {open && <EventDetail id={e.id} onClose={() => setOpen(false)} />}
+    </>
+  )
+}
+
+function Payload({ p }: { p: Record<string, unknown> }) {
+  const rows = Object.entries(p)
+  if (rows.length === 0) return <p className="text-[13px] text-muted">—</p>
+  return (
+    <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[13px]">
+      {rows.map(([k, v]) => (
+        <div key={k} className="contents">
+          <dt className="text-muted">{k}</dt>
+          <dd className="break-all font-mono text-[12px]">{typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean' ? String(v) : JSON.stringify(v)}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
+export function EventDetail({ id, onClose }: { id: string; onClose: () => void }) {
+  const { data, error } = useLoad((s) => api.get<SecEventDetail>(`/api/v1/security/events/${id}`, s), [id])
+  return (
+    <Modal title={t('sec.ev.detail')} onClose={onClose}>
+      {error && <p role="alert" className="text-[13px] text-red">{error}</p>}
+      {data && (
+        <div className="space-y-4">
+          <div>
+            <p className="text-[14px]"><Chip tone={SEV_TONE[data.event.severity]}>{t(`sec.sev.${data.event.severity}` as MsgKey)}</Chip> <span className="ml-2">{eventText(data.event)}</span></p>
+            <p className="mt-1 text-[12px] text-muted">
+              {t('sec.ev.server')}: <Link to={`/security/${data.event.vps_id}`} className="hover:text-cyan hover:underline">{data.event.vps_name}</Link>
+              {' · '}{t('sec.ev.time')}: <span className="tnum">{formatDateTime(data.event.observed_at, 'local')}</span>
+              {' · '}{t('sec.ev.source')}: {t(data.event.source === 'external_check' ? 'sec.ext.source' : 'sec.events.source')}
+            </p>
+          </div>
+          <div>
+            <h3 className="mb-1 text-[13px] font-medium">{t('sec.ev.details')}</h3>
+            <Payload p={data.event.payload} />
+          </div>
+          <div>
+            <h3 className="mb-1 text-[13px] font-medium">{t('sec.ev.related')}</h3>
+            {data.related.length === 0 ? <p className="text-[13px] text-muted">{t('sec.ev.noRelated')}</p> : (
+              <ul className="space-y-1 text-[13px]">
+                {data.related.map((r) => (
+                  <li key={r.id} className="flex flex-wrap items-baseline gap-2">
+                    <span className="tnum text-xs text-muted">{formatDateTime(r.observed_at, 'local')}</span>
+                    <Chip tone={SEV_TONE[r.severity]}>{t(`sec.sev.${r.severity}` as MsgKey)}</Chip>
+                    <span>{eventText(r)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+    </Modal>
+  )
+}
+
+const HEALTH_TONE = { healthy: 'green', attention: 'amber', unknown: 'muted', disabled: 'muted' } as const
+
+function reasonText(r: { code: string; detail?: string }): string {
+  try {
+    return t(`sec.ov.reason.${r.code}` as MsgKey, { name: r.detail ? t(`sec.ov.coverage.${r.detail === 'sockets' ? 'ports' : r.detail}` as MsgKey) : '' })
+  } catch {
+    return r.code
+  }
+}
+
+export function OverviewTab({ vpsId }: { vpsId: string }) {
+  const { data: o, error } = useLoad((s) => api.get<SecOverview>(`/api/v1/security/vps/${vpsId}/overview`, s), [vpsId], 15_000)
+  if (error) return <p role="alert" className="text-[13px] text-red">{error}</p>
+  if (!o) return null
+  const hint = o.health === 'healthy' ? 'sec.ov.healthyHint' : o.health === 'unknown' ? 'sec.ov.unknownHint' : o.health === 'disabled' ? 'sec.ov.disabledHint' : null
+  const c = o.checks
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <Card title={t(`sec.ov.health.${o.health}` as MsgKey)}>
+        <div className="mb-3"><Chip tone={HEALTH_TONE[o.health]}>{t(`sec.ov.health.${o.health}` as MsgKey)}</Chip></div>
+        {hint && <p className="text-[13px] text-muted">{t(hint as MsgKey)}</p>}
+        {o.reasons.length > 0 && (
+          <ul className="list-disc space-y-1 pl-5 text-[13px]">{o.reasons.map((r, i) => <li key={i}>{reasonText(r)}</li>)}</ul>
+        )}
+      </Card>
+      <Card title={t('sec.ov.coverage')}>
+        <dl className="space-y-2 text-[13px]">
+          <div><dt className="text-muted">{t('sec.ov.coverage.agent')}</dt><dd>{t(`sec.card.agent.${o.agent}` as MsgKey)}</dd></div>
+          {(['fail2ban', 'sockets', 'firewall'] as const).map((k) => (
+            <div key={k}>
+              <dt className="text-muted">{k === 'sockets' ? t('sec.ports') : k === 'fail2ban' ? 'Fail2ban' : 'Firewall'}</dt>
+              <dd className="flex flex-wrap items-center gap-2"><StateChip state={o.categories[k]?.state ?? 'waiting'} />
+                {o.categories[k]?.observed_at && <span className="tnum text-xs text-muted">{formatDateTime(o.categories[k].observed_at, 'local')}</span>}</dd>
+            </div>
+          ))}
+          <div><dt className="text-muted">{t('sec.ov.coverage.ports')}</dt>
+            <dd>{c.ports_total === 0 ? t('sec.ov.coverage.none') : t('sec.ov.coverage.portsLine', { n: c.ports_total, u: c.ports_unexpected, d: c.ports_down })}</dd></div>
+          <div><dt className="text-muted">{t('sec.ov.coverage.tls')}</dt>
+            <dd>{c.tls_total === 0 ? t('sec.ov.coverage.none') : t('sec.ov.coverage.tlsLine', { n: c.tls_total, p: c.tls_problems })}</dd></div>
+          {c.tls_nearest_end && <div><dt className="text-muted">{t('sec.ov.nearestEnd')}</dt><dd className="tnum">{formatDateTime(c.tls_nearest_end, 'local')}</dd></div>}
+          {c.last_checked_at && <div><dt className="text-muted">{t('sec.ov.lastCheck')}</dt><dd className="tnum">{formatDateTime(c.last_checked_at, 'local')}</dd></div>}
+        </dl>
+      </Card>
+      <Card title={t('sec.tab.events')}>
+        <p className="mb-2 text-[13px] text-muted">{t('sec.ov.events24h')}: <span className="text-fg">{o.events_24h}</span></p>
+        {o.last_event ? (
+          <p className="text-[13px]"><span className="text-muted">{t('sec.ov.lastEvent')}:</span> <EventLink e={o.last_event} />
+            <span className="tnum ml-2 text-xs text-muted">{formatDateTime(o.last_event.observed_at, 'local')}</span></p>
+        ) : <p className="text-[13px] text-muted">{t('sec.ov.noEvents')}</p>}
+      </Card>
+    </div>
+  )
+}
+
 export function EventsTab({ vpsId }: { vpsId: string }) {
   const [extra, setExtra] = useState<SecEvent[]>([])
   const [more, setMore] = useState<boolean | null>(null)
@@ -268,7 +389,7 @@ export function EventsTab({ vpsId }: { vpsId: string }) {
       <ul className="divide-y divide-line">
         {items.map((e) => (
           <li key={e.id} className="flex flex-wrap items-baseline justify-between gap-3 py-2 text-[13px]">
-            <span><Chip tone={e.severity === 'info' ? 'muted' : e.severity === 'warning' ? 'amber' : 'red'}>{t(`sec.sev.${e.severity}` as MsgKey)}</Chip> <span className="ml-2">{eventText(e)}</span></span>
+            <span><Chip tone={e.severity === 'info' ? 'muted' : e.severity === 'warning' ? 'amber' : 'red'}>{t(`sec.sev.${e.severity}` as MsgKey)}</Chip> <EventLink e={e} className="ml-2" /></span>
             <span className="tnum text-xs text-muted">{formatDateTime(e.observed_at, 'local')} · {t(e.source === 'external_check' ? 'sec.ext.source' : 'sec.events.source')}</span>
           </li>
         ))}
