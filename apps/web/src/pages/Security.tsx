@@ -40,7 +40,7 @@ function VPSDialog({ vps, onClose, onDone }: { vps?: VPS; onClose: () => void; o
     }
   }
   return (
-    <Modal title={vps ? t('sec.save') : t('sec.add')} onClose={onClose} busy={busy}>
+    <Modal title={vps ? t('sec.edit') : t('sec.add')} onClose={onClose} busy={busy}>
       <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); if (!busy && name.trim()) void save() }}>
         <Field label={t('sec.name')} htmlFor="sec-name"><input id="sec-name" className={inputCls} value={name} onChange={(e) => setName(e.target.value)} maxLength={64} data-autofocus /></Field>
         <Field label={t('sec.addresses')} hint={t('sec.addressesHint')} htmlFor="sec-addrs">
@@ -127,7 +127,7 @@ export function SecurityDetail() {
     <div className="space-y-4">
       <Link to="/security" className="inline-flex items-center gap-2 text-[13px] text-muted hover:text-fg"><ArrowLeft size={15} aria-hidden />{t('sec.back')}</Link>
       <PageHead title={v.name} subtitle={v.note || t('sec.checker')}
-        right={v.can_edit ? <GhostButton onClick={() => setEditing(true)}>{t('sec.save')}</GhostButton> : undefined} />
+        right={v.can_edit ? <GhostButton onClick={() => setEditing(true)}>{t('sec.edit')}</GhostButton> : undefined} />
       {err && <p role="alert" className="text-[13px] text-red">{err}</p>}
       {!v.can_edit && <p className="text-[13px] text-muted">{t('sec.readonly')}</p>}
 
