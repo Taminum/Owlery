@@ -20,6 +20,14 @@ const (
 	MaxTLSEndpoints  = 50
 )
 
+// Vantage is where a check was made from. Independent is true only when it was made from a machine that is
+// not the checked server.
+type Vantage struct {
+	ID          string `json:"id"` // api_server | agent:<vps id>
+	Name        string `json:"name,omitempty"`
+	Independent bool   `json:"independent"`
+}
+
 type PortEndpoint struct {
 	ID            string     `json:"id"`
 	VPSID         string     `json:"vps_id"`
@@ -34,18 +42,28 @@ type PortEndpoint struct {
 	LastIP        *string    `json:"last_ip"`
 	LastRTTMS     *int       `json:"last_rtt_ms"`
 	ChangedAt     *time.Time `json:"changed_at"`
+	Vantage       *Vantage   `json:"vantage"` // null until the first check
 }
 
-const portCols = `id, vps_id, host, port, expected, source, enabled, last_checked_at, last_result, last_error, last_ip, last_rtt_ms, changed_at`
+const portCols = `id, vps_id, host, port, expected, source, enabled, last_checked_at, last_result, last_error, last_ip, last_rtt_ms, changed_at, last_vantage, last_vantage_name, last_independent`
 
 func scanPort(r pgx.Row) (PortEndpoint, error) {
 	var p PortEndpoint
 	var id, vid uuid.UUID
-	err := r.Scan(&id, &vid, &p.Host, &p.Port, &p.Expected, &p.Source, &p.Enabled, &p.LastCheckedAt, &p.LastResult, &p.LastError, &p.LastIP, &p.LastRTTMS, &p.ChangedAt)
+	var vid2, vname *string
+	var vind *bool
+	err := r.Scan(&id, &vid, &p.Host, &p.Port, &p.Expected, &p.Source, &p.Enabled, &p.LastCheckedAt, &p.LastResult, &p.LastError, &p.LastIP, &p.LastRTTMS, &p.ChangedAt, &vid2, &vname, &vind)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return p, ErrNotFound
 	}
 	p.ID, p.VPSID = id.String(), vid.String()
+	if vid2 != nil {
+		p.Vantage = &Vantage{ID: *vid2}
+		if vname != nil {
+			p.Vantage.Name = *vname
+		}
+		p.Vantage.Independent = vind != nil && *vind
+	}
 	return p, err
 }
 
@@ -63,6 +81,7 @@ type TLSEndpoint struct {
 	LastFingerprint *string         `json:"last_fingerprint"`
 	LastNotAfter    *time.Time      `json:"last_not_after"`
 	LastObs         json.RawMessage `json:"last_obs"`
+	Vantage         *Vantage        `json:"vantage"` // from the last observation; null until the first check
 }
 
 const tlsCols = `id, vps_id, host, port, sni, profile, enabled, last_checked_at, last_state, last_ip, last_fingerprint, last_not_after, last_obs`
@@ -76,6 +95,16 @@ func scanTLS(r pgx.Row) (TLSEndpoint, error) {
 		return e, ErrNotFound
 	}
 	e.ID, e.VPSID, e.LastObs = id.String(), vid.String(), obs
+	if len(obs) > 0 {
+		var o struct {
+			Vantage     string `json:"vantage"`
+			Checker     string `json:"checker"`
+			Independent bool   `json:"independent"`
+		}
+		if json.Unmarshal(obs, &o) == nil && o.Vantage != "" {
+			e.Vantage = &Vantage{ID: o.Vantage, Name: o.Checker, Independent: o.Independent}
+		}
+	}
 	return e, err
 }
 
@@ -333,21 +362,23 @@ func splitKey(k string) (string, int) {
 // --- the worker's side ---------------------------------------------------------------------------
 
 type DuePort struct {
-	ID   string
-	Host string
-	Port int
+	ID    string
+	VPSID string
+	Host  string
+	Port  int
 }
 
 type DueTLS struct {
-	ID   string
-	Host string
-	Port int
-	SNI  string
+	ID    string
+	VPSID string
+	Host  string
+	Port  int
+	SNI   string
 }
 
 // DuePorts lists enabled endpoints of enabled, live servers whose time has come.
 func (s *Store) DuePorts(ctx context.Context, now time.Time, limit int) ([]DuePort, error) {
-	rows, err := s.pool.Query(ctx, `SELECT e.id, e.host, e.port FROM security_port_endpoints e JOIN security_vps v ON v.id=e.vps_id
+	rows, err := s.pool.Query(ctx, `SELECT e.id, e.vps_id, e.host, e.port FROM security_port_endpoints e JOIN security_vps v ON v.id=e.vps_id
 		WHERE e.enabled AND v.enabled AND v.archived_at IS NULL AND (e.next_due_at IS NULL OR e.next_due_at <= $1)
 		ORDER BY e.next_due_at NULLS FIRST LIMIT $2`, now, limit)
 	if err != nil {
@@ -357,18 +388,18 @@ func (s *Store) DuePorts(ctx context.Context, now time.Time, limit int) ([]DuePo
 	var out []DuePort
 	for rows.Next() {
 		var d DuePort
-		var id uuid.UUID
-		if err := rows.Scan(&id, &d.Host, &d.Port); err != nil {
+		var id, vid uuid.UUID
+		if err := rows.Scan(&id, &vid, &d.Host, &d.Port); err != nil {
 			return nil, err
 		}
-		d.ID = id.String()
+		d.ID, d.VPSID = id.String(), vid.String()
 		out = append(out, d)
 	}
 	return out, rows.Err()
 }
 
 func (s *Store) DueTLS(ctx context.Context, now time.Time, limit int) ([]DueTLS, error) {
-	rows, err := s.pool.Query(ctx, `SELECT e.id, e.host, e.port, e.sni FROM security_tls_endpoints e JOIN security_vps v ON v.id=e.vps_id
+	rows, err := s.pool.Query(ctx, `SELECT e.id, e.vps_id, e.host, e.port, e.sni FROM security_tls_endpoints e JOIN security_vps v ON v.id=e.vps_id
 		WHERE e.enabled AND v.enabled AND v.archived_at IS NULL AND (e.next_due_at IS NULL OR e.next_due_at <= $1)
 		ORDER BY e.next_due_at NULLS FIRST LIMIT $2`, now, limit)
 	if err != nil {
@@ -378,18 +409,25 @@ func (s *Store) DueTLS(ctx context.Context, now time.Time, limit int) ([]DueTLS,
 	var out []DueTLS
 	for rows.Next() {
 		var d DueTLS
-		var id uuid.UUID
-		if err := rows.Scan(&id, &d.Host, &d.Port, &d.SNI); err != nil {
+		var id, vid uuid.UUID
+		if err := rows.Scan(&id, &vid, &d.Host, &d.Port, &d.SNI); err != nil {
 			return nil, err
 		}
-		d.ID = id.String()
+		d.ID, d.VPSID = id.String(), vid.String()
 		out = append(out, d)
 	}
 	return out, rows.Err()
 }
 
-func insertEvents(ctx context.Context, tx pgx.Tx, vid uuid.UUID, evs []secevents.Event, observed time.Time) error {
+func insertEvents(ctx context.Context, tx pgx.Tx, vid uuid.UUID, evs []secevents.Event, observed time.Time, v Vantage) error {
 	for _, e := range evs {
+		// Every external event says where it was seen from, and whether that was a point of view independent of the server.
+		if e.Payload != nil {
+			e.Payload["vantage"], e.Payload["independent"] = v.ID, v.Independent
+			if v.Name != "" {
+				e.Payload["checker"] = v.Name
+			}
+		}
 		payload, _ := json.Marshal(e.Payload)
 		if _, err := tx.Exec(ctx, `INSERT INTO security_events (vps_id, category, type, severity, source, observed_at, received_at, dedupe_key, payload)
 			VALUES ($1,$2,$3,$4,'external_check',$5,$5,$6,$7) ON CONFLICT (vps_id, dedupe_key) DO NOTHING`,
@@ -402,10 +440,11 @@ func insertEvents(ctx context.Context, tx pgx.Tx, vid uuid.UUID, evs []secevents
 
 // PortObservation is one finished TCP check.
 type PortObservation struct {
-	Result string
-	IP     string
-	RTTms  int
-	Error  string
+	Result  string
+	IP      string
+	RTTms   int
+	Error   string
+	Vantage Vantage
 }
 
 // RecordPortCheck stores a result, writes the events the change implies, and schedules the next check.
@@ -430,17 +469,17 @@ func (s *Store) RecordPortCheck(ctx context.Context, id string, o PortObservatio
 		if prev != nil {
 			pp = secevents.PortPrev{Known: true, Result: *prev}
 		}
-		if err := insertEvents(ctx, tx, vid, secevents.PortDiff(pp, o.Result, expected, host, port, o.IP), now); err != nil {
+		if err := insertEvents(ctx, tx, vid, secevents.PortDiff(pp, o.Result, expected, host, port, o.IP), now, o.Vantage); err != nil {
 			return err
 		}
 		_, err := tx.Exec(ctx, `UPDATE security_port_endpoints SET last_checked_at=$2, next_due_at=$3, last_result=$4, last_error=NULLIF($5,''), last_ip=NULLIF($6,''),
-			last_rtt_ms=NULLIF($7,0), changed_at = CASE WHEN last_result IS DISTINCT FROM $4 THEN $2 ELSE changed_at END,
+			last_rtt_ms=NULLIF($7,0), last_vantage=$8, last_vantage_name=NULLIF($9,''), last_independent=$10, changed_at = CASE WHEN last_result IS DISTINCT FROM $4 THEN $2 ELSE changed_at END,
 			unexpected_since = CASE
 				WHEN $4 = 'reachable' AND last_result IS NOT NULL AND last_result NOT IN ('reachable', 'error') THEN COALESCE(unexpected_since, $2)
 				WHEN $4 NOT IN ('reachable', 'error') THEN NULL
 				ELSE unexpected_since END
 			WHERE id=$1`,
-			eid, now, next, o.Result, o.Error, o.IP, o.RTTms)
+			eid, now, next, o.Result, o.Error, o.IP, o.RTTms, o.Vantage.ID, o.Vantage.Name, o.Vantage.Independent)
 		return err
 	})
 }
@@ -454,6 +493,7 @@ type TLSObservation struct {
 	NotAfter    time.Time
 	DaysLeft    int
 	Data        json.RawMessage // the full description kept with the endpoint
+	Vantage     Vantage
 }
 
 // RecordTLSCheck stores a result, writes the events it implies (each expiry threshold once, a renewal
@@ -488,7 +528,7 @@ func (s *Store) RecordTLSCheck(ctx context.Context, id string, o TLSObservation,
 		}
 		// A check that did not reach a certificate leaves what is known about the certificate alone.
 		evs, newBand := secevents.TLSDiff(prev, secevents.TLSCur{State: o.State, Fingerprint: o.Fingerprint, DaysLeft: o.DaysLeft, NotAfter: o.NotAfter, HasCert: o.HasCert}, host, port)
-		if err := insertEvents(ctx, tx, vid, evs, now); err != nil {
+		if err := insertEvents(ctx, tx, vid, evs, now, o.Vantage); err != nil {
 			return err
 		}
 		changed := !prev.Known || prev.State != o.State || (o.HasCert && prev.Fingerprint != o.Fingerprint)
@@ -508,4 +548,36 @@ func (s *Store) RecordTLSCheck(ctx context.Context, id string, o TLSObservation,
 			last_band=$8, last_obs=$9 WHERE id=$1`, eid, now, next, o.State, o.IP, o.Fingerprint, na, newBand, o.Data)
 		return err
 	})
+}
+
+// Checker is a security agent that its host set up to run probes, with what its server owns, so that a
+// target on that same server is never called independently checked by it.
+type Checker struct {
+	AgentID   string
+	VPSID     string
+	VPSName   string
+	Addresses []string
+}
+
+// SecCheckers lists the live agents that announced the probe capability, oldest first.
+func (s *Store) SecCheckers(ctx context.Context) ([]Checker, error) {
+	rows, err := s.pool.Query(ctx, `SELECT a.id, v.id, v.name, COALESCE((SELECT array_agg(address) FROM security_vps_addresses x WHERE x.vps_id = v.id), '{}')
+		FROM security_agents a JOIN security_vps v ON v.id = a.vps_id
+		WHERE a.status = 'active' AND 'probe' = ANY(a.capabilities) AND v.enabled AND v.archived_at IS NULL
+		ORDER BY a.created_at, a.id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Checker
+	for rows.Next() {
+		var c Checker
+		var aid, vid uuid.UUID
+		if err := rows.Scan(&aid, &vid, &c.VPSName, &c.Addresses); err != nil {
+			return nil, err
+		}
+		c.AgentID, c.VPSID = aid.String(), vid.String()
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }

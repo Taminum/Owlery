@@ -52,6 +52,9 @@ type Config struct {
 	StateDir string
 	// Disabled categories are neither collected nor announced as capabilities.
 	NoFail2ban, NoSockets, NoFirewall bool
+	// Probe makes this host a checker: the server may ask it to connect to a public TCP port or read a TLS
+	// certificate, so that a target is seen from somewhere other than the target. Off unless the host chooses it.
+	Probe bool
 }
 
 func (c *Config) defaults() {
@@ -118,7 +121,7 @@ func Run(ctx context.Context, cfg Config) error {
 	if err != nil {
 		return err
 	}
-	a := &agent{cfg: cfg, url: url, hc: hc, epoch: newEpoch()}
+	a := &agent{cfg: cfg, url: url, hc: hc, epoch: newEpoch(), probes: make(chan struct{}, maxProbes)}
 	if cfg.HelperSocket != "" {
 		a.helper = f2bhelper.Client{Path: cfg.HelperSocket}
 		// Fail2ban is read through the helper, and the agent never runs fail2ban-client itself.
@@ -162,6 +165,7 @@ type agent struct {
 	helper f2bhelper.Client
 	done   *executed
 	cmdMu  sync.Mutex // one command at a time, in the order they arrive
+	probes chan struct{}
 }
 
 func (a *agent) token() (string, error) {
@@ -191,6 +195,9 @@ func (a *agent) capabilities(ban bool) []string {
 	}
 	if ban {
 		caps = append(caps, secproto.CapFail2banBan)
+	}
+	if a.cfg.Probe {
+		caps = append(caps, secproto.CapProbe)
 	}
 	return caps
 }
@@ -295,6 +302,31 @@ func (a *agent) reader(ctx context.Context, c *websocket.Conn, ban bool, acks ch
 				res := a.carryOut(ctx, cmd, received, ban)
 				if err := write(ctx, c, res); err != nil {
 					a.cfg.Log.Warn("could not report a command result", "id", cmd.ID, "err", err)
+				}
+			}()
+		case "probe":
+			var p secproto.Probe
+			if json.Unmarshal(b, &p) != nil {
+				fail(errors.New("secagent: a bad probe"))
+				return
+			}
+			if !a.cfg.Probe {
+				// Not set up as a checker: answer that, and never dial.
+				_ = write(ctx, c, secproto.ProbeResult{Type: "probe_result", ID: p.ID, Kind: p.Kind, Refused: "bad_request"})
+				continue
+			}
+			busy := false
+			select {
+			case a.probes <- struct{}{}:
+			default:
+				busy = true
+			}
+			go func() {
+				if !busy {
+					defer func() { <-a.probes }()
+				}
+				if err := write(ctx, c, a.probe(ctx, p, busy)); err != nil {
+					a.cfg.Log.Warn("could not report a probe result", "err", err)
 				}
 			}()
 		case "error":

@@ -39,6 +39,7 @@ func main() {
 		noF2B     = flag.Bool("no-fail2ban", false, "do not read Fail2ban")
 		noSock    = flag.Bool("no-sockets", false, "do not read listening sockets")
 		noFW      = flag.Bool("no-firewall", false, "do not read the firewall")
+		probe     = flag.Bool("probe", false, "act as a checker: let the server ask this host to connect to a public TCP port or read a TLS certificate")
 		showVer   = flag.Bool("version", false, "print the version and exit")
 	)
 	flag.Parse()
@@ -54,7 +55,7 @@ func main() {
 	defer stop()
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	err := secagent.Run(ctx, secagent.Config{ServerURL: *server, TokenFile: *tokenFile, CAFile: *caFile, AllowInsecure: *insecure,
-		Interval: *interval, Version: version, Log: log, HelperSocket: *helper, StateDir: *stateDir, NoFail2ban: *noF2B, NoSockets: *noSock, NoFirewall: *noFW})
+		Interval: *interval, Version: version, Log: log, HelperSocket: *helper, StateDir: *stateDir, NoFail2ban: *noF2B, NoSockets: *noSock, NoFirewall: *noFW, Probe: *probe})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "secagent:", err)
 		os.Exit(1)

@@ -5,10 +5,26 @@ presents. This is separate from the security agent, which reads the host from th
 
 ## Where the check runs from
 
-From the **RemnaScope server itself** (vantage `api_server`). That is **not an independent point of view**:
-if the API runs on the VPS being checked, a result says the port answers *from that machine*, not that it is
-reachable from the internet. Every result carries the vantage and the UI says so. A checker outside the
-checked servers can be added later; until then, treat "reachable" as "reachable from the API host".
+Each result says where it was made from (`vantage`), and whether that is **independent** of the checked
+server:
+
+- **A checker.** A security agent whose host was set up with `-probe` announces the `probe` capability. The
+  server asks it, over its live connection, to connect to a TCP port or to read a TLS certificate, and takes
+  its answer. The vantage is `agent:<server id>` with the checker's name. It is independent only when the
+  checker is not the checked server and the address it actually connected to is not one of the checker's own.
+  A server is never checked by an agent that lives on it.
+- **The RemnaScope server itself** (vantage `api_server`), when no checker qualifies, is connected, or answers
+  in time. This is **not an independent point of view**: if the API runs on the VPS being checked, a result
+  says the port answers *from that machine*, not that it is reachable from the internet. The UI says so.
+
+The checker is chosen automatically among the connected ones; with several, the oldest enrolled that is not
+the target goes first. The server does not trust an agent's answer beyond its shape: a result that is not one
+of the known verdicts is dropped and the check is made from the server, and the number of days left on a
+certificate is counted from the server's clock.
+
+The agent re-checks every request itself: it dials public addresses only (a private, loopback or link-local
+target is refused there too, whatever the server asks), runs at most four probes at once, sends no data on a
+TCP probe, and never turns certificate verification off for its verdict.
 
 ## What is checked
 
