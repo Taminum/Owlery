@@ -366,14 +366,17 @@ func (a *agent) reader(ctx context.Context, c *websocket.Conn, ban bool, acks ch
 
 func (a *agent) collect(ctx context.Context) []seccollect.Snapshot {
 	var out []seccollect.Snapshot
+	var banned map[string]bool // what Fail2ban holds now, so its per-address rules are not read as firewall changes
 	if !a.cfg.NoFail2ban {
-		out = append(out, seccollect.Fail2ban(ctx, a.cfg.Runner, a.cfg.Fail2banBin))
+		f := seccollect.Fail2ban(ctx, a.cfg.Runner, a.cfg.Fail2banBin)
+		out = append(out, f)
+		banned = bannedSet(f)
 	}
 	if !a.cfg.NoSockets {
 		out = append(out, seccollect.Sockets(ctx, a.cfg.Runner, a.cfg.SSBin))
 	}
 	if !a.cfg.NoFirewall {
-		out = append(out, seccollect.Firewall(ctx, a.cfg.Runner, a.cfg.NftBin, a.cfg.IptablesBin))
+		out = append(out, seccollect.FirewallWithBans(ctx, a.cfg.Runner, a.cfg.NftBin, a.cfg.IptablesBin, banned))
 	}
 	return out
 }
@@ -569,4 +572,19 @@ func (e *executed) claim(id string) (bool, error) {
 	}
 	e.ids[id] = true
 	return true, nil
+}
+
+// bannedSet lists the addresses of a Fail2ban snapshot that was read in full; nothing for one that was not.
+func bannedSet(s seccollect.Snapshot) map[string]bool {
+	f, ok := s.Data.(secproto.Fail2ban)
+	if !ok || s.Status != secproto.StatusOK {
+		return nil
+	}
+	m := map[string]bool{}
+	for _, j := range f.Jails {
+		for _, ip := range j.BannedIPs {
+			m[ip] = true
+		}
+	}
+	return m
 }

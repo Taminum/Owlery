@@ -120,7 +120,8 @@ func (s *Server) secOverview(w http.ResponseWriter, r *http.Request, a auth.Acto
 			res = *p.LastResult
 		}
 		switch {
-		case !p.Expected && res == secevents.PortReachable:
+		// The same rule as the alert: a port that was already open at the first check is the baseline, not news.
+		case !p.Expected && res == secevents.PortReachable && (p.UnexpectedSince != nil || p.Source == "discovered"):
 			ck.PortsUnexpected++
 		case p.Expected && res != "" && res != secevents.PortReachable && res != secevents.PortError:
 			ck.PortsDown++
