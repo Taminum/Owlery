@@ -63,3 +63,12 @@ panel; all other writes 60/min per account.
 - **Backups.** The security tables are in the same database as everything else, so `backup.sh` covers them.
 - **Rollback.** Migrations 0021 to 0024 only add tables and one column. An older API ignores them; nothing
   existing is changed, so going back to a previous release needs no database step.
+
+## DNS Map
+- **Resolvers.** Studies ask 1.1.1.1 and 8.8.8.8 over UDP/TCP port 53, and the zone's authoritative servers when
+  their address is public. Outbound port 53 must be open from the API host.
+- **Retention.** DNS changes and run records are kept 180 days, separately from Security. Maps and the current
+  record sets are not purged; archiving a map keeps its history.
+- **Alerts.** `dns_check_failed` and `dns_change` belong to no panel and are shown to the owner under
+  "Сетевая разведка". A record set that flips often is marked volatile and raises no alert.
+- **Rollback.** Migration 0026 only adds tables; an older API ignores them.
