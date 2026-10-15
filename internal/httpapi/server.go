@@ -266,6 +266,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/security/vps/{id}/fail2ban", s.session(s.secCategory(secproto.CatFail2ban)))
 	mux.Handle("GET /api/v1/security/vps/{id}/ports", s.session(s.secCategory(secproto.CatSockets)))
 	mux.Handle("GET /api/v1/security/vps/{id}/firewall", s.session(s.secCategory(secproto.CatFirewall)))
+	mux.Handle("GET /api/v1/security/vps/{id}/firewall/history", s.session(s.fwHistory))
+	mux.Handle("GET /api/v1/security/vps/{id}/firewall/diff", s.session(s.fwDiff))
 	mux.Handle("GET /api/v1/security/vps/{id}/events", s.session(s.secEvents))
 	mux.Handle("GET /api/v1/security/vps/{id}/public-ports", s.session(s.listPublicPorts))
 	mux.Handle("POST /api/v1/security/vps/{id}/public-ports", s.session(s.addPublicPort))

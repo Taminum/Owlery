@@ -2,11 +2,13 @@ package store
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 // SecurityRetention is how long detailed security history is kept: events, snapshots that recorded a
@@ -223,4 +225,60 @@ func (s *Store) SecurityAlertStates(ctx context.Context) (SecAlertStates, error)
 		out.Ports = append(out.Ports, x)
 	}
 	return out, rows.Err()
+}
+
+// FWSnapshot is one stored reading of the firewall: written only when the rules or the verdict changed.
+type FWSnapshot struct {
+	ID         string    `json:"id"`
+	ObservedAt time.Time `json:"observed_at"`
+	ReceivedAt time.Time `json:"received_at"`
+	Status     string    `json:"status"`
+	Hash       string    `json:"hash"`
+	Backend    string    `json:"backend"`
+	Rules      string    `json:"-"`
+}
+
+// FirewallSnapshots returns a server's stored firewall readings, newest first.
+func (s *Store) FirewallSnapshots(ctx context.Context, sc Scope, vpsID string, limit int, withRules bool) ([]FWSnapshot, error) {
+	if _, err := s.GetVPS(ctx, sc, vpsID); err != nil {
+		return nil, err
+	}
+	rows, err := s.pool.Query(ctx, `SELECT id, observed_at, received_at, status, source_hash, COALESCE(data->>'backend',''), CASE WHEN $3 THEN COALESCE(data->>'rules','') ELSE '' END
+		FROM security_snapshots WHERE vps_id=$1 AND category='firewall' ORDER BY observed_at DESC, id DESC LIMIT $2`, uuid.MustParse(vpsID), limit, withRules)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []FWSnapshot{}
+	for rows.Next() {
+		var x FWSnapshot
+		var id uuid.UUID
+		if err := rows.Scan(&id, &x.ObservedAt, &x.ReceivedAt, &x.Status, &x.Hash, &x.Backend, &x.Rules); err != nil {
+			return nil, err
+		}
+		x.ID = id.String()
+		out = append(out, x)
+	}
+	return out, rows.Err()
+}
+
+// FirewallSnapshot returns one stored reading with its rules text.
+func (s *Store) FirewallSnapshot(ctx context.Context, sc Scope, vpsID, id string) (FWSnapshot, error) {
+	if _, err := s.GetVPS(ctx, sc, vpsID); err != nil {
+		return FWSnapshot{}, err
+	}
+	u, err := ParseID(id)
+	if err != nil {
+		return FWSnapshot{}, ErrNotFound
+	}
+	var x FWSnapshot
+	var sid uuid.UUID
+	err = s.pool.QueryRow(ctx, `SELECT id, observed_at, received_at, status, source_hash, COALESCE(data->>'backend',''), COALESCE(data->>'rules','')
+		FROM security_snapshots WHERE id=$1 AND vps_id=$2 AND category='firewall'`, u, uuid.MustParse(vpsID)).
+		Scan(&sid, &x.ObservedAt, &x.ReceivedAt, &x.Status, &x.Hash, &x.Backend, &x.Rules)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return FWSnapshot{}, ErrNotFound
+	}
+	x.ID = sid.String()
+	return x, err
 }
