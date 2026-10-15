@@ -18,6 +18,19 @@
 | `/etc/sudoers.d/remnascope-awg` | sudoers | разрешает пользователю `remnascope` запускать только скрипт |
 | `/etc/remnascope/awg.token` | токен нового агента | выдаётся в RemnaScope (см. шаг 1) |
 
+## Установка одной командой
+
+`deploy/agent/awg/install.sh` делает все шаги ниже за один проход и ничего сверх них: скачивает файлы релиза и сверяет их с `SHA256SUMS`, создаёт пользователя `remnascope`, токен, настройки помощника, правила sudo (по одному точному правилу на помощника), службу агента и по службе датчика на контейнер. Контейнеры, их конфиги и Docker он не трогает. Повторный запуск безопасен.
+
+```bash
+# токен выдаётся в RemnaScope (Ноды → агенты → вид «awg») и показывается один раз
+curl -fsSLO https://github.com/Taminum/RemnaScope/releases/latest/download/remnascope-deploy-files.tar.gz
+tar -xzf remnascope-deploy-files.tar.gz deploy/agent/awg/install.sh
+sudo sh deploy/agent/awg/install.sh --server wss://scope.example.com/ingest/v1 --token-file ./awg.token      --endpoint-host 203.0.113.10 --managed "amnezia-awg2 amnezia-awg3"
+```
+
+Важные параметры: `--managed` перечисляет контейнеры, в которых RemnaScope может добавлять и отзывать устройства (без него агент только читает); `--sense` по умолчанию совпадает с ним; `--endpoint-host` попадает в клиентские конфиги. `--stage DIR` пишет всё в каталог без `systemctl` (для проверки), `--uninstall` убирает установленное. Проверка скрипта без сервера: `sh deploy/agent/awg/test/test-install.sh`.
+
 ## Шаги
 
 1. **В RemnaScope** создать агента: Узлы → awg-host → «Агенты» → вид «awg» (имя, например, `awg-awg-host`). Токен показывается один раз.
