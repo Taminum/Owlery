@@ -36,8 +36,8 @@ func TestSecurityOverviewHealthStates(t *testing.T) {
 	}
 
 	// A public port that answers and is not expected is a reason for attention, and says why.
-	if _, err := w.h.st.Pool().Exec(ctx, `INSERT INTO security_port_endpoints (vps_id, host, port, expected, source, enabled, last_checked_at, last_result)
-		VALUES ($1,'203.0.113.30',9000,false,'manual',true,now(),'reachable')`, v); err != nil {
+	if _, err := w.h.st.Pool().Exec(ctx, `INSERT INTO security_port_endpoints (vps_id, host, port, expected, source, enabled, last_checked_at, last_result, unexpected_since)
+		VALUES ($1,'203.0.113.30',9000,false,'manual',true,now(),'reachable',now())`, v); err != nil {
 		t.Fatal(err)
 	}
 	if o := get(); o.Health != "attention" || len(o.Reasons) != 1 || o.Reasons[0].Code != "port_unexpected" {

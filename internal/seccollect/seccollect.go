@@ -275,9 +275,30 @@ var f2bIptablesRe = regexp.MustCompile(`^-A f2b-\S+ -s \S+ `)
 
 func isFail2banTable(name string) bool { return strings.HasPrefix(name, "f2b") }
 
+// perAddressRe finds the address a one-address rule is about: "ip saddr 1.2.3.4" (nftables) or "-s 1.2.3.4"
+// (iptables). Fail2ban's UFW and "reject" actions put one such rule per banned address into ordinary chains.
+var perAddressRe = regexp.MustCompile(`(?:\bip6? saddr|(?:^|\s)-s)\s+([0-9A-Fa-f:.]+)(?:/32|/128)?(?:\s|$)`)
+
+// isBanRule reports whether a line is a drop or reject of exactly one address that Fail2ban has banned right
+// now. Such a rule is the ban itself, so it is the journal's Fail2ban event and not a change of the firewall.
+// A rule for an address Fail2ban does not hold is kept: that is someone's own rule.
+func isBanRule(line string, banned map[string]bool) bool {
+	if len(banned) == 0 {
+		return false
+	}
+	m := perAddressRe.FindStringSubmatch(line)
+	if m == nil || !banned[m[1]] {
+		return false
+	}
+	l := strings.ToLower(line)
+	return strings.Contains(l, "reject") || strings.Contains(l, "drop")
+}
+
 // CanonicalNft removes what changes without the rules changing: packet counters, handles, comments, and
 // the banned addresses Fail2ban keeps in its own table.
-func CanonicalNft(s string) string {
+func CanonicalNft(s string) string { return canonicalNft(s, nil) }
+
+func canonicalNft(s string, banned map[string]bool) string {
 	var out []string
 	table := ""
 	skipping := false // inside a multi-line "elements = { ... }" of a Fail2ban set
@@ -297,6 +318,9 @@ func CanonicalNft(s string) string {
 			skipping = !strings.Contains(t, "}")
 			continue
 		}
+		if isBanRule(t, banned) {
+			continue
+		}
 		line = nftHandleRe.ReplaceAllString(line, "")
 		line = nftCounterRe.ReplaceAllString(line, "counter")
 		out = append(out, strings.TrimRight(line, " \t"))
@@ -305,11 +329,13 @@ func CanonicalNft(s string) string {
 }
 
 // CanonicalIptables removes the generation timestamps, the per-chain counters and Fail2ban's per-address rules.
-func CanonicalIptables(s string) string {
+func CanonicalIptables(s string) string { return canonicalIptables(s, nil) }
+
+func canonicalIptables(s string, banned map[string]bool) string {
 	var out []string
 	for _, line := range strings.Split(s, "\n") {
 		t := strings.TrimSpace(line)
-		if t == "" || strings.HasPrefix(t, "#") || f2bIptablesRe.MatchString(t) {
+		if t == "" || strings.HasPrefix(t, "#") || f2bIptablesRe.MatchString(t) || isBanRule(t, banned) {
 			continue
 		}
 		out = append(out, strings.TrimRight(iptCountRe.ReplaceAllString(line, ""), " \t"))
@@ -331,6 +357,13 @@ func fit(rules string) (string, bool) {
 // Firewall reads nftables first and iptables second. UFW is a front end over these and is not read on
 // its own yet; on a host where UFW manages the rules, they are visible here as nftables or iptables.
 func Firewall(ctx context.Context, r Runner, nft, iptables string) Snapshot {
+	return FirewallWithBans(ctx, r, nft, iptables, nil)
+}
+
+// FirewallWithBans is Firewall for a host where Fail2ban acts through the ordinary firewall (UFW, "reject"
+// actions): the per-address rules for the addresses in banned are left out of the canonical text, so a ban
+// is not also reported as a change of the rules.
+func FirewallWithBans(ctx context.Context, r Runner, nft, iptables string, banned map[string]bool) Snapshot {
 	snap := Snapshot{Category: secproto.CatFirewall}
 	denied, anyTool, nftEmpty := false, false, false
 
@@ -340,7 +373,7 @@ func Firewall(ctx context.Context, r Runner, nft, iptables string) Snapshot {
 	case res.denied():
 		denied, anyTool = true, true
 	case res.Err == nil && res.ExitCode == 0:
-		if rules := CanonicalNft(res.Stdout); rules != "" {
+		if rules := canonicalNft(res.Stdout, banned); rules != "" {
 			rules, trunc := fit(rules)
 			snap.Status, snap.Data = secproto.StatusOK, secproto.Firewall{Backend: "nft", Rules: rules, Truncated: trunc}
 			return snap
@@ -356,7 +389,7 @@ func Firewall(ctx context.Context, r Runner, nft, iptables string) Snapshot {
 	case res.denied():
 		denied, anyTool = true, true
 	case res.Err == nil && res.ExitCode == 0:
-		if rules := CanonicalIptables(res.Stdout); rules != "" || !nftEmpty {
+		if rules := canonicalIptables(res.Stdout, banned); rules != "" || !nftEmpty {
 			rules, trunc := fit(rules)
 			snap.Status, snap.Data = secproto.StatusOK, secproto.Firewall{Backend: "iptables", Rules: rules, Truncated: trunc}
 			return snap

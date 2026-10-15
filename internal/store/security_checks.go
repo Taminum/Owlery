@@ -43,16 +43,19 @@ type PortEndpoint struct {
 	LastRTTMS     *int       `json:"last_rtt_ms"`
 	ChangedAt     *time.Time `json:"changed_at"`
 	Vantage       *Vantage   `json:"vantage"` // null until the first check
+	// UnexpectedSince is when a port that was not answering started to, and is not marked expected. A port that
+	// was already answering at the first check is the baseline and has none.
+	UnexpectedSince *time.Time `json:"unexpected_since"`
 }
 
-const portCols = `id, vps_id, host, port, expected, source, enabled, last_checked_at, last_result, last_error, last_ip, last_rtt_ms, changed_at, last_vantage, last_vantage_name, last_independent`
+const portCols = `id, vps_id, host, port, expected, source, enabled, last_checked_at, last_result, last_error, last_ip, last_rtt_ms, changed_at, last_vantage, last_vantage_name, last_independent, unexpected_since`
 
 func scanPort(r pgx.Row) (PortEndpoint, error) {
 	var p PortEndpoint
 	var id, vid uuid.UUID
 	var vid2, vname *string
 	var vind *bool
-	err := r.Scan(&id, &vid, &p.Host, &p.Port, &p.Expected, &p.Source, &p.Enabled, &p.LastCheckedAt, &p.LastResult, &p.LastError, &p.LastIP, &p.LastRTTMS, &p.ChangedAt, &vid2, &vname, &vind)
+	err := r.Scan(&id, &vid, &p.Host, &p.Port, &p.Expected, &p.Source, &p.Enabled, &p.LastCheckedAt, &p.LastResult, &p.LastError, &p.LastIP, &p.LastRTTMS, &p.ChangedAt, &vid2, &vname, &vind, &p.UnexpectedSince)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return p, ErrNotFound
 	}
