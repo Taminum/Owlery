@@ -1,0 +1,185 @@
+package httpapi
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/Taminum/RemnaScope/internal/auth"
+	"github.com/Taminum/RemnaScope/internal/secproto"
+	"github.com/Taminum/RemnaScope/internal/store"
+)
+
+// visibleVPS loads the server for the actor or writes "not found".
+func (s *Server) visibleVPS(w http.ResponseWriter, r *http.Request, a auth.Actor) (store.VPS, bool) {
+	v, err := s.Store.GetVPS(r.Context(), a.Scope(), r.PathValue("id"))
+	if err != nil {
+		s.vpsNotFound(w, r)
+		return v, false
+	}
+	return v, true
+}
+
+type secAgentOut struct {
+	store.SecAgent
+	Online bool `json:"online"`
+}
+
+func (s *Server) agentOut(ag store.SecAgent) secAgentOut {
+	return secAgentOut{SecAgent: ag, Online: ag.LastSeen != nil && s.Now().Sub(*ag.LastSeen) < secproto.StaleAfter}
+}
+
+// getSecAgent reports the server's agent. "Online" is only about the agent's connection: it says nothing
+// about whether the things it reads are healthy.
+func (s *Server) getSecAgent(w http.ResponseWriter, r *http.Request, a auth.Actor, _ store.Session) {
+	v, ok := s.visibleVPS(w, r, a)
+	if !ok {
+		return
+	}
+	ag, err := s.Store.SecAgentOf(r.Context(), v.ID)
+	if errors.Is(err, store.ErrNotFound) {
+		writeJSON(w, http.StatusOK, map[string]any{"agent": nil})
+		return
+	}
+	if err != nil {
+		s.writeErr(w, r, http.StatusInternalServerError, "internal", "internal error")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"agent": s.agentOut(ag)})
+}
+
+// createSecAgent issues the server's one agent credential. The secret is shown once.
+func (s *Server) createSecAgent(w http.ResponseWriter, r *http.Request, a auth.Actor, _ store.Session) {
+	v, ok := s.visibleVPS(w, r, a)
+	if !ok {
+		return
+	}
+	if !vpsCanEdit(a, v) {
+		s.writeErr(w, r, http.StatusForbidden, "forbidden", "an administrator of a linked panel is required")
+		return
+	}
+	secret, err := auth.NewToken()
+	if err != nil {
+		s.writeErr(w, r, http.StatusInternalServerError, "internal", "internal error")
+		return
+	}
+	ag, err := s.Store.CreateSecAgent(r.Context(), v.ID, a.AccountID, store.HashAgentSecret(secret))
+	switch {
+	case errors.Is(err, store.ErrConflict):
+		s.writeErr(w, r, http.StatusConflict, "agent_exists", "this server already has an agent; revoke it first")
+		return
+	case err != nil:
+		s.writeErr(w, r, http.StatusInternalServerError, "internal", "internal error")
+		return
+	}
+	s.audit(r, a, "", "security.agent.create", "vps", v.ID, map[string]any{"agent_id": ag.ID})
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusCreated, map[string]any{"agent": s.agentOut(ag), "token": ag.ID + "." + secret, "ingest_path": secproto.Path})
+}
+
+func (s *Server) revokeSecAgent(w http.ResponseWriter, r *http.Request, a auth.Actor, _ store.Session) {
+	v, ok := s.visibleVPS(w, r, a)
+	if !ok {
+		return
+	}
+	if !vpsCanEdit(a, v) {
+		s.writeErr(w, r, http.StatusForbidden, "forbidden", "an administrator of a linked panel is required")
+		return
+	}
+	if err := s.Store.RevokeSecAgent(r.Context(), v.ID); err != nil {
+		s.writeErr(w, r, http.StatusNotFound, "not_found", "no agent")
+		return
+	}
+	s.audit(r, a, "", "security.agent.revoke", "vps", v.ID, nil)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type secCategoryOut struct {
+	Category    string          `json:"category"`
+	State       string          `json:"state"` // agent_required | waiting | ok | stale | not_installed | stopped | permission_denied | unsupported | error
+	Status      string          `json:"status,omitempty"`
+	ObservedAt  *time.Time      `json:"observed_at"`
+	ReceivedAt  *time.Time      `json:"received_at"`
+	ClockSkewMS int64           `json:"clock_skew_ms"`
+	Data        json.RawMessage `json:"data"`
+	Agent       *secAgentOut    `json:"agent"`
+}
+
+// secCategory serves the latest snapshot of one category. A server with no agent says so; a snapshot
+// that stopped refreshing is "stale" and keeps its own time, never presented as current.
+func (s *Server) secCategory(category string) authedHandler {
+	return func(w http.ResponseWriter, r *http.Request, a auth.Actor, _ store.Session) {
+		v, ok := s.visibleVPS(w, r, a)
+		if !ok {
+			return
+		}
+		out := secCategoryOut{Category: category, State: "agent_required", Data: json.RawMessage("null")}
+		if ag, err := s.Store.SecAgentOf(r.Context(), v.ID); err == nil {
+			ao := s.agentOut(ag)
+			out.Agent, out.State = &ao, "waiting"
+		} else if !errors.Is(err, store.ErrNotFound) {
+			s.writeErr(w, r, http.StatusInternalServerError, "internal", "internal error")
+			return
+		}
+		states, err := s.Store.SnapshotStates(r.Context(), a.Scope(), v.ID)
+		if err != nil {
+			s.writeErr(w, r, http.StatusInternalServerError, "internal", "internal error")
+			return
+		}
+		for _, st := range states {
+			if st.Category != category {
+				continue
+			}
+			obs, rec := st.ObservedAt, st.ReceivedAt
+			out.ObservedAt, out.ReceivedAt, out.ClockSkewMS, out.Status, out.Data = &obs, &rec, st.ClockSkewMS, st.Status, st.Data
+			out.State = st.Status
+			if s.Now().Sub(rec) > secproto.StaleAfter {
+				out.State = "stale"
+			}
+		}
+		writeJSON(w, http.StatusOK, out)
+	}
+}
+
+func (s *Server) secEvents(w http.ResponseWriter, r *http.Request, a auth.Actor, _ store.Session) {
+	v, ok := s.visibleVPS(w, r, a)
+	if !ok {
+		return
+	}
+	q := r.URL.Query()
+	limit := 50
+	if x := q.Get("limit"); x != "" {
+		n, err := strconv.Atoi(x)
+		if err != nil || n < 1 || n > 200 {
+			s.writeErr(w, r, http.StatusBadRequest, "invalid_limit", "limit must be 1 to 200")
+			return
+		}
+		limit = n
+	}
+	cat := q.Get("category")
+	if cat != "" && !secproto.ValidCategory(cat) {
+		s.writeErr(w, r, http.StatusBadRequest, "invalid_category", "unknown category")
+		return
+	}
+	var before *time.Time
+	if x := q.Get("before_ts"); x != "" {
+		t, err := time.Parse(time.RFC3339Nano, x)
+		if err != nil {
+			s.writeErr(w, r, http.StatusBadRequest, "invalid_cursor", "before_ts must be RFC 3339")
+			return
+		}
+		before = &t
+	}
+	evs, err := s.Store.SecEvents(r.Context(), a.Scope(), v.ID, cat, before, q.Get("before_id"), limit+1)
+	if err != nil {
+		s.writeErr(w, r, http.StatusInternalServerError, "internal", "internal error")
+		return
+	}
+	more := len(evs) > limit
+	if more {
+		evs = evs[:limit]
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": evs, "more": more})
+}
