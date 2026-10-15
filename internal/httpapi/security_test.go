@@ -124,3 +124,80 @@ func TestSecurityVPSScopeRolesAndLinks(t *testing.T) {
 		t.Errorf("an archived name can be reused: %d", st)
 	}
 }
+
+func TestServerCardsCarryTheFail2banCountWithItsFreshness(t *testing.T) {
+	w := newAgentWorld(t)
+	none := mkVPS(t, w, "NoAgent", "203.0.113.1", "")
+	live := mkVPS(t, w, "Live", "203.0.113.2", "")
+	old := mkVPS(t, w, "Old", "203.0.113.3", "")
+	denied := mkVPS(t, w, "Denied", "203.0.113.4", "")
+	for _, id := range []string{live, old, denied} {
+		if st, _ := w.owner.do("POST", "/api/v1/security/vps/"+id+"/agent", nil); st != 201 {
+			t.Fatal(st)
+		}
+	}
+	snap := func(vps, status, data string, receivedAgo string) {
+		if _, err := w.h.st.Pool().Exec(ctx, `INSERT INTO security_snapshot_state (vps_id, category, status, source_hash, observed_at, received_at, data)
+			VALUES ($1,'fail2ban',$2,'h', now() - $4::interval, now() - $4::interval, $3::jsonb)`, vps, status, data, receivedAgo); err != nil {
+			t.Fatal(err)
+		}
+	}
+	two := `{"jails":[{"name":"sshd","currently_banned":2,"total_banned":40,"banned_ips":["1.1.1.1","2.2.2.2"]},{"name":"nginx","currently_banned":1,"total_banned":5,"banned_ips":["3.3.3.3"]}]}`
+	snap(live, "ok", two, "10 seconds")
+	snap(old, "ok", two, "1 hour")
+	snap(denied, "permission_denied", `{}`, "10 seconds")
+	if _, err := w.h.st.Pool().Exec(ctx, `UPDATE security_agents SET last_seen = now() WHERE vps_id = $1`, live); err != nil {
+		t.Fatal(err)
+	}
+
+	_, b := w.owner.get("/api/v1/security/vps")
+	var list struct {
+		Items []struct {
+			ID      string `json:"id"`
+			Summary struct {
+				Agent    string `json:"agent"`
+				Fail2ban struct {
+					State       string `json:"state"`
+					Banned      int    `json:"banned"`
+					TotalBanned int    `json:"total_banned"`
+					Jails       int    `json:"jails"`
+				} `json:"fail2ban"`
+			} `json:"summary"`
+		} `json:"items"`
+	}
+	list = parse[struct {
+		Items []struct {
+			ID      string `json:"id"`
+			Summary struct {
+				Agent    string `json:"agent"`
+				Fail2ban struct {
+					State       string `json:"state"`
+					Banned      int    `json:"banned"`
+					TotalBanned int    `json:"total_banned"`
+					Jails       int    `json:"jails"`
+				} `json:"fail2ban"`
+			} `json:"summary"`
+		} `json:"items"`
+	}](t, b)
+	by := map[string]int{}
+	for i, it := range list.Items {
+		by[it.ID] = i
+	}
+	get := func(id string) (string, string, int, int, int) {
+		s := list.Items[by[id]].Summary
+		return s.Agent, s.Fail2ban.State, s.Fail2ban.Banned, s.Fail2ban.TotalBanned, s.Fail2ban.Jails
+	}
+	if a, st, n, tot, j := get(none); a != "none" || st != "agent_required" || n != 0 {
+		t.Errorf("a server with no agent shows no number: %s %s %d %d %d", a, st, n, tot, j)
+	}
+	if a, st, n, tot, j := get(live); a != "online" || st != "ok" || n != 3 || tot != 45 || j != 2 {
+		t.Errorf("live: %s %s %d %d %d", a, st, n, tot, j)
+	}
+	// Old data keeps its last known number, but its state says "stale" so the screen shows it as old.
+	if a, st, n, _, _ := get(old); a != "waiting" && a != "offline" || st != "stale" || n != 3 {
+		t.Errorf("old data is called stale: %s %s %d", a, st, n)
+	}
+	if _, st, n, _, _ := get(denied); st != "permission_denied" || n != 0 {
+		t.Errorf("a failed read shows no count: %s %d", st, n)
+	}
+}

@@ -420,3 +420,56 @@ func (s *Store) SecEvents(ctx context.Context, sc Scope, vpsID, category string,
 	}
 	return out, rows.Err()
 }
+
+// SecSummary is what a server's card shows at a glance: whether it has an agent, and the last known state of
+// Fail2ban. It carries the times so the caller can call old data old.
+type SecSummary struct {
+	AgentStatus   string // "" when the server has no agent
+	AgentLastSeen *time.Time
+	F2BStatus     string // "" when nothing was received yet
+	F2BReceivedAt *time.Time
+	F2BObservedAt *time.Time
+	Jails         int
+	Banned        int // addresses banned right now, across jails
+	TotalBanned   int // bans made since Fail2ban started counting
+}
+
+// SecuritySummaries returns one summary per server the scope can see.
+func (s *Store) SecuritySummaries(ctx context.Context, sc Scope) (map[string]SecSummary, error) {
+	pred, args := vpsVisible(sc, 0)
+	rows, err := s.pool.Query(ctx, `SELECT v.id, ag.status, ag.last_seen, st.status, st.received_at, st.observed_at, st.data
+		FROM security_vps v
+		LEFT JOIN security_agents ag ON ag.vps_id = v.id AND ag.status <> 'revoked'
+		LEFT JOIN security_snapshot_state st ON st.vps_id = v.id AND st.category = 'fail2ban'
+		WHERE `+pred, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]SecSummary{}
+	for rows.Next() {
+		var id uuid.UUID
+		var agStatus, stStatus *string
+		var sum SecSummary
+		var data []byte
+		if err := rows.Scan(&id, &agStatus, &sum.AgentLastSeen, &stStatus, &sum.F2BReceivedAt, &sum.F2BObservedAt, &data); err != nil {
+			return nil, err
+		}
+		if agStatus != nil {
+			sum.AgentStatus = *agStatus
+		}
+		if stStatus != nil {
+			sum.F2BStatus = *stStatus
+			var f secproto.Fail2ban
+			if json.Unmarshal(data, &f) == nil {
+				sum.Jails = len(f.Jails)
+				for _, j := range f.Jails {
+					sum.Banned += max(j.CurrentlyBanned, len(j.BannedIPs))
+					sum.TotalBanned += j.TotalBanned
+				}
+			}
+		}
+		out[id.String()] = sum
+	}
+	return out, rows.Err()
+}
