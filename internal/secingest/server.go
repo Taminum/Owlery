@@ -18,6 +18,7 @@ import (
 	"github.com/coder/websocket"
 
 	"github.com/Taminum/RemnaScope/internal/auth"
+	"github.com/Taminum/RemnaScope/internal/secops"
 	"github.com/Taminum/RemnaScope/internal/secproto"
 	"github.com/Taminum/RemnaScope/internal/store"
 )
@@ -32,6 +33,8 @@ type Server struct {
 	// IntervalSeconds is what the agent is told to use between reports.
 	IntervalSeconds int
 	Now             func() time.Time
+	// Ops carries commands to agents that hold a connection and is where an agent's answer comes back (nil = no commands).
+	Ops *secops.Hub
 }
 
 var dummy = sha256.Sum256([]byte("remnascope-no-such-security-agent"))
@@ -122,7 +125,7 @@ func closeWith(c *websocket.Conn, code int, reason string) {
 	_ = c.Close(websocket.StatusCode(code), reason)
 }
 
-var knownCaps = map[string]bool{"fail2ban_read": true, "socket_read": true, "firewall_read": true}
+var knownCaps = map[string]bool{"fail2ban_read": true, "socket_read": true, "firewall_read": true, secproto.CapFail2banBan: true}
 
 func (s *Server) session(ctx context.Context, c *websocket.Conn, agent store.SecAgent) {
 	hctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -157,6 +160,9 @@ func (s *Server) session(ctx context.Context, c *websocket.Conn, agent store.Sec
 	if send(ctx, c, secproto.Welcome{Type: "welcome", AckSeq: ack, IntervalSeconds: interval}) != nil {
 		return
 	}
+	if s.Ops != nil {
+		defer s.Ops.Register(agent.ID, func(ctx context.Context, v any) error { return send(ctx, c, v) })()
+	}
 	s.log().Info("security agent connected", "agent", agent.ID, "vps", agent.VPSID, "ack_seq", ack)
 
 	for {
@@ -187,6 +193,8 @@ func (s *Server) session(ctx context.Context, c *websocket.Conn, agent store.Sec
 			if !s.snapshot(ctx, c, agent, data) {
 				return
 			}
+		case "command_result":
+			s.commandResult(ctx, agent, data)
 		default:
 			_ = send(ctx, c, secproto.Error{Type: "error", Code: "bad_message"})
 			closeWith(c, secproto.CloseProtocol, "unknown message")
@@ -226,4 +234,25 @@ func (s *Server) snapshot(ctx context.Context, c *websocket.Conn, agent store.Se
 		return false
 	}
 	return send(ctx, c, secproto.Ack{Type: "ack", AckSeq: res.AckSeq, Stored: res.Stored}) == nil
+}
+
+// commandResult stores an agent's answer to a command. A bad, late or foreign answer is dropped: it can
+// only ever settle a command that is still pending and was sent to this very agent.
+func (s *Server) commandResult(ctx context.Context, agent store.SecAgent, data []byte) {
+	var r secproto.CommandResult
+	if len(data) > 4096 || json.Unmarshal(data, &r) != nil || len(r.ID) > 64 || len(r.Code) > 64 {
+		return
+	}
+	cmd, err := s.Store.CompleteCommand(ctx, agent.ID, r, s.now().UTC())
+	if err != nil {
+		return
+	}
+	// The outcome joins the audit trail next to the intent that was recorded when it was requested.
+	meta := map[string]any{"command_id": cmd.ID, "action": cmd.Action, "jail": cmd.Jail, "ip": cmd.IP, "state": cmd.State, "verified": cmd.Verified}
+	if cmd.ResultCode != nil {
+		meta["code"] = *cmd.ResultCode
+	}
+	if err := s.Store.WriteAudit(ctx, store.AuditEntry{ActorName: "security agent", Action: "security.fail2ban.command_result", ObjectType: "vps", ObjectID: cmd.VPSID, Metadata: meta}); err != nil {
+		s.log().Error("audit write failed", "command", cmd.ID)
+	}
 }

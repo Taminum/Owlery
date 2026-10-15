@@ -67,6 +67,10 @@ func (w *Worker) Run(ctx context.Context) {
 
 // Round checks everything that is due, a few targets at a time.
 func (w *Worker) Round(ctx context.Context) {
+	// Commands that were not answered in time are called unknown, and ones the state read since has settled are closed.
+	if _, err := w.Store.SettleCommands(ctx, w.now()); err != nil {
+		w.Log.Error("settling commands", "err", err)
+	}
 	if err := w.Store.SyncPortCandidates(ctx); err != nil {
 		w.Log.Error("syncing port candidates", "err", err)
 	}
