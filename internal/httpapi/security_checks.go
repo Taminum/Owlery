@@ -110,6 +110,21 @@ func (s *Server) addPublicPort(w http.ResponseWriter, r *http.Request, a auth.Ac
 	writeJSON(w, http.StatusCreated, e)
 }
 
+// acceptOpenPorts marks what answers now as expected, for a server whose open ports are all known.
+func (s *Server) acceptOpenPorts(w http.ResponseWriter, r *http.Request, a auth.Actor, _ store.Session) {
+	v, ok := s.editableVPS(w, r, a)
+	if !ok {
+		return
+	}
+	n, err := s.Store.AcceptOpenPorts(r.Context(), a.Scope(), v.ID)
+	if err != nil {
+		s.checkStoreErr(w, r, err)
+		return
+	}
+	s.audit(r, a, "", "security.port_endpoint.accept_open", "vps", v.ID, map[string]any{"changed": n})
+	writeJSON(w, http.StatusOK, map[string]any{"changed": n})
+}
+
 func (s *Server) patchPublicPort(w http.ResponseWriter, r *http.Request, a auth.Actor, _ store.Session) {
 	v, ok := s.editableVPS(w, r, a)
 	if !ok {

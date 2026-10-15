@@ -87,6 +87,31 @@ function AddPort({ vpsId, onDone }: { vpsId: string; onDone: () => void }) {
   )
 }
 
+/** One step that says "what is open now is as it should be": every answering port becomes expected. */
+function AcceptOpen({ vpsId, count, onDone }: { vpsId: string; count: number; onDone: () => void }) {
+  const [sure, setSure] = useState(false)
+  const [busy, setBusy] = useState(false)
+  if (count === 0) return null
+  async function go() {
+    setBusy(true)
+    try {
+      await api.post(`/api/v1/security/vps/${vpsId}/public-ports/accept-open`)
+      onDone()
+    } finally {
+      setBusy(false)
+      setSure(false)
+    }
+  }
+  if (!sure) return <GhostButton onClick={() => setSure(true)}>{t('sec.ext.acceptOpen', { n: count })}</GhostButton>
+  return (
+    <span className="inline-flex items-center gap-2 text-[13px]">
+      {t('sec.ext.acceptSure', { n: count })}
+      <PrimaryButton onClick={() => void go()} disabled={busy}>{t('sec.ext.acceptYes')}</PrimaryButton>
+      <GhostButton onClick={() => setSure(false)} disabled={busy}>{t('common.cancel')}</GhostButton>
+    </span>
+  )
+}
+
 export function PublicPorts({ vpsId, canEdit }: { vpsId: string; canEdit: boolean }) {
   const { data, error, reload } = useLoad((s) => api.get<PublicPortsResponse>(`/api/v1/security/vps/${vpsId}/public-ports`, s), [vpsId], 30_000)
   const [err, setErr] = useState('')
@@ -103,7 +128,12 @@ export function PublicPorts({ vpsId, canEdit }: { vpsId: string; canEdit: boolea
   if (!data) return null
   return (
     <Card title={t('sec.ext.title')} note={t('sec.ext.coverage', { n: data.interval_minutes })}
-      right={canEdit ? <RunNow vpsId={vpsId} kind="ports" onDone={reload} /> : undefined}>
+      right={canEdit ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <AcceptOpen vpsId={vpsId} count={data.items.filter((p) => p.enabled && !p.expected && p.last_result === 'reachable').length} onDone={reload} />
+          <RunNow vpsId={vpsId} kind="ports" onDone={reload} />
+        </div>
+      ) : undefined}>
       <VantageNote items={data.items} />
       {err && <p role="alert" className="mb-2 text-[13px] text-red">{err}</p>}
       {data.items.length === 0 && <p className="text-[13px] text-muted">{t('sec.ext.none')}</p>}
