@@ -89,3 +89,9 @@ run's coverage. See DNS_MAP.md.
 - `GET /api/v1/awg/hosts`: the AmneziaWG hosts, with `online`, `container_admin` (the host opted in) and the containers each reported.
 - `POST /api/v1/awg/hosts/{id}/containers` `{container, port, subnet}`: creates one container in the Amnezia layout. `container` is `amnezia-awg` or `amnezia-awg` plus up to two digits, `port` 1024 to 65535, `subnet` a /24 in 10.0.0.0/8. Answers 409 `container_admin_off` when the host did not opt in.
 - `POST /api/v1/awg/instances/{id}/remove` `{confirm}`: removes the container and every device in it. `confirm` must equal the container's name.
+
+## Notifications (owner only)
+
+- `GET /api/v1/notify/channels`, `POST /api/v1/notify/channels` `{name, token, chat_id, on_alerts, digest_hour, digest_tz}`, `PATCH /api/v1/notify/channels/{id}`, `DELETE ...`, `POST .../{id}/test`: Telegram channels. A channel is stored only after a message actually reached the chat; the bot token and chat id are sealed with the master key and are never returned (only a hint of the chat id and the last result).
+- `POST /api/v1/notify/telegram/discover` `{token}`: confirms a bot token and lists the chats that wrote to the bot. The token is not kept.
+- What goes out: an alert when it opens and when it closes (what was already open when the channel was added is not announced; more than eight at once become one summary), and a daily digest at the chosen local hour. Failures are stored as fixed words (`network`, `rejected`, `bad_answer`), never as Telegram's text.
