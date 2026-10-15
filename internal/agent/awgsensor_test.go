@@ -82,3 +82,27 @@ func TestSensorsReportThroughTheAgentSocket(t *testing.T) {
 		t.Fatal("no report arrived through the socket")
 	}
 }
+
+func TestSensorAcceptsContainersAddedToTheHostConfigLater(t *testing.T) {
+	dir := t.TempDir()
+	conf := filepath.Join(dir, "awg-manage.conf")
+	if err := os.WriteFile(conf, []byte("MANAGED=\"c1\"\nSENSE=\"c1\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := &AWGSensorSource{ConfPath: conf}
+	got := make(chan ingestproto.AWGFlows, 2)
+	s.Emit = func(f ingestproto.AWGFlows) { got <- f }
+	feed := func(c string) {
+		s.consume(strings.NewReader("W\t" + c + "\t1\t2\t0\t0\nF\t10.8.1.2\t6\t1.1.1.1\t443\t10\t20\texample.org\tsni\t1\nE\n"))
+	}
+	feed("c2")
+	select {
+	case f := <-got:
+		t.Fatalf("a container that is not in the config was heard: %+v", f)
+	default:
+	}
+	feed("c1")
+	if f := <-got; f.Container != "c1" {
+		t.Fatalf("%+v", f)
+	}
+}
