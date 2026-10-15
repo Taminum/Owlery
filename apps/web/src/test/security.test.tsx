@@ -65,7 +65,7 @@ describe('Security page', () => {
       if (r.path === '/api/v1/security/vps/v1/agent') return { status: 200, body: { agent } }
       if (r.path === '/api/v1/security/vps/v1/fail2ban') return { status: 200, body: f2b }
     } })
-    const view = renderSec('/security/v1')
+    const view = renderSec('/security/v1?tab=fail2ban')
     expect(await screen.findByText('Агент не создан. Без него Fail2ban, порты и firewall не видны.')).toBeInTheDocument()
     expect(await screen.findByText('нужен агент')).toBeInTheDocument()
     expect(screen.queryByText('данные получены')).toBeNull()
@@ -74,7 +74,7 @@ describe('Security page', () => {
     agent = { id: 'a1', status: 'active', agent_version: '0.1', hostname: 'h1', capabilities: [], last_seen: new Date().toISOString(), online: true }
     f2b = cat({ state: 'ok', status: 'ok', observed_at: '2026-10-15T12:00:00Z', received_at: '2026-10-15T12:00:00Z',
       data: { jails: [{ name: 'sshd', currently_failed: 1, total_failed: 9, currently_banned: 1, total_banned: 4, banned_ips: ['203.0.113.5'] }] } })
-    renderSec('/security/v1')
+    renderSec('/security/v1?tab=fail2ban')
     expect(await screen.findByText('sshd')).toBeInTheDocument()
     expect(screen.getByText('203.0.113.5')).toBeInTheDocument()
     expect(screen.getByText('на связи')).toBeInTheDocument()
@@ -87,7 +87,7 @@ describe('Security page', () => {
       if (r.path === '/api/v1/security/vps/v1/agent') return { status: 200, body: { agent: null } }
       if (r.path === '/api/v1/security/vps/v1/fail2ban') return { status: 200, body: { category: 'fail2ban', state: 'permission_denied', status: 'permission_denied', observed_at: '2026-10-15T12:00:00Z', received_at: '2026-10-15T12:00:00Z', clock_skew_ms: 0, data: {}, agent: null } }
     } })
-    renderSec('/security/v1')
+    renderSec('/security/v1?tab=fail2ban')
     expect(await screen.findByText('нет прав на чтение')).toBeInTheDocument()
     expect(screen.queryByRole('table')).toBeNull()
   })
@@ -101,7 +101,7 @@ describe('Security page', () => {
       if (r.path === '/api/v1/security/vps/v1/public-ports' && r.method === 'GET') return { status: 200, body: { items: [port({}), port({ id: 'e2', port: 8443, expected: false, last_result: 'timeout' }), port({ id: 'e3', port: 22, last_result: null, last_checked_at: null, last_ip: null })], vantage: { id: 'api_server', independent: false }, interval_minutes: 60, coverage: { kind: 'known_endpoints', discovery: 'off' } } }
       if (r.path === '/api/v1/security/vps/v1/checks/ports/run') return { status: 202, body: { requested: 3 } }
     } })
-    renderSec('/security/v1')
+    renderSec('/security/v1?tab=fail2ban')
     await userEvent.click(await screen.findByRole('tab', { name: 'Порты' }))
     expect(await screen.findByText(/Это не независимая точка/)).toBeInTheDocument()
     expect(screen.getByText(/Остальные порты не сканируются/)).toBeInTheDocument()
@@ -121,7 +121,7 @@ describe('Security page', () => {
       if (r.path === '/api/v1/security/vps/v1/fail2ban') return { status: 200, body: { category: 'fail2ban', state: 'agent_required', observed_at: null, received_at: null, clock_skew_ms: 0, data: null, agent: null } }
       if (r.path === '/api/v1/security/vps/v1/tls') return { status: 200, body: { items: [ep({}), ep({ id: 't2', host: 'old.example.com', last_state: 'expired', last_not_after: '2026-10-10T00:00:00Z', last_obs: { days_left: -5 } }), ep({ id: 't3', host: 'new.example.com', last_state: null, last_checked_at: null, last_not_after: null, last_obs: {} })], vantage: { id: 'api_server', independent: false }, interval_hours: 24 } }
     } })
-    renderSec('/security/v1')
+    renderSec('/security/v1?tab=fail2ban')
     await userEvent.click(await screen.findByRole('tab', { name: 'TLS-сертификаты' }))
     expect(await screen.findByText(/через 47 дн./)).toBeInTheDocument()
     expect(screen.getByText(/истёк 5 дн. назад/)).toBeInTheDocument()
@@ -161,7 +161,7 @@ describe('Security page', () => {
       if (r.path === '/api/v1/security/vps/v1/agent' && r.method === 'POST') { agent = { id: 'a1', status: 'enrolling', agent_version: null, hostname: null, capabilities: [], last_seen: null, online: false }; return { status: 201, body: { agent, token: 'AGENTID.SECRETVALUE', ingest_path: '/ingest/security/v1' } } }
       if (r.path === '/api/v1/security/vps/v1/fail2ban') return { status: 200, body: { category: 'fail2ban', state: 'agent_required', observed_at: null, received_at: null, clock_skew_ms: 0, data: null, agent: null } }
     } })
-    renderSec('/security/v1')
+    renderSec('/security/v1?tab=fail2ban')
     await userEvent.click(await screen.findByRole('button', { name: 'Создать агента' }))
     expect(await screen.findByText(/echo 'AGENTID\.SECRETVALUE'/)).toBeInTheDocument()
     expect(screen.getByText(/useradd --system/)).toBeInTheDocument()
@@ -190,7 +190,7 @@ describe('Security page', () => {
         if (r.path === '/api/v1/security/vps/v1/fail2ban/unban') return { status: 202, body: { command: cmd({}) } }
         if (r.path === '/api/v1/security/commands/c1') return { status: 200, body: { command: cmd({ state: 'executed', verified: true, final: true }) } }
       })
-      renderSec('/security/v1')
+      renderSec('/security/v1?tab=fail2ban')
       await userEvent.click(await screen.findByRole('button', { name: 'Разблокировать' }))
       expect(screen.getByText(/Адрес 93\.184\.216\.9 будет разблокирован в jail sshd/)).toBeInTheDocument()
       expect(api.find('POST', '/api/v1/security/vps/v1/fail2ban/unban')).toHaveLength(0) // nothing is sent before the confirmation
@@ -211,7 +211,7 @@ describe('Security page', () => {
           return n === 1 ? { status: 409, body: { code: 'risk', message: 'x', request_id: 'r', details: { reasons: ['private_address'] } } } : { status: 202, body: { command: cmd({ action: 'ban', state: 'executed', verified: true, final: true }) } }
         }
       })
-      renderSec('/security/v1')
+      renderSec('/security/v1?tab=fail2ban')
       await userEvent.type(await screen.findByLabelText('IP'), '10.0.0.5')
       await userEvent.click(screen.getByRole('button', { name: 'Заблокировать' }))
       const dialog = await screen.findByRole('dialog')
@@ -232,7 +232,7 @@ describe('Security page', () => {
       base({ allowed: true, ready: true }, (r) => {
         if (r.path === '/api/v1/security/vps/v1/fail2ban/unban') return { status: 202, body: { command: cmd({ state: 'unknown', final: true }) } }
       })
-      renderSec('/security/v1')
+      renderSec('/security/v1?tab=fail2ban')
       await userEvent.click(await screen.findByRole('button', { name: 'Разблокировать' }))
       await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Разблокировать' }))
       expect(await screen.findByText('результат неизвестен')).toBeInTheDocument()
@@ -241,14 +241,14 @@ describe('Security page', () => {
 
     it('offers no controls to someone who may not manage, and explains why they are off when the agent cannot take a command', async () => {
       base({ allowed: false, ready: false, reason: 'not_owner' })
-      const first = renderSec('/security/v1')
+      const first = renderSec('/security/v1?tab=fail2ban')
       expect(await screen.findByText('sshd')).toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Разблокировать' })).toBeNull()
       expect(screen.queryByLabelText('IP')).toBeNull()
       first.unmount()
 
       base({ allowed: true, ready: false, reason: 'agent_offline' })
-      renderSec('/security/v1')
+      renderSec('/security/v1?tab=fail2ban')
       expect(await screen.findByText(/Агент не на связи: команда не отправляется и не ставится в очередь/)).toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Разблокировать' })).toBeDisabled()
     })
@@ -272,5 +272,33 @@ describe('Security page', () => {
       // No number is invented for a server that cannot be read.
       expect(screen.queryByText('заблокировано сейчас: 0')).toBeNull()
     })
+  })
+})
+
+describe('Security overview', () => {
+  const ov = (over: object) => ({
+    health: 'unknown', reasons: [], agent: 'none',
+    categories: { fail2ban: { state: 'agent_required', observed_at: null }, sockets: { state: 'agent_required', observed_at: null }, firewall: { state: 'agent_required', observed_at: null } },
+    checks: { ports_total: 0, ports_unexpected: 0, ports_down: 0, tls_total: 0, tls_problems: 0, tls_nearest_end: null, last_checked_at: null },
+    last_event: null, events_24h: 0, ...over,
+  })
+  const run = (body: object) => mockApi({ me: owner, handler: (r: Req) => {
+    if (r.path === '/api/v1/security/vps/v1') return { status: 200, body: vps() }
+    if (r.path === '/api/v1/security/vps/v1/agent') return { status: 200, body: { agent: null } }
+    if (r.path === '/api/v1/security/vps/v1/overview') return { status: 200, body }
+  } })
+
+  it('says there is nothing to judge by instead of calling a server with no data healthy', async () => {
+    run(ov({}))
+    renderSec('/security/v1')
+    expect((await screen.findAllByText('Данных пока нет')).length).toBeGreaterThan(0)
+    expect(screen.queryByText('Всё в порядке')).toBeNull()
+  })
+
+  it('lists the reasons for attention', async () => {
+    run(ov({ health: 'attention', reasons: [{ code: 'port_unexpected' }, { code: 'tls_problem' }], checks: { ports_total: 2, ports_unexpected: 1, ports_down: 0, tls_total: 1, tls_problems: 1, tls_nearest_end: null, last_checked_at: '2026-10-15T12:00:00Z' } }))
+    renderSec('/security/v1')
+    expect(await screen.findByText('Порт отвечает снаружи, но не отмечен как ожидаемый.')).toBeInTheDocument()
+    expect(screen.getByText('Есть сертификат с проблемой или скорым окончанием срока.')).toBeInTheDocument()
   })
 })
