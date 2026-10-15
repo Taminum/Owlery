@@ -108,7 +108,11 @@ the state comparison.
 ## Limits of this version
 
 - No journal tailing yet: Fail2ban history comes from comparing states every 30 seconds, so a ban and an
-  unban between two reads is missed.
+  unban between two reads is not *named*. It is counted: Fail2ban's own ban counter is compared between reads,
+  and when it grew by more than the new addresses that are visible, the journal records
+  `fail2ban.bans_unobserved` with the number. Naming them needs read access to Fail2ban's log, which is a
+  privilege decision for the host owner (the log is readable by root and group `adm`), not something this
+  agent asks for on its own.
 - Firewall rules are stored as canonical text (counters, handles, timestamps and Fail2ban's bans removed),
   not as a structured model; the change view is "the rules changed", without a line diff.
 - Listening sockets are the host's own. Containers with their own network namespace may not appear.
