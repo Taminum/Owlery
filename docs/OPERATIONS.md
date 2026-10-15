@@ -61,8 +61,17 @@ panel; all other writes 60/min per account.
   server is linked to; a server linked to none has no panel and its alerts are shown to the owner only, when no
   panel filter is chosen. The alerts page is the only channel; there is no push notification.
 - **Backups.** The security tables are in the same database as everything else, so `backup.sh` covers them.
-- **Rollback.** Migrations 0021 to 0024 only add tables and one column. An older API ignores them; nothing
-  existing is changed, so going back to a previous release needs no database step.
+- **Checkers.** A host whose agent runs with `-probe` is asked to make the external checks of the *other*
+  servers, so that they are seen from outside. It is a decision per host (see SECURITY_AGENT.md); with none,
+  or when none qualifies, the RemnaScope server checks and the result is marked not independent.
+- **Discovery.** TLS endpoints are found on their own where a certificate is presented. The port scan is off
+  per server until someone turns it on; it tries a fixed list of about sixty ports on registered IP addresses
+  once a day.
+- **Rollback.** Migrations 0021 to 0028 only add tables and columns (and widen one `CHECK` on
+  `security_port_endpoints.source`). An older API ignores them; nothing existing is changed, so going back to a
+  previous release needs no database step.
+- **More.** [SECURITY_THREAT_MODEL.md](SECURITY_THREAT_MODEL.md) says what the module defends against and what
+  it does not; [SECURITY_DNS_REPORT.md](SECURITY_DNS_REPORT.md) is the acceptance report.
 
 ## DNS Map
 - **Resolvers.** Studies ask 1.1.1.1 and 8.8.8.8 over UDP/TCP port 53, and the zone's authoritative servers when
