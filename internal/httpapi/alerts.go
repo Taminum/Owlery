@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Taminum/RemnaScope/internal/auth"
@@ -48,8 +49,10 @@ func (s *Server) listAlerts(w http.ResponseWriter, r *http.Request, a auth.Actor
 		Alerts []alertOut `json:"alerts"`
 		Open   int        `json:"open"`
 	}{Alerts: []alertOut{}}
-	if len(ids) > 0 {
-		list, err := s.Store.ListAlerts(r.Context(), ids, qs.Get("state") != "all", 200)
+	// Alerts of servers that belong to no panel are the owner's, and are shown when no panel is picked.
+	withUnscoped := a.IsOwner && len(req) == 0
+	if len(ids) > 0 || withUnscoped {
+		list, err := s.Store.ListAlerts(r.Context(), ids, withUnscoped, qs.Get("state") != "all", 200)
 		if err != nil {
 			s.writeErr(w, r, http.StatusInternalServerError, "internal", "internal error")
 			return
@@ -58,7 +61,14 @@ func (s *Server) listAlerts(w http.ResponseWriter, r *http.Request, a auth.Actor
 			if x.ResolvedAt == nil {
 				out.Open++
 			}
-			out.Alerts = append(out.Alerts, alertOut{ID: x.ID, PanelID: x.PanelID, PanelName: names[x.PanelID], Kind: x.Kind, Label: x.Label, Detail: x.Detail,
+			name := names[x.PanelID]
+			if x.PanelID == "" {
+				name = "Безопасность"
+				if strings.HasPrefix(x.Kind, "dns_") {
+					name = "Сетевая разведка"
+				}
+			}
+			out.Alerts = append(out.Alerts, alertOut{ID: x.ID, PanelID: x.PanelID, PanelName: name, Kind: x.Kind, Label: x.Label, Detail: x.Detail,
 				OpenedAt: x.OpenedAt.UTC(), LastSeenAt: x.LastSeenAt.UTC(), ResolvedAt: x.ResolvedAt})
 		}
 	}
