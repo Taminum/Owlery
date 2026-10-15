@@ -2,9 +2,9 @@
 // TLS endpoint presents. It dials only public addresses, checks the address actually connected to, sends
 // no data on a TCP probe, and never turns certificate verification off for its verdict.
 //
-// The vantage is the RemnaScope server itself. When the API runs on the server being checked, that is not
-// an independent point of view, and every result says so.
-package secchecks
+// The same code runs in two places: on the RemnaScope server, and on a security agent that was set up as a
+// checker, so that a target can be seen from a machine that is not the target.
+package secprobe
 
 import (
 	"context"
@@ -25,19 +25,16 @@ import (
 )
 
 const (
-	VantageID   = "api_server"
-	Independent = false // set to true only once a checker outside the checked servers exists
-
 	dialTimeout = 5 * time.Second
 	tlsTimeout  = 10 * time.Second
 )
 
 var errBlocked = errors.New("secchecks: address not allowed")
 
-// Tests replace these; nothing else should.
+// AllowAddr and Lookup are replaced by tests; nothing else should touch them.
 var (
-	allowAddr = safehttp.PublicAddr
-	lookup    = func(ctx context.Context, host string) ([]netip.Addr, error) {
+	AllowAddr = safehttp.PublicAddr
+	Lookup    = func(ctx context.Context, host string) ([]netip.Addr, error) {
 		return net.DefaultResolver.LookupNetIP(ctx, "ip", host)
 	}
 )
@@ -47,12 +44,12 @@ var (
 func Resolve(ctx context.Context, host string) (addrs []netip.Addr, resolved []string, err error) {
 	if a, perr := netip.ParseAddr(host); perr == nil {
 		a = a.Unmap()
-		if !allowAddr(a) {
+		if !AllowAddr(a) {
 			return nil, nil, errBlocked
 		}
 		return []netip.Addr{a}, []string{a.String()}, nil
 	}
-	ips, err := lookup(ctx, host)
+	ips, err := Lookup(ctx, host)
 	if err != nil || len(ips) == 0 {
 		return nil, nil, errors.New("dns")
 	}
@@ -60,7 +57,7 @@ func Resolve(ctx context.Context, host string) (addrs []netip.Addr, resolved []s
 	for _, ip := range ips {
 		ip = ip.Unmap()
 		resolved = append(resolved, ip.String())
-		if !allowAddr(ip) {
+		if !AllowAddr(ip) {
 			continue
 		}
 		if ip.Is4() {
@@ -79,7 +76,7 @@ func Resolve(ctx context.Context, host string) (addrs []netip.Addr, resolved []s
 func dialer() *net.Dialer {
 	return &net.Dialer{Timeout: dialTimeout, Control: func(_, address string, _ syscall.RawConn) error {
 		ap, err := netip.ParseAddrPort(address)
-		if err != nil || !allowAddr(ap.Addr().Unmap()) {
+		if err != nil || !AllowAddr(ap.Addr().Unmap()) {
 			return errBlocked
 		}
 		return nil

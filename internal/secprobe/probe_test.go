@@ -1,4 +1,4 @@
-package secchecks
+package secprobe
 
 import (
 	"context"
@@ -20,9 +20,9 @@ import (
 // allowLoopback lets the checker dial the test servers, then puts the real rule back.
 func allowLoopback(t *testing.T) {
 	t.Helper()
-	old := allowAddr
-	allowAddr = func(a netip.Addr) bool { return a.IsLoopback() }
-	t.Cleanup(func() { allowAddr = old })
+	old := AllowAddr
+	AllowAddr = func(a netip.Addr) bool { return a.IsLoopback() }
+	t.Cleanup(func() { AllowAddr = old })
 }
 
 func listen(t *testing.T) (net.Listener, int) {
@@ -69,20 +69,20 @@ func TestTCPReachableRefusedAndBlocked(t *testing.T) {
 }
 
 func TestResolveKeepsOnlyPublicAddressesAndPrefersIPv4(t *testing.T) {
-	old := lookup
-	t.Cleanup(func() { lookup = old })
-	lookup = func(context.Context, string) ([]netip.Addr, error) {
+	old := Lookup
+	t.Cleanup(func() { Lookup = old })
+	Lookup = func(context.Context, string) ([]netip.Addr, error) {
 		return []netip.Addr{netip.MustParseAddr("2001:db8::1"), netip.MustParseAddr("10.0.0.5"), netip.MustParseAddr("93.184.216.34")}, nil
 	}
-	oldAllow := allowAddr
-	t.Cleanup(func() { allowAddr = oldAllow })
-	allowAddr = func(a netip.Addr) bool { return !a.IsPrivate() }
+	oldAllow := AllowAddr
+	t.Cleanup(func() { AllowAddr = oldAllow })
+	AllowAddr = func(a netip.Addr) bool { return !a.IsPrivate() }
 	addrs, resolved, err := Resolve(context.Background(), "example.test")
 	if err != nil || len(addrs) != 2 || addrs[0].String() != "93.184.216.34" || len(resolved) != 3 {
 		t.Fatalf("%v %v %v", addrs, resolved, err)
 	}
 	// A name that points only inward is blocked, and the answer is still recorded.
-	lookup = func(context.Context, string) ([]netip.Addr, error) {
+	Lookup = func(context.Context, string) ([]netip.Addr, error) {
 		return []netip.Addr{netip.MustParseAddr("10.1.1.1")}, nil
 	}
 	if _, res, err := Resolve(context.Background(), "inner.test"); err == nil || len(res) != 1 {
