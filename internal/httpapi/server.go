@@ -28,6 +28,7 @@ import (
 	"github.com/Taminum/RemnaScope/internal/netintel"
 	"github.com/Taminum/RemnaScope/internal/remnawave"
 	"github.com/Taminum/RemnaScope/internal/safehttp"
+	"github.com/Taminum/RemnaScope/internal/secproto"
 	"github.com/Taminum/RemnaScope/internal/secrets"
 	"github.com/Taminum/RemnaScope/internal/store"
 	"github.com/Taminum/RemnaScope/internal/syncer"
@@ -66,6 +67,7 @@ type Server struct {
 	Probe        ProbeFactory
 	Sync         *syncer.Syncer
 	Ingest       http.Handler // the agents' WebSocket endpoint; authenticates by agent credential, not by session
+	SecIngest    http.Handler // the security agents' endpoint, with its own credentials
 	Limits       Limits
 	Live         *live.Hub // present-moment router snapshots (nil = none)
 	Gemini       *gemini.Client
@@ -141,6 +143,10 @@ func (s *Server) Handler() http.Handler {
 
 	if s.Ingest != nil {
 		mux.Handle(ingestproto.Path, s.Ingest)
+	}
+
+	if s.SecIngest != nil {
+		mux.Handle(secproto.Path, s.SecIngest)
 	}
 
 	mux.HandleFunc("POST /api/v1/auth/login", s.login)
@@ -223,6 +229,13 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("DELETE /api/v1/security/vps/{id}", s.session(s.archiveVPS))
 	mux.Handle("POST /api/v1/security/vps/{id}/links", s.session(s.addVPSLink))
 	mux.Handle("DELETE /api/v1/security/vps/{id}/links/{link}", s.session(s.removeVPSLink))
+	mux.Handle("GET /api/v1/security/vps/{id}/agent", s.session(s.getSecAgent))
+	mux.Handle("POST /api/v1/security/vps/{id}/agent", s.session(s.createSecAgent))
+	mux.Handle("DELETE /api/v1/security/vps/{id}/agent", s.session(s.revokeSecAgent))
+	mux.Handle("GET /api/v1/security/vps/{id}/fail2ban", s.session(s.secCategory(secproto.CatFail2ban)))
+	mux.Handle("GET /api/v1/security/vps/{id}/ports", s.session(s.secCategory(secproto.CatSockets)))
+	mux.Handle("GET /api/v1/security/vps/{id}/firewall", s.session(s.secCategory(secproto.CatFirewall)))
+	mux.Handle("GET /api/v1/security/vps/{id}/events", s.session(s.secEvents))
 
 	mux.Handle("GET /api/v1/accounts", s.session(s.listAccounts))
 	mux.Handle("POST /api/v1/accounts", s.session(s.createAccount))
