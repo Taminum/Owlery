@@ -266,11 +266,12 @@ export interface SecCategory<T> {
 }
 export interface SecEvent { id: string; category: string; type: string; severity: 'info' | 'warning' | 'critical'; source: string; observed_at: string; payload: Record<string, unknown> }
 
-export interface Vantage { id: string; independent: boolean }
+export interface Vantage { id: string; name?: string; independent: boolean }
 export interface PublicPort {
   id: string; host: string; port: number; expected: boolean; source: 'manual' | 'local_listener'; enabled: boolean
   last_checked_at: string | null; last_result: 'reachable' | 'refused' | 'timeout' | 'filtered_or_unknown' | 'error' | null
   last_error: string | null; last_ip: string | null; last_rtt_ms: number | null; changed_at: string | null
+  vantage: Vantage | null
 }
 export interface PublicPortsResponse { items: PublicPort[]; vantage: Vantage; interval_minutes: number; coverage: { kind: string; discovery: string } }
 export interface TLSObs {
@@ -280,6 +281,7 @@ export interface TLSObs {
 export interface TLSEndpoint {
   id: string; host: string; port: number; sni: string; enabled: boolean; last_checked_at: string | null; last_state: string | null
   last_ip: string | null; last_fingerprint: string | null; last_not_after: string | null; last_obs: TLSObs
+  vantage: Vantage | null
 }
 export interface TLSResponse { items: TLSEndpoint[]; vantage: Vantage; interval_hours: number }
 
