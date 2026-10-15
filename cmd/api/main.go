@@ -31,6 +31,7 @@ import (
 	"github.com/Taminum/RemnaScope/internal/keyrotate"
 	"github.com/Taminum/RemnaScope/internal/live"
 	"github.com/Taminum/RemnaScope/internal/netintel"
+	"github.com/Taminum/RemnaScope/internal/notify"
 	"github.com/Taminum/RemnaScope/internal/probe"
 	"github.com/Taminum/RemnaScope/internal/remnawave"
 	"github.com/Taminum/RemnaScope/internal/safehttp"
@@ -188,6 +189,7 @@ func serve(log *slog.Logger) error {
 	}
 	go alerts.Run(ctx, st, time.Minute, log)
 	go secChecker.Run(ctx)
+	go (&notify.Worker{Store: st, Ring: ring, Log: log}).Run(ctx)
 	go (&awglimits.Worker{Store: st, Ops: srv.AWGOps, Log: log}).Run(ctx)
 	go dnsWorker.Run(ctx)
 	go probe.Run(ctx, st, time.Minute, log)
