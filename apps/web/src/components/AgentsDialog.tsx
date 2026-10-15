@@ -39,6 +39,8 @@ export function AgentsDialog({ panel, tz, onClose }: { panel: PanelDTO; tz: stri
   const nodeAgents = (agents.data?.agents ?? []).filter((a) => a.kind !== 'router' && a.kind !== 'awg')
   const routerAgents = (agents.data?.agents ?? []).filter((a) => a.kind === 'router')
   const awgAgents = (agents.data?.agents ?? []).filter((a) => a.kind === 'awg')
+  // Nodes that have no live AmneziaWG agent yet.
+  const awgFree = (nodes.data?.nodes ?? []).filter((n) => !awgAgents.some((a) => a.node_id === n.id && a.status !== 'revoked'))
   const byNode = new Map(nodeAgents.map((a) => [a.node_id, a]))
 
   async function enroll(n: PanelNode, kind: 'node' | 'router' | 'awg' = 'node') {
@@ -178,12 +180,13 @@ export function AgentsDialog({ panel, tz, onClose }: { panel: PanelDTO; tz: stri
                 <GhostButton className="!h-8 !border-red/50 !px-2.5 !text-xs !text-red" disabled={busy} onClick={() => setRevoking(a)}>{t('agents.revoke')}</GhostButton>
               </div>
             ))}
-            {awgAgents.length === 0 && (
+            {/* One AmneziaWG agent per node: a second server can have its own beside the first. */}
+            {awgFree.length > 0 && (
               <div className="flex flex-wrap items-center gap-2">
-                <select aria-label={t('agents.awgNode')} value={awgNode || nodes.data.nodes[0].id} onChange={(e) => setAwgNode(e.target.value)} className="h-9 rounded-control border border-line bg-canvas px-2 text-[13px]">
-                  {nodes.data.nodes.map((n) => <option key={n.id} value={n.id}>{n.name}</option>)}
+                <select aria-label={t('agents.awgNode')} value={awgFree.some((n) => n.id === awgNode) ? awgNode : awgFree[0].id} onChange={(e) => setAwgNode(e.target.value)} className="h-9 rounded-control border border-line bg-canvas px-2 text-[13px]">
+                  {awgFree.map((n) => <option key={n.id} value={n.id}>{n.name}</option>)}
                 </select>
-                <GhostButton className="!h-8 !px-2.5 !text-xs" disabled={busy} onClick={() => void enroll(nodes.data!.nodes.find((n) => n.id === (awgNode || nodes.data!.nodes[0].id)) ?? nodes.data!.nodes[0], 'awg')}>{t('agents.awgAdd')}</GhostButton>
+                <GhostButton className="!h-8 !px-2.5 !text-xs" disabled={busy} onClick={() => void enroll(awgFree.find((n) => n.id === awgNode) ?? awgFree[0], 'awg')}>{t('agents.awgAdd')}</GhostButton>
               </div>
             )}
           </div>
