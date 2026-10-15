@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"regexp"
 	"sort"
@@ -245,20 +246,44 @@ func Sockets(ctx context.Context, r Runner, bin string) Snapshot {
 	return NewSocketWatch(0).Collect(ctx, r, bin, time.Now())
 }
 
-// EphemeralFrom is the first port of Linux's default dynamic range. A proxy such as Xray opens a UDP socket in
-// that range for every client flow; each is a "listener" for seconds, and none is a service.
-const EphemeralFrom = 32768
+// EphemeralFrom and EphemeralTo are Linux's default dynamic port range. A proxy such as Xray opens a UDP socket
+// in that range for every client flow; each is a "listener" for seconds, and none is a service. The host's own
+// range (net.ipv4.ip_local_port_range) is used when it can be read: Amnezia's hosts commonly set 10000-65535.
+const (
+	EphemeralFrom = 32768
+	EphemeralTo   = 60999
+)
+
+// localPortRange reads the host's dynamic port range, or returns the Linux default.
+func localPortRange() (int, int) {
+	b, err := os.ReadFile("/proc/sys/net/ipv4/ip_local_port_range")
+	if err != nil {
+		return EphemeralFrom, EphemeralTo
+	}
+	f := strings.Fields(string(b))
+	if len(f) != 2 {
+		return EphemeralFrom, EphemeralTo
+	}
+	lo, e1 := strconv.Atoi(f[0])
+	hi, e2 := strconv.Atoi(f[1])
+	if e1 != nil || e2 != nil || lo < 1024 || hi > 65535 || lo > hi {
+		return EphemeralFrom, EphemeralTo
+	}
+	return lo, hi
+}
 
 // SocketWatch reads listening sockets but reports a UDP socket in the dynamic range only once it has been
 // there for MinAge: a service that is really listening there (a VPN on a high UDP port) shows up after that
 // delay, and flow sockets that come and go never do. Everything else is reported at once.
 type SocketWatch struct {
-	MinAge time.Duration
-	seen   map[string]time.Time
+	MinAge   time.Duration
+	From, To int // the dynamic port range; UDP sockets in it are held back
+	seen     map[string]time.Time
 }
 
 func NewSocketWatch(minAge time.Duration) *SocketWatch {
-	return &SocketWatch{MinAge: minAge, seen: map[string]time.Time{}}
+	lo, hi := localPortRange()
+	return &SocketWatch{MinAge: minAge, From: lo, To: hi, seen: map[string]time.Time{}}
 }
 
 func (w *SocketWatch) Collect(ctx context.Context, r Runner, bin string, now time.Time) Snapshot {
@@ -277,7 +302,7 @@ func (w *SocketWatch) Collect(ctx context.Context, r Runner, bin string, now tim
 		now2 := map[string]time.Time{}
 		kept := data.Listeners[:0]
 		for _, l := range data.Listeners {
-			if l.Proto != "udp" || l.Port < EphemeralFrom {
+			if l.Proto != "udp" || l.Port < w.From || l.Port > w.To {
 				kept = append(kept, l)
 				continue
 			}

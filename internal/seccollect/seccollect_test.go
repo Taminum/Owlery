@@ -263,6 +263,7 @@ func TestFlowSocketsOfAProxyAreNotListenersButARealHighUDPServiceIsAfterAWhile(t
 	const flow = "udp UNCONN 0 0 0.0.0.0:50459 0.0.0.0:* users:((\"rw-core\",pid=7,fd=9))\n"
 	const vpn = "udp UNCONN 0 0 0.0.0.0:49587 0.0.0.0:*\ntcp LISTEN 0 4096 0.0.0.0:22 0.0.0.0:*\n"
 	w := NewSocketWatch(10 * time.Minute)
+	w.From, w.To = 10000, 65535 // the range Amnezia hosts commonly set
 	t0 := time.Date(2026, 10, 16, 0, 0, 0, 0, time.UTC)
 	ports := func(s Snapshot) map[int]bool {
 		m := map[int]bool{}
@@ -273,7 +274,7 @@ func TestFlowSocketsOfAProxyAreNotListenersButARealHighUDPServiceIsAfterAWhile(t
 	}
 	// Right away: TCP and low ports show, the dynamic-range UDP ones do not.
 	got := ports(w.Collect(context.Background(), fixedSS{flow + vpn}, "ss", t0))
-	if !got[22] || got[50459] || got[49587] {
+	if !got[22] || got[50459] || got[25699] || got[49587] {
 		t.Fatalf("%v", got)
 	}
 	// The flow socket is gone a minute later and never appeared; the VPN port has stayed.
