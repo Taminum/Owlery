@@ -186,6 +186,8 @@ func serve(log *slog.Logger) error {
 
 	if c.SyncEnabled {
 		go sy.Run(ctx)
+		srv.Pulse = syncer.NewPulse()
+		go sy.RunPulse(ctx, srv.Pulse, 15*time.Second)
 	}
 	go alerts.Run(ctx, st, time.Minute, log)
 	go secChecker.Run(ctx)

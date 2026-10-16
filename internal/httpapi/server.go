@@ -76,7 +76,8 @@ type Server struct {
 	checkLimit   *auth.Limiter
 	cmdLimit     *auth.Limiter
 	Limits       Limits
-	Live         *live.Hub // present-moment router snapshots (nil = none)
+	Live         *live.Hub     // present-moment router snapshots (nil = none)
+	Pulse        *syncer.Pulse // the latest speed of every panel's nodes (nil = none)
 	Gemini       *gemini.Client
 	Auto         *autoclassify.Runner
 	Intel        *netintel.Tool
@@ -190,6 +191,13 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/v1/panels/{id}/enable", s.session(s.setEnabled(true)))
 	mux.Handle("GET /api/v1/panels/{id}/nodes", s.session(s.listNodes))
 	mux.Handle("GET /api/v1/panels/{id}/users", s.session(s.listUsers))
+	mux.Handle("GET /api/v1/subscriptions", s.session(s.subscriptions))
+	mux.Handle("GET /api/v1/pulse/nodes", s.session(s.pulseNodes))
+	mux.Handle("GET /api/v1/billing", s.session(s.listBills))
+	mux.Handle("POST /api/v1/billing", s.session(s.createBill))
+	mux.Handle("PUT /api/v1/billing/{id}", s.session(s.updateBill))
+	mux.Handle("DELETE /api/v1/billing/{id}", s.session(s.deleteBill))
+	mux.Handle("POST /api/v1/billing/{id}/paid", s.session(s.payBill))
 	mux.Handle("GET /api/v1/panels/{id}/sync-runs", s.session(s.listSyncRuns))
 	mux.Handle("GET /api/v1/panels/{id}/agents", s.session(s.listAgents))
 	mux.Handle("POST /api/v1/panels/{id}/agents", s.session(s.createAgent))
