@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -41,6 +42,10 @@ func (f *fakeHost) connect() {
 				res.Config = "[Interface]\nPrivateKey = CLIENTSECRET\nAddress = 10.8.1.9/32\n"
 			case op.Op == "revoke":
 				res.Key, res.IP = op.Key, ""
+			case op.Op == "export":
+				res.Files = []ingestproto.AWGFile{{Name: "awg0.conf", Data: "W0ludGVyZmFjZV0K"}, {Name: "wireguard_psk.key", Data: "U0VDUkVU"}}
+			case op.Op == "restore":
+				res.Port = 55424
 			}
 			f.hub.Deliver(f.id, res)
 		}()
@@ -309,5 +314,64 @@ func TestAWGContainersCanBeCreatedAndRemovedOnlyOnAHostThatOptedIn(t *testing.T)
 	host.mu.Unlock()
 	if op.Op != "remove" || op.Container != "amnezia-awg2" || op.Confirm != "yes-delete-all-devices" {
 		t.Fatalf("%+v", op)
+	}
+}
+
+func TestAWGBackupIsEncryptedRestoredAndTransferredWithoutBeingStored(t *testing.T) {
+	w, host, inst := managedWorld(t)
+	if _, err := w.h.st.Pool().Exec(context.Background(), `UPDATE awg_instances SET container='amnezia-awg2'`); err != nil {
+		t.Fatal(err)
+	}
+	bk := "/api/v1/awg/instances/" + inst + "/backup"
+	if st, _ := w.owner.do("POST", bk, map[string]string{"passphrase": "correct horse battery"}); st != 409 {
+		t.Fatalf("a host that did not opt in must be refused: %d", st)
+	}
+	host.hub.SetContainerAdmin(host.id, true)
+	if st, _ := w.viewer.do("POST", bk, map[string]string{"passphrase": "correct horse battery"}); st != 403 {
+		t.Fatalf("a viewer took a backup: %d", st)
+	}
+	if st, _ := w.owner.do("POST", bk, map[string]string{"passphrase": "short"}); st != 422 {
+		t.Fatalf("a weak passphrase: %d", st)
+	}
+	st, blob := w.owner.do("POST", bk, map[string]string{"passphrase": "correct horse battery"})
+	if st != 200 || !strings.HasPrefix(string(blob), awgBackupMagic) || strings.Contains(string(blob), "SECRET") || strings.Contains(string(blob), "U0VDUkVU") {
+		t.Fatalf("%d, the backup must be encrypted", st)
+	}
+	if _, err := awgBackupOpen(blob, "wrong passphrase!!"); err == nil {
+		t.Fatal("a wrong passphrase opened the backup")
+	}
+	files, err := awgBackupOpen(blob, "correct horse battery")
+	if err != nil || len(files) != 2 {
+		t.Fatalf("%v %v", err, files)
+	}
+
+	rs := "/api/v1/awg/hosts/" + host.id + "/restore"
+	enc := base64.StdEncoding.EncodeToString(blob)
+	if st, _ := w.owner.do("POST", rs, map[string]string{"container": "amnezia-awg3", "passphrase": "nope nope nope", "backup": enc}); st != 422 {
+		t.Fatalf("restore with a wrong passphrase: %d", st)
+	}
+	if st, _ := w.owner.do("POST", rs, map[string]string{"container": "nginx", "passphrase": "correct horse battery", "backup": enc}); st != 422 {
+		t.Fatalf("restore into a foreign name: %d", st)
+	}
+	if st, b := w.owner.do("POST", rs, map[string]string{"container": "amnezia-awg3", "passphrase": "correct horse battery", "backup": enc}); st != 201 {
+		t.Fatalf("%d %s", st, b)
+	}
+	host.mu.Lock()
+	op := host.ops[len(host.ops)-1]
+	host.mu.Unlock()
+	if op.Op != "restore" || op.Container != "amnezia-awg3" || len(op.Files) != 2 {
+		t.Fatalf("%+v", op)
+	}
+
+	tr := "/api/v1/awg/instances/" + inst + "/transfer"
+	if st, b := w.owner.do("POST", tr, map[string]string{"host_id": host.id, "container": "amnezia-awg4"}); st != 201 {
+		t.Fatalf("%d %s", st, b)
+	}
+	host.mu.Lock()
+	n := len(host.ops)
+	last, prev := host.ops[n-1], host.ops[n-2]
+	host.mu.Unlock()
+	if prev.Op != "export" || last.Op != "restore" || last.Container != "amnezia-awg4" {
+		t.Fatalf("%+v %+v", prev, last)
 	}
 }

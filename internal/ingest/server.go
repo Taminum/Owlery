@@ -210,7 +210,7 @@ func (s *Server) session(ctx context.Context, c *websocket.Conn, agent store.Age
 			}
 		case "awg_op_result":
 			var res ingestproto.AWGOpResult
-			if agent.Kind == "awg" && s.Ops != nil && len(data) <= ingestproto.MaxAWGConfigBytes+4096 && json.Unmarshal(data, &res) == nil {
+			if agent.Kind == "awg" && s.Ops != nil && len(data) <= ingestproto.MaxAWGFilesBytes+8192 && json.Unmarshal(data, &res) == nil {
 				s.Ops.Deliver(agent.ID, res)
 			}
 		case "awg":

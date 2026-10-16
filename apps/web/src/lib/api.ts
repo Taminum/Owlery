@@ -76,3 +76,26 @@ export function overviewURL(f: Filters, demoState?: string): string {
 
 export const fetchOverview = (f: Filters, demoState: string | undefined, signal?: AbortSignal) =>
   request<Overview>('GET', overviewURL(f, demoState), undefined, signal)
+
+/** POST that answers with a file. The caller saves it; nothing is cached. */
+export async function postBlob(path: string, body: unknown): Promise<Blob> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (csrf) headers['X-CSRF-Token'] = csrf
+  let res: Response
+  try {
+    res = await fetch(path, { method: 'POST', headers, credentials: 'same-origin', cache: 'no-store', body: JSON.stringify(body) })
+  } catch {
+    throw new ApiError(0, 'network', 'network')
+  }
+  if (!res.ok) {
+    let b: { code?: string; message?: string; request_id?: string } = {}
+    try {
+      b = (await res.json()) as typeof b
+    } catch {
+      b = {}
+    }
+    if (res.status === 401 && b.code !== 'invalid_credentials') unauthorizedHandler?.()
+    throw new ApiError(res.status, b.code ?? 'http_error', b.message ?? res.statusText, b.request_id)
+  }
+  return res.blob()
+}
