@@ -20,6 +20,10 @@ const (
 	AlertSecTLS   = "sec_tls"          // a certificate is expiring, expired or not valid
 	AlertSecPort  = "sec_port"         // an unexpected port answers, or an expected one does not
 
+	// Users of a panel. They belong to the panel of the user.
+	AlertUserExpiry  = "user_expiry"  // an active user's subscription ends within days
+	AlertUserTraffic = "user_traffic" // an active user has used most of the traffic limit
+
 	// DNS Map. These belong to no panel: they are the owner's.
 	AlertDNSFailed = "dns_check_failed" // the last run could not settle even the apex's basic records
 	AlertDNSChange = "dns_change"       // an important record changed in the last day, confirmed by two resolvers

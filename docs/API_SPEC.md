@@ -92,6 +92,9 @@ run's coverage. See DNS_MAP.md.
 - `POST /api/v1/awg/instances/{id}/backup` `{passphrase}`: owner only, the host must have opted in to container operations. Answers with an encrypted file (`RSAWGB1`, argon2id + AES-256-GCM, `Cache-Control: no-store`). The file holds the server key and the preshared keys, so it is shown once and stored nowhere. Passphrase: at least 10 characters.
 - `POST /api/v1/awg/hosts/{id}/restore` `{container, passphrase, backup}`: `backup` is the file in base64 (up to 1 MB of body). Creates the container on the host with the same keys and settings; `201 {container, port, server_key_short}`.
 - `POST /api/v1/awg/instances/{id}/transfer` `{host_id, container}`: exports the container and restores it on another host in one step; the files pass through the server and are neither stored nor returned.
+- `GET /api/v1/subscriptions`: users of the panels in scope with `status`, `expire_at`, `traffic_limit_bytes` and `traffic_used_bytes` (null when the panel did not say), soonest end first. Viewers get masked names.
+- `GET /api/v1/pulse/nodes`: what each panel's nodes carry right now (`down_bps`, `up_bps` as the panel reports them, bytes per second), read every 15 seconds and kept in memory only; a reading older than two minutes is not returned.
+- `GET /api/v1/billing`, `POST /api/v1/billing`, `PUT /api/v1/billing/{id}`, `DELETE /api/v1/billing/{id}`, `POST /api/v1/billing/{id}/paid`: the owner's own list of payments (`name`, `provider`, `amount`, `currency`, `period_months`, `next_due`, `note`). Owner only. `paid` records a payment and moves `next_due` one period on from the date that was due. `GET` also returns `monthly`, the cost per month by currency.
 
 ## Notifications (owner only)
 

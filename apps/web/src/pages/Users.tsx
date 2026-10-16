@@ -4,7 +4,10 @@ import { useApp } from '../lib/context'
 import { formatDateTime, formatInt, formatPct } from '../lib/format'
 import { useAnalytics } from '../hooks/useAnalytics'
 import type { NamedCount, UserDetailResponse, UsersResponse } from '../lib/types'
-import { Card } from '../components/ui'
+import { Card, Chip } from '../components/ui'
+import { api } from '../lib/api'
+import { useLoad } from '../hooks/useLoad'
+import { formatBytes } from '../lib/format'
 import { Drawer } from '../components/Drawer'
 import { CoverageLine, MiniTimeline, NoDataPanel, PageHead, ShareBar, TableSkeleton } from '../components/Analyzer'
 
@@ -53,6 +56,61 @@ function Detail({ k }: { k: string }) {
   )
 }
 
+interface Sub { panel_id: string; panel_name: string; username: string; status: string; expire_at: string | null; traffic_limit_bytes: number | null; traffic_used_bytes: number | null }
+
+function Subscriptions({ tz }: { tz: string }) {
+  const { data } = useLoad((s) => api.get<{ users: Sub[] }>('/api/v1/subscriptions', s), [], 120_000)
+  const [now] = useState(() => Date.now())
+  if (!data || data.users.length === 0) return null
+  return (
+    <Card title={t('sub.title')} note={t('sub.note')}>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-[13px]">
+          <caption className="sr-only">{t('sub.title')}</caption>
+          <thead><tr className="text-left text-xs text-muted">
+            <th scope="col" className="px-2 py-2 font-medium">{t('sub.user')}</th>
+            <th scope="col" className="px-2 py-2 font-medium">{t('sub.panel')}</th>
+            <th scope="col" className="px-2 py-2 font-medium">{t('sub.status')}</th>
+            <th scope="col" className="px-2 py-2 font-medium">{t('sub.expire')}</th>
+            <th scope="col" className="px-2 py-2 font-medium">{t('sub.traffic')}</th>
+          </tr></thead>
+          <tbody>
+            {data.users.map((u, i) => {
+              const left = u.expire_at ? (new Date(u.expire_at).getTime() - now) / 86_400_000 : null
+              const lim = u.traffic_limit_bytes ?? 0
+              const pct = lim > 0 && u.traffic_used_bytes !== null ? Math.min(100, Math.round((u.traffic_used_bytes * 100) / lim)) : null
+              return (
+                <tr key={`${u.panel_id}:${u.username}:${i}`} className="border-t border-line/60">
+                  <td className="px-2 py-2 font-medium text-fg">{u.username}</td>
+                  <td className="px-2 py-2 text-muted">{u.panel_name}</td>
+                  <td className="px-2 py-2"><Chip tone={u.status === 'ACTIVE' ? 'green' : 'muted'}>{u.status || '—'}</Chip></td>
+                  <td className="whitespace-nowrap px-2 py-2">
+                    {u.expire_at ? (
+                      <>
+                        <span className="tnum mr-2">{formatDateTime(u.expire_at, tz)}</span>
+                        {left !== null && left < 0 ? <Chip tone="red">{t('sub.expired')}</Chip>
+                          : left !== null && left <= 3 ? <Chip tone="amber">{left < 1 ? t('sub.left.today') : t('sub.left.days', { n: Math.ceil(left) })}</Chip> : null}
+                      </>
+                    ) : <span className="text-muted">{t('sub.noEnd')}</span>}
+                  </td>
+                  <td className="whitespace-nowrap px-2 py-2">
+                    {pct === null ? <span className="text-muted">{lim > 0 ? '—' : t('sub.unlimited')}</span> : (
+                      <span className="tnum">
+                        <span className={pct >= 90 ? 'text-amber' : ''}>{formatBytes(u.traffic_used_bytes ?? 0)} / {formatBytes(lim)}</span>
+                        <span className="ml-2 text-xs text-muted">{pct}%</span>
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  )
+}
+
 export default function Users() {
   const { filters } = useApp()
   const [sel, setSel] = useState<string | null>(null)
@@ -63,6 +121,7 @@ export default function Users() {
   return (
     <div className="space-y-4">
       <PageHead title={t('an.users.title')} subtitle={t('an.users.subtitle')} />
+      <Subscriptions tz={tz} />
       {data && <CoverageLine meta={data.meta} tz={tz} />}
       {error && <p role="alert" className="text-[13px] text-red">{error}</p>}
       {!data && !error && <TableSkeleton />}
