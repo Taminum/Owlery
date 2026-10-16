@@ -4,6 +4,9 @@ import { formatDateTime, formatInt, formatPct } from '../lib/format'
 import { useAnalytics } from '../hooks/useAnalytics'
 import type { NodesResponse } from '../lib/types'
 import { Card, Chip } from '../components/ui'
+import { api } from '../lib/api'
+import { useLoad } from '../hooks/useLoad'
+import { formatRate } from '../lib/format'
 import { CoverageLine, NoDataPanel, PageHead, ShareBar, TableSkeleton } from '../components/Analyzer'
 
 const AGENT = {
@@ -12,8 +15,14 @@ const AGENT = {
   none: ['an.nodes.agentNone', 'muted'],
 } as const
 
+interface PulseNode { node_uuid: string; name: string; down_bps: number; up_bps: number }
+interface PulsePanel { panel_id: string; nodes: PulseNode[] }
+
 export default function Nodes() {
   const { filters } = useApp()
+  const pulse = useLoad((s) => api.get<{ panels: PulsePanel[] }>('/api/v1/pulse/nodes', s), [], 15_000)
+  const speed = new Map<string, PulseNode>()
+  for (const p of pulse.data?.panels ?? []) for (const n of p.nodes) speed.set(`${p.panel_id}:${n.name}`, n)
   const { data, error } = useAnalytics<NodesResponse>('nodes', filters)
   const tz = filters.tz
   const max = data ? Math.max(0, ...data.rows.map((r) => r.share)) : 0
@@ -34,6 +43,7 @@ export default function Nodes() {
                 <th scope="col" className="px-2 py-2 font-medium">{t('an.nodes.node')}</th>
                 <th scope="col" className="px-2 py-2 font-medium">{t('an.users.panel')}</th>
                 <th scope="col" className="px-2 py-2 font-medium">{t('an.nodes.agent')}</th>
+                <th scope="col" className="px-2 py-2 font-medium" title={t('pulse.hint')}>{t('pulse.speed')}</th>
                 <th scope="col" className="px-2 py-2 font-medium">{t('an.nodes.lastEvent')}</th>
                 <th scope="col" className="px-2 py-2 text-right font-medium">{t('an.connections')}</th>
                 <th scope="col" className="w-[150px] px-2 py-2 font-medium">{t('an.share')}</th>
@@ -49,6 +59,10 @@ export default function Nodes() {
                       <td className="px-2 py-2 font-medium text-fg">{r.name}</td>
                       <td className="px-2 py-2 text-muted">{r.panel_name}</td>
                       <td className="px-2 py-2"><Chip tone={tone}>{t(label)}</Chip></td>
+                      <td className="tnum whitespace-nowrap px-2 py-2 text-muted">{(() => {
+                        const v = speed.get(`${r.panel_id}:${r.name}`)
+                        return v ? `↓ ${formatRate(v.down_bps)} · ↑ ${formatRate(v.up_bps)}` : t('pulse.none')
+                      })()}</td>
                       <td className="tnum whitespace-nowrap px-2 py-2 text-muted">{r.last_event_at ? formatDateTime(r.last_event_at, tz) : '—'}</td>
                       <td className="tnum px-2 py-2 text-right text-fg">{formatInt(r.connections)}</td>
                       <td className="px-2 py-2"><ShareBar share={r.share} max={max} /></td>

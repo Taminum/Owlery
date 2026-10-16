@@ -115,6 +115,9 @@ func TestTelegramChannelIsStoredSealedAndAnnouncesAlertsOnce(t *testing.T) {
 	before := len(fake.texts())
 
 	wk := &notify.Worker{Store: w.h.st, Ring: w.h.srv.Ring, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	// Before the digest hour, whatever the real clock says, so that this round is not a digest round.
+	early, _ := time.LoadLocation("Asia/Yekaterinburg")
+	wk.Now = func() time.Time { return time.Date(2026, 10, 16, 3, 0, 0, 0, early) }
 	wk.Round(ctx)
 	if len(fake.texts()) != before {
 		t.Fatalf("an alert that was already open was announced: %v", fake.texts()[before:])

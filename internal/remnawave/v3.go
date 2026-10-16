@@ -207,6 +207,12 @@ func (a *V3) ListUsers(ctx context.Context, offset, size int) (UsersPage, error)
 				u.UsedBytes, u.LifetimeBytes = byteCount(ut.Used), byteCount(ut.Lifetime)
 			}
 		}
+		if s := rawString(row, "expireAt"); s != "" {
+			if t, err := time.Parse(time.RFC3339, s); err == nil {
+				u.ExpireAt = &t
+			}
+		}
+		u.LimitBytes = byteCount(row["trafficLimitBytes"])
 		if u.UsedBytes != nil || u.LifetimeBytes != nil {
 			page.WithCounter++
 		}
