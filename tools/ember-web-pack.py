@@ -41,7 +41,12 @@ def main() -> int:
     total = 0
     for p, i in index.items():
         out = os.path.join(OUT, f"atlas-{i}.webp")
-        Image.open(p).convert("RGBA").save(out, "WEBP", quality=QUALITY, method=6, alpha_quality=100)
+        im = Image.open(p).convert("RGBA")
+        if im.size != (2048, 2048):  # the page sizes the background as a square, so a short last atlas is padded
+            full = Image.new("RGBA", (2048, 2048), (0, 0, 0, 0))
+            full.paste(im, (0, 0))
+            im = full
+        im.save(out, "WEBP", quality=QUALITY, method=6, alpha_quality=100)
         total += os.path.getsize(out)
 
     def cell(fid: str):
@@ -60,6 +65,14 @@ def main() -> int:
             "markers": c.get("markers", []),
             "effect": bool(c.get("effect")),
         }
+        # Scenes with a scenario: click-to-catch, a change of clothes, a flying heart.
+        for key in ("interaction", "wardrobe"):
+            if key in c:
+                clips[cid][key] = c[key]
+        eff = c.get("effect")
+        if isinstance(eff, dict) and eff.get("type") == "floating-heart":
+            shutil.copyfile(os.path.normpath(os.path.join(PKG, eff["texture"])), os.path.join(OUT, "heart.png"))
+            clips[cid]["heart"] = {"texture": "heart.png", "flight": eff["flight"]}
 
     proj = m["projectiles"][0]
     shutil.copyfile(os.path.join(PKG, proj["file"]), os.path.join(OUT, "projectile.png"))

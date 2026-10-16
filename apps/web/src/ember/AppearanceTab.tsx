@@ -40,6 +40,7 @@ export function AppearanceTab() {
         <Toggle id="kw-comments" label={t('kw.comments')} checked={s.comments} disabled={!s.enabled || !s.mascot} onChange={(v) => setKawaii({ comments: v })} />
         <Toggle id="kw-anim" label={t('kw.animations')} checked={s.animations} disabled={!s.enabled || !s.mascot} onChange={(v) => setKawaii({ animations: v })} />
         <Toggle id="kw-storm" label={t('kw.storm')} hint={t('kw.storm.hint')} checked={s.itemStorm} disabled={!s.enabled || !s.mascot || !s.animations} onChange={(v) => setKawaii({ itemStorm: v })} />
+        <Toggle id="kw-playful" label={t('kw.playful')} hint={t('kw.playful.hint')} checked={s.playful} disabled={!s.enabled || !s.mascot || !s.animations} onChange={(v) => setKawaii({ playful: v })} />
         <Toggle id="kw-reduced" label={t('kw.reduced')} hint={t('kw.reduced.hint')} checked={s.reduced} disabled={!s.enabled} onChange={(v) => setKawaii({ reduced: v })} />
       </Card>
     </div>
