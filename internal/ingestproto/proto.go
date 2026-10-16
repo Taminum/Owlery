@@ -159,7 +159,7 @@ const (
 type AWGOp struct {
 	Type      string `json:"type"` // "awg_op"
 	ID        string `json:"id"`
-	Op        string `json:"op"` // add | revoke | install | remove
+	Op        string `json:"op"` // add | revoke | install | remove | export | restore
 	Container string `json:"c"`
 	Name      string `json:"n,omitempty"` // add: the device's name
 	Key       string `json:"k,omitempty"` // revoke: the device's public key
@@ -168,7 +168,22 @@ type AWGOp struct {
 	Port    int    `json:"p,omitempty"` // install: the UDP port
 	Subnet  string `json:"s,omitempty"` // install: the tunnel subnet, a /24 in 10.0.0.0/8
 	Confirm string `json:"y,omitempty"` // remove: the confirmation word, which deletes every device in the container
+	// restore: the files of a container's configuration, as export returned them.
+	Files []AWGFile `json:"files,omitempty"`
 }
+
+// AWGFile is one file of a container's configuration, base64 encoded. The set is fixed (see AWGFileNames) and the
+// content is secret: it holds the server's private key and every device's preshared key.
+type AWGFile struct {
+	Name string `json:"n"`
+	Data string `json:"d"`
+}
+
+// AWGFileNames are the only files a backup carries.
+var AWGFileNames = []string{"awg0.conf", "wireguard_server_private_key.key", "wireguard_server_public_key.key", "wireguard_psk.key", "clientsTable"}
+
+// MaxAWGFilesBytes bounds the base64 text of all the files of one container.
+const MaxAWGFilesBytes = 400 << 10
 
 // AWGOpResult is the agent's answer. For a successful add it carries the new device's client
 // configuration, which holds its private key: it is delivered once to whoever asked and kept nowhere.
@@ -179,8 +194,10 @@ type AWGOpResult struct {
 	Code   string `json:"code,omitempty"` // error: a short machine word
 	Key    string `json:"k,omitempty"`    // the device's public key
 	IP     string `json:"ip,omitempty"`   // its address in the tunnel
-	Port   int    `json:"port,omitempty"` // install: the port the new container listens on
-	Config string `json:"cfg,omitempty"`
+	Port   int    `json:"port,omitempty"` // install and restore: the port the container listens on
+	// export: the container's configuration files. It is returned to the one who asked and kept nowhere.
+	Files  []AWGFile `json:"files,omitempty"`
+	Config string    `json:"cfg,omitempty"`
 }
 
 const MaxAWGConfigBytes = 16 << 10

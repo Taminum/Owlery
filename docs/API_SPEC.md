@@ -89,6 +89,9 @@ run's coverage. See DNS_MAP.md.
 - `GET /api/v1/awg/hosts`: the AmneziaWG hosts, with `online`, `container_admin` (the host opted in) and the containers each reported.
 - `POST /api/v1/awg/hosts/{id}/containers` `{container, port, subnet}`: creates one container in the Amnezia layout. `container` is `amnezia-awg` or `amnezia-awg` plus up to two digits, `port` 1024 to 65535, `subnet` a /24 in 10.0.0.0/8. Answers 409 `container_admin_off` when the host did not opt in.
 - `POST /api/v1/awg/instances/{id}/remove` `{confirm}`: removes the container and every device in it. `confirm` must equal the container's name.
+- `POST /api/v1/awg/instances/{id}/backup` `{passphrase}`: owner only, the host must have opted in to container operations. Answers with an encrypted file (`RSAWGB1`, argon2id + AES-256-GCM, `Cache-Control: no-store`). The file holds the server key and the preshared keys, so it is shown once and stored nowhere. Passphrase: at least 10 characters.
+- `POST /api/v1/awg/hosts/{id}/restore` `{container, passphrase, backup}`: `backup` is the file in base64 (up to 1 MB of body). Creates the container on the host with the same keys and settings; `201 {container, port, server_key_short}`.
+- `POST /api/v1/awg/instances/{id}/transfer` `{host_id, container}`: exports the container and restores it on another host in one step; the files pass through the server and are neither stored nor returned.
 
 ## Notifications (owner only)
 
