@@ -13,6 +13,7 @@ import { Drawer } from '../components/Drawer'
 import { controlCls } from '../components/Popover'
 import { AddDevice, RenameDevice, RevokeDevice } from '../components/AwgDevice'
 import { AwgHosts, RemoveContainer } from '../components/AwgContainers'
+import { BackupContainer, TransferContainer } from '../components/AwgBackup'
 import { DeviceLimits, LimitLine } from '../components/AwgLimits'
 import { GhostButton } from '../components/Modal'
 
@@ -89,6 +90,8 @@ export default function Awg() {
   const [open, setOpen] = useState<Peer | null>(null)
   const [adding, setAdding] = useState<Instance | null>(null)
   const [removingServer, setRemovingServer] = useState<Instance | null>(null)
+  const [backingUp, setBackingUp] = useState<Instance | null>(null)
+  const [transferring, setTransferring] = useState<Instance | null>(null)
   const [revoking, setRevoking] = useState<Peer | null>(null)
   const [limiting, setLimiting] = useState<Peer | null>(null)
   const [renaming, setRenaming] = useState<Peer | null>(null)
@@ -129,6 +132,8 @@ export default function Awg() {
           right={canForget && in_.mode === 'managed' ? (
             <div className="flex flex-wrap items-center gap-2">
               <GhostButton onClick={() => setAdding(in_)}>{t('awg.add')}</GhostButton>
+              {/^amnezia-awg\d{0,2}$/.test(in_.container) && <GhostButton onClick={() => setBackingUp(in_)}>{t('awgb.backup')}</GhostButton>}
+              {/^amnezia-awg\d{0,2}$/.test(in_.container) && <GhostButton onClick={() => setTransferring(in_)}>{t('awgb.transfer')}</GhostButton>}
               {/^amnezia-awg\d{0,2}$/.test(in_.container) && <GhostButton onClick={() => setRemovingServer(in_)}>{t('awgc.remove')}</GhostButton>}
             </div>
           ) : undefined}
@@ -183,6 +188,8 @@ export default function Awg() {
         <div className="space-y-1 text-xs leading-5 text-muted"><p>{t('awg.state.hint')}</p><p>{t('awg.direction')}</p></div>
       )}
       {adding && <AddDevice instanceId={adding.id} container={adding.container} onClose={() => setAdding(null)} onDone={() => q.reload()} />}
+      {backingUp && <BackupContainer instanceId={backingUp.id} container={backingUp.container} onClose={() => setBackingUp(null)} />}
+      {transferring && <TransferContainer instanceId={transferring.id} container={transferring.container} onClose={() => setTransferring(null)} onDone={() => q.reload()} />}
       {removingServer && <RemoveContainer instanceId={removingServer.id} container={removingServer.container} onClose={() => setRemovingServer(null)} onDone={() => q.reload()} />}
       {revoking && <RevokeDevice peerId={revoking.id} label={revoking.label} onClose={() => setRevoking(null)} onDone={() => q.reload()} />}
       {limiting && <DeviceLimits peerId={limiting.id} label={limiting.label} current={limiting} onClose={() => setLimiting(null)} onDone={() => q.reload()} />}
