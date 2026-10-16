@@ -317,7 +317,7 @@ func (s *Syncer) syncUsers(ctx context.Context, p store.Panel, ad remnawave.Pane
 		}
 		recs := make([]store.UserRecord, 0, len(pg.Users))
 		for _, u := range pg.Users {
-			recs = append(recs, store.UserRecord{RemoteUUID: u.RemoteUUID, Username: u.Username, Status: u.Status})
+			recs = append(recs, store.UserRecord{RemoteUUID: u.RemoteUUID, Username: u.Username, Status: u.Status, ExpireAt: u.ExpireAt, LimitBytes: u.LimitBytes, UsedBytes: u.UsedBytes})
 		}
 		c, err := s.St.UpsertUsers(ctx, p.ID, start, recs)
 		if err != nil {
