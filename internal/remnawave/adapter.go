@@ -50,6 +50,10 @@ type User struct {
 	// current period's counter and resets with the user's traffic strategy. Either may be nil.
 	LifetimeBytes *int64
 	UsedBytes     *int64
+	// What the panel allows: when the subscription ends and how much traffic a period may use
+	// (0 means no limit). Either may be nil.
+	ExpireAt   *time.Time
+	LimitBytes *int64
 }
 
 // UsersPage is one offset-paginated page. Next is the offset for the following

@@ -35,6 +35,9 @@ export class Director {
 export function moodForAlert(kind: string): Mood {
   switch (kind) {
     case 'sec_tls':
+    case 'user_expiry':
+    case 'user_traffic':
+    case 'bill_due':
       return 'concerned'
     case 'dns_change':
       return 'curious'
