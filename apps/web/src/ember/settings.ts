@@ -15,13 +15,14 @@ export interface KawaiiSettings {
   comments: boolean
   animations: boolean
   itemStorm: boolean
+  playful: boolean // the cheeky scenes in the mascot's menu
   reduced: boolean // a manual "less motion"; the system preference is honoured as well
   size: MascotSize
   pos: { x: number; y: number } | null // where the mascot was dragged to (left and top, in px); null: the corner
 }
 
 export const KAWAII_DEFAULTS: KawaiiSettings = {
-  enabled: false, theme: 'kawaii_dark', mascot: true, comments: true, animations: true, itemStorm: true, reduced: false, size: 'l', pos: null,
+  enabled: false, theme: 'kawaii_dark', mascot: true, comments: true, animations: true, itemStorm: true, playful: true, reduced: false, size: 'l', pos: null,
 }
 
 const KEY = 'remnascope.kawaii'
@@ -39,6 +40,7 @@ function read(): KawaiiSettings {
       comments: p.comments !== false,
       animations: p.animations !== false,
       itemStorm: p.itemStorm !== false,
+      playful: p.playful !== false,
       reduced: p.reduced === true,
       size: p.size === 's' || p.size === 'm' || p.size === 'xl' ? p.size : 'l',
       pos: p.pos && Number.isFinite(p.pos.x) && Number.isFinite(p.pos.y) ? { x: Math.round(p.pos.x), y: Math.round(p.pos.y) } : null,
