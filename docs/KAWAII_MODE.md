@@ -34,6 +34,10 @@ With less motion the mascot is a still picture and the lines stay.
 
 ## Assets
 
+The artwork is **not in the repository** (`/apps/web/public/ember/` is ignored). It belongs to the owner and is
+packed from the private package at build time: `deploy/prod/ship.sh` runs the packer when `assets/ember` is
+present. Without it the mascot does not appear and nothing else changes; the theme and the settings still work.
+
 `apps/web/public/ember/` is produced by `python tools/ember-web-pack.py` from `assets/ember/pilot-v2`
 (17 atlases converted to WebP with a lossless alpha channel, about 6.4 MB in all, fetched only when the mode is on; a clip waits for its atlas before it plays, and the last atlas is padded to a square).
 The source package and its notes stay under `assets/ember` and are not part of the web image.

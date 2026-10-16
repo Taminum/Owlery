@@ -5,6 +5,9 @@ set -euo pipefail
 HOST=${1:?usage: ship.sh <ssh alias> [release]}
 REL=${2:-$(date +%Y%m%d-%H%M)}
 cd "$(dirname "$0")/../.."
+# The mascot artwork lives outside the repository. When the asset package is here, it is packed into the web build;
+# without it the web image is built without the mascot, which then simply does not appear.
+if [ -d assets/ember/pilot-v2 ]; then python tools/ember-web-pack.py || echo "warning: the mascot could not be packed"; else echo "note: no assets/ember here, building without the mascot"; fi
 docker build -f deploy/api.Dockerfile --target api -t "remnascope-api:$REL" .
 docker build -f deploy/web.Dockerfile -t "remnascope-web:$REL" .
 docker save "remnascope-api:$REL" "remnascope-web:$REL" | ssh "$HOST" 'docker load'
