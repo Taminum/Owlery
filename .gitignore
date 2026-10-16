@@ -12,3 +12,6 @@ deploy/**/.env
 deploy/**/secrets/
 !internal/**/testdata/*.log
 deploy/backup/
+
+# The mascot artwork is not part of the repository: it is packed from the private asset package at build time.
+/apps/web/public/ember/
