@@ -17,14 +17,23 @@ look back exactly: the theme is an attribute on `<html>` and nothing else change
   may follow sooner, nothing while typing in a form, nothing when the tab is hidden.
 - **The item storm** is a joke scene, started from the menu ("Подразнить"), with its own switch. It is skipped
   entirely with animations off or reduced motion.
+- **Touch and hover** (package v9): a click on the drawing (not on its transparent corners, checked on the alpha
+  of the current picture) makes her react (`tap`) and say a line; a second click during a scene gets "busy"; resting
+  the mouse on her for 0.65 s gives `curious`. The "⋯" button at her corner opens the menu.
+- **Cheeky scenes**, all from the menu and never on their own, with their own switch ("Озорные сценки"): an air
+  kiss (a separate heart flies from her hand), "caught flirting" (she waits, looping two poses, until she is
+  clicked, then answers) and taking the hoodie off (she stays in the white top, only talks, until "Надеть худи").
+- **Speech bubble**: typed out, with a tail; a click finishes it, the next closes it; screen readers get the whole
+  sentence at once. Dark theme for the dark looks, paper for Sakura Light. A scene's line comes at its marker.
+- Her hair is red: that is canon now, the original brief said dark.
 
 ## Switches
 
-Mode, theme, mascot, comments, animations, item storm, "less motion" (the system preference is honoured too).
+Mode, theme, mascot, comments, animations, item storm, cheeky scenes, "less motion" (the system preference is honoured too).
 With less motion the mascot is a still picture and the lines stay.
 
 ## Assets
 
 `apps/web/public/ember/` is produced by `python tools/ember-web-pack.py` from `assets/ember/pilot-v2`
-(15 atlases converted to WebP with a lossless alpha channel, about 5.6 MB in all, fetched only when the mode is on).
+(17 atlases converted to WebP with a lossless alpha channel, about 6.4 MB in all, fetched only when the mode is on; a clip waits for its atlas before it plays, and the last atlas is padded to a square).
 The source package and its notes stay under `assets/ember` and are not part of the web image.

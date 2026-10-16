@@ -4,6 +4,14 @@ import { Director, moodForAlert } from '../ember/director'
 import { KAWAII_DEFAULTS, reloadKawaiiForTests, resetKawaiiForTests, setKawaii } from '../ember/settings'
 import { Mascot } from '../ember/Mascot'
 
+beforeEach(() => {
+  // Pictures "load" at once; the mascot waits for the atlas of a clip before it plays it.
+  vi.stubGlobal('Image', class {
+    onload: (() => void) | null = null
+    set src(_v: string) { setTimeout(() => this.onload?.(), 0) }
+  })
+})
+
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.useRealTimers()
@@ -79,13 +87,13 @@ const manifest = {
   particleMotion: { widthPx: 54, heightPx: 36, durationMs: 1000, keyframes: [{ x: 0, y: 0, rotation: 0, opacity: 1, offset: 0 }, { x: 10, y: 10, rotation: 0, opacity: 0, offset: 1 }] },
 }
 
-function stubFetch(alerts: { id: string; kind: string; resolved_at: string | null }[]) {
+function stubFetch(alerts: { id: string; kind: string; resolved_at: string | null }[], mf: object = manifest, phrases: object = { alert: ['Бака! Сервер пропал!'] }) {
   const calls: string[] = []
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input)
     calls.push(url)
-    const body = url.includes('ember.json') ? manifest
-      : url.includes('phrases') ? { clips: { alert: ['Бака! Сервер пропал!'] } }
+    const body = url.includes('ember.json') ? mf
+      : url.includes('phrases') ? { clips: phrases }
       : url.includes('/alerts') ? { alerts }
       : { items: [] }
     return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
@@ -119,9 +127,69 @@ describe('Mascot', () => {
     stubFetch([])
     render(<MemoryRouter><Mascot /></MemoryRouter>)
     await screen.findByTestId('ember')
-    screen.getByRole('button', { name: /Ember/ }).click()
+    screen.getByRole('button', { name: 'Меню талисмана' }).click()
     ;(await screen.findByRole('menuitem', { name: 'Выключить талисмана' })).click()
     await act(async () => { await Promise.resolve() })
     expect(screen.queryByTestId('ember')).toBeNull()
+  })
+})
+
+const cell = { a: 0, x: 0, y: 0 }
+const sceneManifest = {
+  ...manifest,
+  clips: {
+    ...manifest.clips,
+    tap: { frames: [cell], durationsMs: [20], loop: false, markers: [], effect: false },
+    hoodie_off: { frames: [cell, cell], durationsMs: [20, 20], loop: false, effect: false, markers: [{ name: 'speech', atMs: 20 }], wardrobe: { holdFinal: true } },
+    caught_flirting: {
+      frames: [cell, cell, cell, cell], durationsMs: [10, 10, 10, 10], loop: false, effect: false, markers: [{ name: 'speech', atMs: 30 }],
+      interaction: { type: 'click-to-catch', introEndMs: 30, waitLoopStartMs: 10 },
+    },
+  },
+}
+const scenePhrases = { tap: ['Эй!'], hoodie_off: ['Жарко мне.'], caught_flirting: ['Я просто удобно села.'] }
+const wait = (ms: number) => act(async () => { await new Promise((r) => setTimeout(r, ms)) })
+
+describe('Mascot scenes', () => {
+  it('holds the last picture after the clothes come off, talks instead of moving, and dresses again from the menu', async () => {
+    setKawaii({ enabled: true })
+    stubFetch([], sceneManifest, scenePhrases)
+    render(<MemoryRouter><Mascot /></MemoryRouter>)
+    await screen.findByTestId('ember')
+    screen.getByRole('button', { name: 'Меню талисмана' }).click()
+    ;(await screen.findByRole('menuitem', { name: 'Снять худи' })).click()
+    await wait(200)
+    expect(screen.getByText('Жарко мне.', { selector: '.sr-only' })).toBeInTheDocument()
+    screen.getByRole('button', { name: 'Меню талисмана' }).click()
+    expect(await screen.findByRole('menuitem', { name: 'Надеть худи' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Воздушный поцелуй' })).toBeNull() // no other scene in the other clothes
+    screen.getByRole('menuitem', { name: 'Надеть худи' }).click()
+    screen.getByRole('button', { name: 'Меню талисмана' }).click()
+    expect(await screen.findByRole('menuitem', { name: 'Снять худи' })).toBeInTheDocument()
+  })
+
+  it('waits for the click in "caught flirting" and speaks only after it', async () => {
+    setKawaii({ enabled: true })
+    stubFetch([], sceneManifest, scenePhrases)
+    render(<MemoryRouter><Mascot /></MemoryRouter>)
+    await screen.findByTestId('ember')
+    screen.getByRole('button', { name: 'Меню талисмана' }).click()
+    ;(await screen.findByRole('menuitem', { name: 'Поймана за флиртом' })).click()
+    await wait(250)
+    expect(screen.queryByText('Я просто удобно села.', { selector: '.sr-only' })).toBeNull() // still waiting
+    screen.getByRole('button', { name: /Талисман Ember/ }).click()
+    await wait(250)
+    expect(screen.getByText('Я просто удобно села.', { selector: '.sr-only' })).toBeInTheDocument()
+  })
+
+  it('does not offer the cheeky scenes when they are switched off', async () => {
+    setKawaii({ enabled: true, playful: false })
+    stubFetch([], sceneManifest, scenePhrases)
+    render(<MemoryRouter><Mascot /></MemoryRouter>)
+    await screen.findByTestId('ember')
+    screen.getByRole('button', { name: 'Меню талисмана' }).click()
+    await screen.findByRole('menuitem', { name: 'Выключить талисмана' })
+    expect(screen.queryByRole('menuitem', { name: 'Снять худи' })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: 'Воздушный поцелуй' })).toBeNull()
   })
 })
