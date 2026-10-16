@@ -439,6 +439,9 @@ type UserRecord struct {
 	RemoteUUID string
 	Username   string
 	Status     string
+	ExpireAt   *time.Time
+	LimitBytes *int64
+	UsedBytes  *int64
 }
 
 type User struct {
@@ -448,6 +451,10 @@ type User struct {
 	Username   *string    `json:"username"`
 	Status     *string    `json:"status"`
 	LastSyncAt *time.Time `json:"last_sync_at"`
+	// Allowance copied from the panel; nil when the panel did not say.
+	ExpireAt   *time.Time `json:"expire_at"`
+	LimitBytes *int64     `json:"traffic_limit_bytes"`
+	UsedBytes  *int64     `json:"traffic_used_bytes"`
 }
 
 func (s *Store) UpsertUsers(ctx context.Context, panelID string, runStart time.Time, users []UserRecord) (SyncCounts, error) {
@@ -459,9 +466,10 @@ func (s *Store) UpsertUsers(ctx context.Context, panelID string, runStart time.T
 	err = s.inTx(ctx, func(tx pgx.Tx) error {
 		for _, u := range users {
 			var inserted bool
-			err := tx.QueryRow(ctx, `INSERT INTO users (panel_id, remote_uuid, display_name, status, last_sync_at) VALUES ($1,$2,$3,$4,$5)
-				ON CONFLICT (panel_id, remote_uuid) DO UPDATE SET display_name=EXCLUDED.display_name, status=EXCLUDED.status, last_sync_at=EXCLUDED.last_sync_at, removed_at=NULL
-				RETURNING (xmax = 0)`, pid, u.RemoteUUID, nilIfEmpty(u.Username), nilIfEmpty(u.Status), runStart).Scan(&inserted)
+			err := tx.QueryRow(ctx, `INSERT INTO users (panel_id, remote_uuid, display_name, status, last_sync_at, expire_at, traffic_limit_bytes, traffic_used_bytes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+				ON CONFLICT (panel_id, remote_uuid) DO UPDATE SET display_name=EXCLUDED.display_name, status=EXCLUDED.status, last_sync_at=EXCLUDED.last_sync_at, removed_at=NULL,
+					expire_at=EXCLUDED.expire_at, traffic_limit_bytes=EXCLUDED.traffic_limit_bytes, traffic_used_bytes=EXCLUDED.traffic_used_bytes
+				RETURNING (xmax = 0)`, pid, u.RemoteUUID, nilIfEmpty(u.Username), nilIfEmpty(u.Status), runStart, u.ExpireAt, u.LimitBytes, u.UsedBytes).Scan(&inserted)
 			if err != nil {
 				return err
 			}
@@ -501,7 +509,7 @@ func (s *Store) ListUsers(ctx context.Context, sc Scope, panelID, after string, 
 			return nil, "", ErrNotFound
 		}
 	}
-	rows, err := s.pool.Query(ctx, `SELECT id, panel_id, remote_uuid, display_name, status, last_sync_at FROM users
+	rows, err := s.pool.Query(ctx, `SELECT id, panel_id, remote_uuid, display_name, status, last_sync_at, expire_at, traffic_limit_bytes, traffic_used_bytes FROM users
 		WHERE panel_id=$1 AND removed_at IS NULL AND id > $2 ORDER BY id LIMIT $3`, pid, afterID, limit+1)
 	if err != nil {
 		return nil, "", err
@@ -511,7 +519,7 @@ func (s *Store) ListUsers(ctx context.Context, sc Scope, panelID, after string, 
 	for rows.Next() {
 		var u User
 		var id, p uuid.UUID
-		if err := rows.Scan(&id, &p, &u.RemoteUUID, &u.Username, &u.Status, &u.LastSyncAt); err != nil {
+		if err := rows.Scan(&id, &p, &u.RemoteUUID, &u.Username, &u.Status, &u.LastSyncAt, &u.ExpireAt, &u.LimitBytes, &u.UsedBytes); err != nil {
 			return nil, "", err
 		}
 		u.ID, u.PanelID = id.String(), p.String()

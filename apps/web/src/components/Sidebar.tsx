@@ -1,9 +1,10 @@
 import { NavLink, useLocation } from 'react-router-dom'
-import { BarChart3, Bell, Compass, Gauge, Globe2, Laptop, Shield, ShieldCheck, Telescope, LayoutDashboard, History, Radio, Server, Settings, Users, Waypoints, X, type LucideIcon } from 'lucide-react'
+import { BarChart3, Bell, Compass, Wallet, Gauge, Globe2, Laptop, Shield, ShieldCheck, Telescope, LayoutDashboard, History, Radio, Server, Settings, Users, Waypoints, X, type LucideIcon } from 'lucide-react'
 import { t, type MsgKey } from '../i18n'
 import { api } from '../lib/api'
 import { useLoad } from '../hooks/useLoad'
 import type { AlertsResponse } from '../lib/types'
+import { useAuth } from '../lib/auth'
 
 interface Item { to: string; key: MsgKey; icon: LucideIcon; disabled?: boolean }
 
@@ -22,6 +23,7 @@ const MAIN: Item[] = [
   { to: '/channels', key: 'nav.channels', icon: Gauge },
   { to: '/devices', key: 'nav.devices', icon: Laptop },
   { to: '/panels', key: 'nav.panels', icon: Waypoints },
+  { to: '/billing', key: 'nav.billing', icon: Wallet },
   { to: '/alerts', key: 'nav.alerts', icon: Bell },
 ]
 
@@ -57,6 +59,8 @@ function NavItem({ item, onNavigate }: { item: Item; onNavigate: () => void }) {
 }
 
 export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { state: auth } = useAuth()
+  const owner = auth.status === 'authed' && auth.me.account.is_owner
   return (
     <>
       {open && <div className="fixed inset-0 z-30 bg-black/60 lg:hidden" onClick={onClose} aria-hidden />}
@@ -71,7 +75,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           </button>
         </div>
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2">
-          {MAIN.map((i) => <NavItem key={i.to} item={i} onNavigate={onClose} />)}
+          {MAIN.filter((i) => owner || i.to !== '/billing').map((i) => <NavItem key={i.to} item={i} onNavigate={onClose} />)}
         </nav>
         <div className="border-t border-line p-3">
           <NavItem item={{ to: '/settings', key: 'nav.settings', icon: Settings }} onNavigate={onClose} />

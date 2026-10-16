@@ -612,3 +612,55 @@ func (s *Server) listSyncRuns(w http.ResponseWriter, r *http.Request, a auth.Act
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"runs": runs})
 }
+
+// subscriptions lists the users of the panels the viewer may see with their end date and traffic limit.
+// Viewers see masked account names, as in the per-panel list.
+func (s *Server) subscriptions(w http.ResponseWriter, r *http.Request, a auth.Actor, _ store.Session) {
+	list, err := s.Store.ListSubscriptions(r.Context(), a.Scope(), 500)
+	if err != nil {
+		s.writeErr(w, r, http.StatusInternalServerError, "internal", "internal error")
+		return
+	}
+	for i := range list {
+		if !a.Can(list[i].PanelID, auth.PermOperate) {
+			list[i].Username = auth.MaskUsername(list[i].Username)
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"users": list})
+}
+
+// pulseNodes says what the nodes of each panel carry right now. A reading older than two minutes is reported
+// as missing: a speed that old is not a speed.
+func (s *Server) pulseNodes(w http.ResponseWriter, r *http.Request, a auth.Actor, _ store.Session) {
+	type panelOut struct {
+		PanelID   string             `json:"panel_id"`
+		PanelName string             `json:"panel_name"`
+		At        *time.Time         `json:"at"`
+		Error     string             `json:"error,omitempty"`
+		Nodes     []syncer.NodeSpeed `json:"nodes"`
+	}
+	out := []panelOut{}
+	if s.Pulse != nil {
+		ps, err := s.Store.ListPanels(r.Context(), a.Scope())
+		if err != nil {
+			s.writeErr(w, r, http.StatusInternalServerError, "internal", "internal error")
+			return
+		}
+		names := map[string]string{}
+		ids := make([]string, 0, len(ps))
+		for _, p := range ps {
+			names[p.ID] = p.Name
+			ids = append(ids, p.ID)
+		}
+		for _, v := range s.Pulse.For(a.Scope(), ids) {
+			o := panelOut{PanelID: v.PanelID, PanelName: names[v.PanelID], Error: v.Err, Nodes: []syncer.NodeSpeed{}}
+			if !v.At.IsZero() && time.Since(v.At) < 2*time.Minute {
+				at := v.At
+				o.At, o.Nodes = &at, v.Nodes
+			}
+			out = append(out, o)
+		}
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]any{"panels": out})
+}
