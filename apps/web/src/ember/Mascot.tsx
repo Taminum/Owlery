@@ -8,7 +8,13 @@ import { MASCOT_SIZES, setKawaii, useKawaii } from './settings'
 
 interface Cell { a: number; x: number; y: number }
 interface Marker { name: string; atMs: number; origin?: { x: number; y: number }; count?: number }
-interface Clip { frames: Cell[]; durationsMs: number[]; loop: boolean; markers: Marker[]; effect: boolean }
+interface Flight { releaseMs: number; endMs: number; origin: { x: number; y: number }; dx: number; dy: number; width: number; height: number }
+interface Clip {
+  frames: Cell[]; durationsMs: number[]; loop: boolean; markers: Marker[]; effect: boolean
+  heart?: { texture: string; flight: Flight }
+  interaction?: { type: string; introEndMs: number; waitLoopStartMs: number } // a scene that waits to be clicked
+  wardrobe?: { holdFinal: boolean } // the scene ends in other clothes, and the last picture stays
+}
 interface Keyframe { x: number; y: number; rotation: number; opacity: number; offset: number }
 interface Manifest {
   frameSize: { width: number; height: number }
@@ -51,6 +57,26 @@ function typingNow(): boolean {
 
 interface AlertRow { id: string; kind: string; resolved_at: string | null }
 
+/** The speech bubble: the text is typed out, a click finishes it and the next click closes it. Screen readers get
+ *  the whole sentence at once. Remounted (by key) for every new sentence. */
+function Bubble({ text, theme, reduced, onClose }: { text: string; theme: 'dark' | 'paper'; reduced: boolean; onClose: () => void }) {
+  const [n, setN] = useState(() => (reduced ? text.length : 0))
+  useEffect(() => {
+    if (reduced) return
+    const id = window.setInterval(() => setN((v) => (v >= text.length ? v : v + 1)), 25)
+    return () => window.clearInterval(id)
+  }, [text, reduced])
+  const shown = reduced ? text.length : n
+  return (
+    <div className="ember-bubble" data-theme={theme} role="button" tabIndex={0} onClick={() => (shown < text.length ? setN(text.length) : onClose())}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (shown < text.length) setN(text.length); else onClose() } }}>
+      <span className="ember-bubble__name" aria-hidden="true">Ember</span>
+      <span className="sr-only" role="status">{text}</span>
+      <span aria-hidden="true">{text.slice(0, shown)}</span>
+    </div>
+  )
+}
+
 /** The decorative mascot. It exists only while Kawaii Mode is on, loads its pictures then, and reacts to the
  *  alerts the application already has: it never asks for anything the page does not ask for itself. */
 export function Mascot() {
@@ -60,13 +86,24 @@ export function Mascot() {
   const [hidden, setHidden] = useState(false)
   const [menu, setMenu] = useState(false)
   const [frame, setFrame] = useState<{ clip: string; i: number }>({ clip: 'idle', i: 0 })
-  const [say, setSay] = useState<string | null>(null)
+  const [say, setSay] = useState<{ id: number; text: string } | null>(null)
+  const [tank, setTank] = useState(false) // after "takes the hoodie off" the last picture stays
   const systemReduced = useSyncExternalStore(subscribeReduced, systemReducedNow, () => false)
   const playRef = useRef<(m: Manifest, clipId: string, say?: string) => void>(() => {})
   const stageRef = useRef<HTMLDivElement>(null)
   const timer = useRef<number | undefined>(undefined)
   const sayTimer = useRef<number | undefined>(undefined)
   const busy = useRef(false)
+  const tankRef = useRef(false)
+  const clipRef = useRef('idle')
+  const caught = useRef(false) // the click that ends the waiting of "caught flirting"
+  const lastTap = useRef(0)
+  const lastBusySay = useRef(0)
+  const hoverTimer = useRef<number | undefined>(undefined)
+  const sayId = useRef(0)
+  const masks = useRef(new Map<number, CanvasRenderingContext2D | null>())
+  const loadedAtlas = useRef(new Set<number>())
+  const loadToken = useRef(0)
   const director = useMemo(() => new Director(), [])
   const narrow = useSyncExternalStore(subscribeWidth, narrowNow, () => false)
   const reduced = s.reduced || systemReduced
@@ -97,9 +134,10 @@ export function Mascot() {
 
   const showSay = useCallback((text: string | undefined) => {
     if (!text || !s.comments) return
-    setSay(text)
+    sayId.current += 1
+    setSay({ id: sayId.current, text })
     window.clearTimeout(sayTimer.current)
-    sayTimer.current = window.setTimeout(() => setSay(null), 4500 + text.length * 40)
+    sayTimer.current = window.setTimeout(() => setSay(null), 5000 + text.length * 45)
   }, [s.comments])
 
   const spawn = useCallback((m: Manifest, origin: { x: number; y: number }, count: number) => {
@@ -129,16 +167,71 @@ export function Mascot() {
     }
   }, [animated])
 
-  /** Plays one clip, then returns to the idle loop. */
+  /** The air kiss: a separate heart flies from the hand. The path is the one the asset package describes. */
+  const spawnHeart = useCallback((m: Manifest, h: NonNullable<Clip['heart']>) => {
+    const stage = stageRef.current
+    if (!stage || !animated) return
+    const k = stage.clientWidth / m.frameSize.width
+    const f = h.flight
+    const w = f.width * k
+    const hh = f.height * k
+    const img = document.createElement('img')
+    img.src = `${BASE}/${h.texture}`
+    img.alt = ''
+    img.setAttribute('aria-hidden', 'true')
+    Object.assign(img.style, { position: 'absolute', left: `${f.origin.x * k - w / 2}px`, top: `${f.origin.y * k - hh / 2}px`, width: `${w}px`, height: `${hh}px`, pointerEvents: 'none', zIndex: '3', opacity: '0' })
+    stage.appendChild(img)
+    const life = f.endMs - f.releaseMs
+    const done = () => img.remove()
+    if (typeof img.animate === 'function') {
+      const frames = Array.from({ length: 9 }, (_, j) => {
+        const u = j / 8
+        const x = f.dx * u
+        const y = f.dy * u - Math.sin(Math.PI * u) * 12
+        return {
+          transform: `translate(${x * k}px, ${y * k}px) scale(${0.45 + 0.65 * Math.min(1, u * 4)}) rotate(${Math.sin(Math.PI * u * 2) * 12}deg)`,
+          opacity: Math.min(1, u * 8) * Math.min(1, (1 - u) * 4), offset: u,
+        }
+      })
+      img.animate(frames, { duration: life, fill: 'forwards', easing: 'linear' }).onfinish = done
+    }
+    window.setTimeout(done, life + 200)
+  }, [animated])
+
+  /** Plays one clip, then returns to the idle loop (or, after a change of clothes, stays on the last picture). */
   const play = useCallback((m: Manifest, clipId: string, say?: string) => {
     const clip = m.clips[clipId]
     if (!clip || !animated) {
       showSay(say)
       return
     }
+    // A clip is not started before its pictures have arrived: an atlas that is still loading would show as a gap.
+    const pending = [...new Set(clip.frames.map((f) => f.a))].filter((a) => !loadedAtlas.current.has(a))
+    if (pending.length > 0) {
+      const token = ++loadToken.current
+      void Promise.all(pending.map((a) => new Promise<void>((resolve) => {
+        const img = new Image()
+        const done = () => { loadedAtlas.current.add(a); resolve() }
+        img.onload = done
+        img.onerror = done // a missing picture must not stop the mascot for good
+        img.src = `${BASE}/atlas-${a}.webp`
+        window.setTimeout(done, 3000) // slow or stuck: go on without it rather than wait for ever
+      }))).then(() => { if (token === loadToken.current) playRef.current(m, clipId, say) })
+      return
+    }
     stop()
     busy.current = clipId !== 'idle' && clipId !== 'blink'
-    showSay(say)
+    clipRef.current = clipId
+    caught.current = false
+    // A phrase that belongs to a moment of the scene waits for its marker; any other starts at once.
+    const speechAtMarker = clip.markers.some((mk) => mk.name === 'speech')
+    if (!speechAtMarker) showSay(say)
+    const ia = clip.interaction?.type === 'click-to-catch' ? clip.interaction : null
+    let waitFrom = 0
+    if (ia) { // the first frame that starts at the point the waiting loop returns to
+      let at = 0
+      while (waitFrom < clip.frames.length - 1 && at + (clip.durationsMs[waitFrom] ?? 0) <= ia.waitLoopStartMs) { at += clip.durationsMs[waitFrom] ?? 0; waitFrom++ }
+    }
     let i = 0
     let elapsed = 0
     const fired = new Set<number>()
@@ -149,16 +242,35 @@ export function Mascot() {
       }
       setFrame({ clip: clipId, i })
       clip.markers.forEach((mk, n) => {
-        if (!fired.has(n) && mk.atMs <= elapsed + 1 && mk.origin && (mk.name.startsWith('release') || mk.name.startsWith('storm'))) {
+        if (fired.has(n) || mk.atMs > elapsed + 1) return
+        if (mk.origin && (mk.name.startsWith('release') || mk.name.startsWith('storm'))) {
           fired.add(n)
           spawn(m, mk.origin, mk.count ?? 1)
+        } else if (mk.name === 'heart-release' && clip.heart) {
+          fired.add(n)
+          spawnHeart(m, clip.heart)
+        } else if (mk.name === 'speech') {
+          fired.add(n)
+          showSay(say)
         }
       })
       const d = clip.durationsMs[i] ?? 50
       elapsed += d
       i++
+      if (ia && !caught.current && elapsed >= ia.introEndMs) { // wait for the click, repeating the loop of two poses
+        i = waitFrom
+        elapsed = ia.waitLoopStartMs
+      }
       if (i >= clip.frames.length) {
         if (clip.loop && clipId === 'idle') { i = 0; elapsed = 0 }
+        else if (clip.wardrobe?.holdFinal) { // in other clothes now: the last picture stays
+          timer.current = window.setTimeout(() => {
+            busy.current = false
+            tankRef.current = true
+            setTank(true)
+          }, d)
+          return
+        }
         else {
           timer.current = window.setTimeout(() => {
             busy.current = false
@@ -171,7 +283,7 @@ export function Mascot() {
       timer.current = window.setTimeout(step, d)
     }
     step()
-  }, [animated, showSay, spawn, stop])
+  }, [animated, showSay, spawn, spawnHeart, stop])
   useEffect(() => { playRef.current = play }, [play])
 
   // The idle loop, with an occasional blink.
@@ -180,18 +292,22 @@ export function Mascot() {
     if (!animated) { stop(); return }
     const start = window.setTimeout(() => play(manifest, 'idle'), 0)
     const blink = window.setInterval(() => {
-      if (!busy.current && !document.hidden) play(manifest, 'blink')
+      if (!busy.current && !tankRef.current && !document.hidden) play(manifest, 'blink')
     }, 9000 + Math.random() * 5000)
     return () => { window.clearTimeout(start); window.clearInterval(blink); stop() }
   }, [manifest, active, animated, play, stop])
 
-  useEffect(() => () => { window.clearTimeout(sayTimer.current); stop() }, [stop])
+  useEffect(() => () => { window.clearTimeout(sayTimer.current); window.clearTimeout(hoverTimer.current); stop() }, [stop])
 
   const react = useCallback((mood: Mood) => {
     if (!manifest || !active) return
     if (!director.allow(mood, Date.now(), { typing: typingNow(), busy: busy.current })) return
+    if (tankRef.current) { // in the other clothes she only talks
+      showSay(pick(phrases?.clips[MOOD_CLIP[mood]]))
+      return
+    }
     play(manifest, MOOD_CLIP[mood], pick(phrases?.clips[MOOD_CLIP[mood]]))
-  }, [manifest, active, director, play, phrases])
+  }, [manifest, active, director, play, phrases, showSay])
 
   // What the mascot reacts to: the application's own alerts, and new Fail2ban bans.
   const seenAlerts = useRef<Set<string> | null>(null)
@@ -262,19 +378,89 @@ export function Mascot() {
   const clip = manifest.clips[frame.clip] ?? manifest.clips.idle
   const cell = !animated ? manifest.poster : clip.frames[Math.min(frame.i, clip.frames.length - 1)]
 
+  // Is the point on the drawing, not on its transparent corners? The alpha of the current picture says so.
+  const onDrawing = (e: React.MouseEvent<HTMLButtonElement>): boolean => {
+    if (e.detail === 0) return true // a key press has no point
+    const key = cell.a
+    let ctx = masks.current.get(key)
+    if (ctx === undefined) {
+      masks.current.set(key, null)
+      const img = new Image()
+      img.onload = () => {
+        const c = document.createElement('canvas')
+        c.width = img.naturalWidth
+        c.height = img.naturalHeight
+        const g = c.getContext('2d', { willReadFrequently: true })
+        if (g) { g.drawImage(img, 0, 0); masks.current.set(key, g) }
+      }
+      img.src = `${BASE}/atlas-${key}.webp`
+      ctx = null
+    }
+    if (!ctx) return true // not loaded yet, or no canvas: the whole square counts
+    const r = e.currentTarget.getBoundingClientRect()
+    const x = Math.min(manifest.frameSize.width - 1, Math.max(0, Math.floor((e.clientX - r.left) / k)))
+    const y = Math.min(manifest.frameSize.height - 1, Math.max(0, Math.floor((e.clientY - r.top) / k)))
+    try {
+      return ctx.getImageData(cell.x + x, cell.y + y, 1, 1).data[3] >= 32
+    } catch {
+      return true
+    }
+  }
+
+  const onBodyClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (moved.current) { moved.current = false; return }
+    if (!onDrawing(e)) return
+    const taps = phrases?.clips.tap
+    if (!animated) { showSay(pick(taps)); return }
+    if (tankRef.current) { showSay(pick(phrases?.clips.hoodie_off)); return } // the clothes stay: only a phrase
+    if (clipRef.current === 'caught_flirting' && busy.current && !caught.current) { caught.current = true; return } // the click she was waiting for
+    const now = performance.now()
+    if (busy.current) {
+      if (now - lastBusySay.current > 1200) {
+        lastBusySay.current = now
+        showSay(clipRef.current === 'hoodie_off' ? t('kw.stuck') : t('kw.busy'))
+      }
+      return
+    }
+    if (now - lastTap.current < 2400) return
+    lastTap.current = now
+    play(manifest, 'tap', pick(taps))
+  }
+
+  const onEnter = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.pointerType !== 'mouse' || reduced || !animated) return
+    window.clearTimeout(hoverTimer.current)
+    hoverTimer.current = window.setTimeout(() => {
+      if (clipRef.current === 'idle' && !busy.current && !tankRef.current && !document.hidden) play(manifest, 'curious', pick(phrases?.clips.curious))
+    }, 650)
+  }
+  const onLeave = () => window.clearTimeout(hoverTimer.current)
+
+  const scene = (id: string) => { setMenu(false); play(manifest, id, pick(phrases?.clips[id])) }
+  const dress = () => {
+    setMenu(false)
+    tankRef.current = false
+    setTank(false)
+    clipRef.current = 'idle'
+    play(manifest, 'idle')
+  }
+  const themeName = s.theme === 'sakura_light' ? 'paper' : 'dark'
+
   return (
     <div className="ember-root" data-testid="ember" style={shown ? { left: shown.x, top: shown.y, right: 'auto', bottom: 'auto' } : undefined}>
-      {say && (
-        <div className="ember-bubble" role="status" onClick={() => setSay(null)}>{say}</div>
-      )}
+      {say && <Bubble key={say.id} text={say.text} theme={themeName} reduced={reduced} onClose={() => setSay(null)} />}
       <div ref={stageRef} className="ember-stage" style={{ width: size, height: size }}>
-        <button type="button" className="ember-body" aria-label={t('kw.mascot')} aria-expanded={menu} onPointerDown={onDown}
-          onClick={() => { if (moved.current) { moved.current = false; return } setMenu((v) => !v) }}
+        <button type="button" className="ember-gear" aria-label={t('kw.menu')} aria-expanded={menu} onClick={() => setMenu((v) => !v)}>⋯</button>
+        <button type="button" className="ember-body" aria-label={t('kw.mascot')} onPointerDown={onDown} onPointerEnter={onEnter} onPointerLeave={onLeave} onClick={onBodyClick}
           style={{ width: size, height: size, backgroundImage: `url(${BASE}/atlas-${cell.a}.webp)`, backgroundSize: `${manifest.atlasSize * k}px ${manifest.atlasSize * k}px`, backgroundPosition: `-${cell.x * k}px -${cell.y * k}px` }} />
       </div>
       {menu && (
         <div className="ember-menu" role="menu">
-          {s.itemStorm && animated && <button role="menuitem" type="button" onClick={() => { setMenu(false); play(manifest, 'item_storm', pick(phrases?.clips.item_storm)) }}>{t('kw.tease')}</button>}
+          {s.itemStorm && animated && !tank && <button role="menuitem" type="button" onClick={() => scene('item_storm')}>{t('kw.tease')}</button>}
+          {s.playful && animated && !tank && <button role="menuitem" type="button" onClick={() => scene('kiss_tease')}>{t('kw.kiss')}</button>}
+          {s.playful && animated && !tank && <button role="menuitem" type="button" onClick={() => scene('caught_flirting')}>{t('kw.caught')}</button>}
+          {s.playful && animated && !tank && <button role="menuitem" type="button" onClick={() => scene('hoodie_off')}>{t('kw.hoodieOff')}</button>}
+          {tank && <button role="menuitem" type="button" onClick={dress}>{t('kw.hoodieOn')}</button>}
           {s.pos && <button role="menuitem" type="button" onClick={() => { setMenu(false); setKawaii({ pos: null }) }}>{t('kw.reset')}</button>}
           <button role="menuitem" type="button" onClick={() => { setMenu(false); setHidden(true) }}>{t('kw.hide')}</button>
           <button role="menuitem" type="button" onClick={() => { setMenu(false); setKawaii({ mascot: false }) }}>{t('kw.off')}</button>

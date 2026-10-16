@@ -62,7 +62,13 @@ body {
 .ember-root > * { pointer-events: auto; }
 .ember-stage { position: relative; }
 .ember-body { display: block; border: 0; padding: 0; background-color: transparent; background-repeat: no-repeat; cursor: pointer; border-radius: 24px; }
-.ember-bubble { max-width: 240px; padding: 9px 12px; border-radius: 14px; border: 1px solid var(--color-line); background: var(--color-elevated); color: var(--color-fg); font-size: 13px; line-height: 1.35; box-shadow: 0 6px 20px rgb(0 0 0 / .25); cursor: pointer; }
+.ember-bubble { --b-bg: #342438; --b-ink: #fff2f8; --b-border: #bc7aab; --b-accent: #ffc0dd; position: relative; max-width: min(300px, calc(100vw - 32px)); margin-bottom: 8px; padding: 8px 13px 10px; border-radius: 16px 16px 5px 16px; border: 1px solid var(--b-border); background: var(--b-bg); color: var(--b-ink); font-size: 13.5px; line-height: 1.45; box-shadow: 0 4px 15px rgb(22 12 36 / .28); cursor: pointer; text-align: left; }
+.ember-bubble[data-theme='paper'] { --b-bg: #fff8fc; --b-ink: #402b40; --b-border: #b677a3; --b-accent: #8d386c; }
+.ember-bubble::after { content: ''; position: absolute; bottom: -7px; right: 56px; width: 12px; height: 12px; border-right: 1px solid var(--b-border); border-bottom: 1px solid var(--b-border); background: var(--b-bg); transform: skewY(-15deg) rotate(-35deg); pointer-events: none; }
+.ember-bubble__name { display: block; color: var(--b-accent); font-size: 10px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
+.ember-bubble:focus-visible { outline: 3px solid #f493c5; outline-offset: 3px; }
+.ember-gear { position: absolute; top: 4px; left: 4px; z-index: 4; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 999px; border: 1px solid var(--color-line); background: var(--color-elevated); color: var(--color-fg); opacity: .55; cursor: pointer; font-size: 16px; line-height: 1; }
+.ember-gear:hover, .ember-gear:focus-visible { opacity: 1; }
 .ember-menu { display: flex; flex-direction: column; min-width: 190px; border: 1px solid var(--color-line); border-radius: 12px; background: var(--color-elevated); overflow: hidden; }
 .ember-menu > * { padding: 9px 12px; text-align: left; font-size: 13px; color: var(--color-fg); background: transparent; border: 0; cursor: pointer; text-decoration: none; }
 .ember-menu > *:hover, .ember-menu > *:focus-visible { background: var(--color-surface); }
