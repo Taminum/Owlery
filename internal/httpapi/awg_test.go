@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"github.com/Taminum/RemnaScope/internal/alerts"
 	"strings"
 	"testing"
 	"time"
@@ -237,5 +238,45 @@ func TestAmneziaWGTrafficIsPartOfSitesAndDomainsWithItsSourceMark(t *testing.T) 
 	st, b = w.owner.get("/api/v1/analytics/sites?" + strings.Replace(rng, w.home.ID, w.home.ID, 1))
 	if st != 200 || strings.Contains(string(b), `"sources":null`) {
 		t.Fatalf("sources must never be null: %s", b)
+	}
+}
+
+func TestAWGContainerWithoutAnInterfaceRaisesAnAlertThatClosesWhenItComesBack(t *testing.T) {
+	w := awgWorld(t, 10*time.Second)
+	ctx := context.Background()
+	nodes, _ := w.h.st.ListNodes(ctx, store.Scope{All: true}, w.home.ID, false)
+	ag, err := w.h.st.CreateAgent(ctx, store.Scope{All: true}, w.home.ID, nodes[0].ID, "awg2", "awg", "", store.HashAgentSecret("awg-secret-2"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.h.st.Pool().Exec(ctx, `UPDATE agents SET status='active', last_seen=now() WHERE id=$1`, ag.ID); err != nil {
+		t.Fatal(err)
+	}
+	open := func() map[string]bool {
+		if _, _, err := alerts.Evaluate(ctx, w.h.st, time.Now().UTC()); err != nil {
+			t.Fatal(err)
+		}
+		_, b := w.owner.get("/api/v1/alerts")
+		out := map[string]bool{}
+		for _, a := range parse[alertsResp](t, b).Alerts {
+			if a.ResolvedAt == nil {
+				out[a.Kind] = true
+			}
+		}
+		return out
+	}
+	broken := ingestproto.AWG{Type: "awg", Containers: []ingestproto.AWGContainer{{Name: "amnezia-awg2", Tools: "1.0.20210914", Module: "3.1.20260812", Down: true}}}
+	if err := w.h.st.SaveAWG(ctx, ag, broken, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	if o := open(); !o["awg_down"] {
+		t.Fatalf("a container with no interface must raise an alert: %v", o)
+	}
+	fixed := ingestproto.AWG{Type: "awg", Containers: []ingestproto.AWGContainer{{Name: "amnezia-awg2", Tools: "3.1.20260812", Module: "3.1.20260812"}}}
+	if err := w.h.st.SaveAWG(ctx, ag, fixed, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	if o := open(); o["awg_down"] || o["awg_tools_old"] {
+		t.Fatalf("the alert must close: %v", o)
 	}
 }

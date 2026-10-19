@@ -143,7 +143,14 @@ func (s *Store) SaveAWG(ctx context.Context, agent Agent, snap ingestproto.AWG, 
 			return err
 		}
 	}
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+	aid, err := ParseID(agent.ID)
+	if err != nil {
+		return nil
+	}
+	return s.saveAWGContainers(ctx, aid, snap.Containers, now)
 }
 
 type AWGPeerRow struct {
