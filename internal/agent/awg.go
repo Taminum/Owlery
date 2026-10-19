@@ -58,7 +58,7 @@ func (a *AWGSource) once(ctx context.Context) {
 		return
 	}
 	snap := ParseAWGSnapshot(out.String())
-	if (len(snap.Instances) > 0 || snap.ContainerAdmin) && a.Emit != nil {
+	if (len(snap.Instances) > 0 || snap.ContainerAdmin || len(snap.Containers) > 0) && a.Emit != nil {
 		a.Emit(snap)
 	}
 }
@@ -89,6 +89,8 @@ func ParseAWGSnapshot(text string) ingestproto.AWG {
 	tables := map[string]int64{}
 	managed := map[string]bool{}
 	legacy := map[string][4]string{}
+	ci := map[string]int{}
+	down := map[string]bool{}
 	for _, line := range strings.Split(text, "\n") {
 		f := strings.Split(strings.TrimRight(line, "\r"), "\t")
 		if len(f) < 2 {
@@ -131,6 +133,13 @@ func ParseAWGSnapshot(text string) ingestproto.AWG {
 			}
 		case "M":
 			managed[f[1]] = true
+		case "V":
+			if len(f) >= 4 && len(snap.Containers) < ingestproto.MaxAWGInstances {
+				ci[f[1]] = len(snap.Containers)
+				snap.Containers = append(snap.Containers, ingestproto.AWGContainer{Name: f[1], Tools: versionText(f[2]), Module: versionText(f[3])})
+			}
+		case "D":
+			down[f[1]] = true
 		case "X":
 			if f[1] == "container_admin" {
 				snap.ContainerAdmin = true
@@ -152,6 +161,9 @@ func ParseAWGSnapshot(text string) ingestproto.AWG {
 			}
 		}
 	}
+	for c, i := range ci {
+		snap.Containers[i].Down = down[c]
+	}
 	for i := range snap.Instances {
 		for j := range snap.Instances[i].Peers {
 			p := &snap.Instances[i].Peers[j]
@@ -169,6 +181,20 @@ func ParseAWGSnapshot(text string) ingestproto.AWG {
 		snap.Instances[i].Managed = managed[snap.Instances[i].Container]
 	}
 	return snap
+}
+
+// versionText keeps a version like 3.1.20260812 and drops anything else.
+func versionText(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) == 0 || len(s) > 40 {
+		return ""
+	}
+	for _, r := range s {
+		if (r < '0' || r > '9') && r != '.' {
+			return ""
+		}
+	}
+	return s
 }
 
 // parseSize reads "106.76 GiB" or "792.61 MiB" into bytes; anything else is 0.

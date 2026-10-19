@@ -126,3 +126,23 @@ func TestParseCreatedReadsBothShapesOfTheOldTable(t *testing.T) {
 		}
 	}
 }
+
+func TestParseAWGSnapshotCarriesToolVersionsAndAContainerWithNoInterface(t *testing.T) {
+	text := "V\tamnezia-awg2\t1.0.20210914\t3.1.20260812\nD\tamnezia-awg2\nV\tamnezia-awg3\t3.1.20260812\t3.1.20260812\n" +
+		"I\tamnezia-awg3\tawg0\t55424\tJc,S3\t1760000000\n" +
+		"V\tbad\tx; rm -rf /\t\n"
+	snap := ParseAWGSnapshot(text)
+	if len(snap.Containers) != 3 {
+		t.Fatalf("%+v", snap.Containers)
+	}
+	c2, c3, bad := snap.Containers[0], snap.Containers[1], snap.Containers[2]
+	if c2.Name != "amnezia-awg2" || c2.Tools != "1.0.20210914" || c2.Module != "3.1.20260812" || !c2.Down {
+		t.Fatalf("%+v", c2)
+	}
+	if c3.Down || c3.Tools != c3.Module {
+		t.Fatalf("a container with an interface is not down: %+v", c3)
+	}
+	if bad.Tools != "" || bad.Module != "" {
+		t.Fatalf("a version that is not a version is dropped: %+v", bad)
+	}
+}
