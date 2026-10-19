@@ -33,7 +33,11 @@ for c in $CONTAINERS; do
   "$DOCKER" inspect -f '{{.State.Running}}' "$c" 2>/dev/null | grep -qx true || continue
   started=$(date -d "$("$DOCKER" inspect -f '{{.State.StartedAt}}' "$c" 2>/dev/null)" +%s 2>/dev/null || echo 0)
   tools=$("$DOCKER" exec "$c" awg --version 2>/dev/null | sed -n 's/.*tools v\{0,1\}\([0-9][0-9.]*\).*/\1/p' | head -1)
+  # The agent's service may not read /lib/modules (ProtectKernelModules), so modinfo can fail there: the version
+  # DKMS has installed is a directory name, and the loaded module also says its version.
   module=$(modinfo -F version amneziawg 2>/dev/null | sed -n 's/^\([0-9][0-9.]*\).*/\1/p' | head -1)
+  [ -n "$module" ] || module=$(ls /var/lib/dkms/amneziawg 2>/dev/null | grep -E '^[0-9][0-9.]*$' | sort -V | tail -1)
+  [ -n "$module" ] || module=$(sed -n 's/^\([0-9][0-9.]*\).*/\1/p' /sys/module/amneziawg/version 2>/dev/null | head -1)
   printf 'V\t%s\t%s\t%s\n' "$c" "$tools" "$module"
   ifaces=$("$DOCKER" exec "$c" awg show interfaces 2>/dev/null)
   [ -n "$ifaces" ] || printf 'D\t%s\n' "$c"
