@@ -6,6 +6,8 @@
 #   P <container> <public key> <latest handshake unix> <rx bytes> <tx bytes> <allowed ips, comma separated>
 #   N <container> <public key> <client name>
 #   T <container> <when the Amnezia panel last wrote its client table, unix seconds>
+#   V <container> <version of the awg tools in the container> <version of the amneziawg kernel module on the host>
+#   D <container>   (the container runs but has no AmneziaWG interface: nothing is connected)
 #   L <container> <public key> <what the panel recorded: received, sent, latest handshake, creation date, as text>
 #
 # It only READS. It never prints a private key, a preshared key or a client endpoint: counters, handshakes
@@ -30,7 +32,12 @@ MANAGED=$(sed -n 's/^MANAGED="\(.*\)"$/\1/p' "$MANAGE_CONF" 2>/dev/null | head -
 for c in $CONTAINERS; do
   "$DOCKER" inspect -f '{{.State.Running}}' "$c" 2>/dev/null | grep -qx true || continue
   started=$(date -d "$("$DOCKER" inspect -f '{{.State.StartedAt}}' "$c" 2>/dev/null)" +%s 2>/dev/null || echo 0)
-  for i in $("$DOCKER" exec "$c" awg show interfaces 2>/dev/null); do
+  tools=$("$DOCKER" exec "$c" awg --version 2>/dev/null | sed -n 's/.*tools v\{0,1\}\([0-9][0-9.]*\).*/\1/p' | head -1)
+  module=$(modinfo -F version amneziawg 2>/dev/null | sed -n 's/^\([0-9][0-9.]*\).*/\1/p' | head -1)
+  printf 'V\t%s\t%s\t%s\n' "$c" "$tools" "$module"
+  ifaces=$("$DOCKER" exec "$c" awg show interfaces 2>/dev/null)
+  [ -n "$ifaces" ] || printf 'D\t%s\n' "$c"
+  for i in $ifaces; do
     port=$("$DOCKER" exec "$c" awg show "$i" listen-port 2>/dev/null)
     fields=$("$DOCKER" exec "$c" grep -oE '^[A-Za-z0-9]+ *=' "/opt/amnezia/awg/$i.conf" 2>/dev/null \
       | tr -d ' =' | grep -vxE 'PrivateKey|PresharedKey|PublicKey|Address|AllowedIPs|ListenPort|DNS|MTU|Endpoint|PersistentKeepalive' \

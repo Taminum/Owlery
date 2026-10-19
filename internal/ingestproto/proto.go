@@ -146,6 +146,17 @@ type AWG struct {
 	// ContainerAdmin says that the host has the helper that creates and removes containers installed. A host
 	// with no container yet reports it too, which is how an empty server can be set up from RemnaScope.
 	ContainerAdmin bool `json:"ca,omitempty"`
+	// Containers is what each running container says about itself, whether or not it has an interface.
+	Containers []AWGContainer `json:"cs,omitempty"`
+}
+
+// AWGContainer: a running container, the version of the awg tools inside it and of the host's kernel module, and
+// whether it has no AmneziaWG interface (so nothing connects).
+type AWGContainer struct {
+	Name   string `json:"c"`
+	Tools  string `json:"tv,omitempty"`
+	Module string `json:"mv,omitempty"`
+	Down   bool   `json:"d,omitempty"`
 }
 
 const (
