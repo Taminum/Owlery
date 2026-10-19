@@ -245,7 +245,7 @@ func TestAWGContainerWithoutAnInterfaceRaisesAnAlertThatClosesWhenItComesBack(t 
 	w := awgWorld(t, 10*time.Second)
 	ctx := context.Background()
 	nodes, _ := w.h.st.ListNodes(ctx, store.Scope{All: true}, w.home.ID, false)
-	ag, err := w.h.st.CreateAgent(ctx, store.Scope{All: true}, w.home.ID, nodes[0].ID, "awg", "awg2", "", store.HashAgentSecret("awg-secret-2"))
+	ag, err := w.h.st.CreateAgent(ctx, store.Scope{All: true}, w.home.ID, nodes[0].ID, "awg2", "awg", "", store.HashAgentSecret("awg-secret-2"))
 	if err != nil {
 		t.Fatal(err)
 	}
