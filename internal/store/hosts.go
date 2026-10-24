@@ -135,6 +135,7 @@ type HostRow struct {
 	ID        string              `json:"id"`
 	Name      string              `json:"name"`
 	Online    bool                `json:"online"`
+	Country   string              `json:"country"`
 	AgentSeen *time.Time          `json:"agent_seen"`
 	HasData   bool                `json:"has_data"`
 	UpdatedAt *time.Time          `json:"updated_at"`
@@ -169,7 +170,8 @@ type HostRow struct {
 func (s *Store) Hosts(ctx context.Context, sc Scope, now time.Time) ([]HostRow, error) {
 	pred, args := vpsVisible(sc, 0)
 	rows, err := s.pool.Query(ctx, `SELECT v.id, v.name, a.last_seen, i.updated_at, COALESCE(i.os,''), COALESCE(i.kernel,''), COALESCE(i.arch,''), COALESCE(i.cpu_model,''),
-			COALESCE(i.cpus,0), COALESCE(i.mem_total,0), COALESCE(i.swap_total,0), COALESCE(i.last, '{}'::jsonb)
+			COALESCE(i.cpus,0), COALESCE(i.mem_total,0), COALESCE(i.swap_total,0), COALESCE(i.last, '{}'::jsonb),
+			COALESCE((SELECT n.country_code FROM security_vps_links l JOIN nodes n ON n.id = l.node_id WHERE l.vps_id = v.id ORDER BY l.created_at, l.id LIMIT 1), '')
 		FROM security_vps v
 		LEFT JOIN security_agents a ON a.vps_id = v.id AND a.status = 'active'
 		LEFT JOIN host_info i ON i.vps_id = v.id
@@ -183,7 +185,7 @@ func (s *Store) Hosts(ctx context.Context, sc Scope, now time.Time) ([]HostRow, 
 		var h HostRow
 		var id uuid.UUID
 		var last []byte
-		if err := rows.Scan(&id, &h.Name, &h.AgentSeen, &h.UpdatedAt, &h.OS, &h.Kernel, &h.Arch, &h.CPUModel, &h.CPUs, &h.MemTotal, &h.SwapTotal, &last); err != nil {
+		if err := rows.Scan(&id, &h.Name, &h.AgentSeen, &h.UpdatedAt, &h.OS, &h.Kernel, &h.Arch, &h.CPUModel, &h.CPUs, &h.MemTotal, &h.SwapTotal, &last, &h.Country); err != nil {
 			return nil, err
 		}
 		h.ID = id.String()

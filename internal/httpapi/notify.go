@@ -54,7 +54,7 @@ func (s *Server) notifyList(w http.ResponseWriter, r *http.Request, a auth.Actor
 		s.writeErr(w, r, http.StatusInternalServerError, "internal", "internal error")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"channels": cs, "max": store.MaxNotifyChannels})
+	writeJSON(w, http.StatusOK, map[string]any{"channels": cs, "max": store.MaxNotifyChannels, "groups": store.AlertGroups, "critical": criticalList()})
 }
 
 // notifyDiscover checks a bot token and lists the chats that wrote to the bot. The token is used for these
@@ -194,6 +194,29 @@ func (s *Server) notifyPatch(w http.ResponseWriter, r *http.Request, a auth.Acto
 		}
 		p.DigestTZ = &v
 	}
+	if v, ok := raw["commands"].(bool); ok {
+		p.Commands = &v
+	}
+	if v, ok := raw["prefs"]; ok {
+		pr, ok := parsePrefs(v)
+		if !ok {
+			s.writeErr(w, r, http.StatusUnprocessableEntity, "invalid_prefs", "the notification settings are not valid")
+			return
+		}
+		p.Prefs = &pr
+	}
+	if v, ok := raw["mute_hours"]; ok {
+		f, isNum := v.(float64)
+		if !isNum || f < 0 || f > 24*14 || f != float64(int(f)) {
+			s.writeErr(w, r, http.StatusUnprocessableEntity, "invalid_mute", "mute for 0 to 336 hours")
+			return
+		}
+		p.SetMute = true
+		if f > 0 {
+			until := time.Now().UTC().Add(time.Duration(f) * time.Hour)
+			p.MutedUntil = &until
+		}
+	}
 	ch, err := s.Store.PatchNotifyChannel(r.Context(), r.PathValue("id"), p)
 	if err != nil {
 		s.writeErr(w, r, http.StatusNotFound, "not_found", "no such channel")
@@ -245,4 +268,81 @@ func (s *Server) notifyTest(w http.ResponseWriter, r *http.Request, a auth.Actor
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func criticalList() []string {
+	var out []string
+	for _, g := range store.AlertGroups {
+		for _, k := range g.Kinds {
+			if store.CriticalKinds[k] {
+				out = append(out, k)
+			}
+		}
+	}
+	return out
+}
+
+var hhmm = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
+
+// parsePrefs reads the notification settings of a request and refuses anything it does not know.
+func parsePrefs(v any) (store.NotifyPrefs, bool) {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return store.NotifyPrefs{}, false
+	}
+	var p store.NotifyPrefs
+	for k, val := range m {
+		switch k {
+		case "off":
+			arr, ok := val.([]any)
+			if !ok || len(arr) > len(store.AlertGroups) {
+				return p, false
+			}
+			seen := map[string]bool{}
+			for _, x := range arr {
+				id, ok := x.(string)
+				if !ok || !store.ValidAlertGroup(id) {
+					return p, false
+				}
+				if !seen[id] {
+					seen[id] = true
+					p.Off = append(p.Off, id)
+				}
+			}
+		case "no_resolved":
+			b, ok := val.(bool)
+			if !ok {
+				return p, false
+			}
+			p.NoResolved = b
+		case "quiet_on":
+			b, ok := val.(bool)
+			if !ok {
+				return p, false
+			}
+			p.QuietOn = b
+		case "quiet_from", "quiet_to":
+			s, ok := val.(string)
+			if !ok || (s != "" && !hhmm.MatchString(s)) {
+				return p, false
+			}
+			if k == "quiet_from" {
+				p.QuietFrom = s
+			} else {
+				p.QuietTo = s
+			}
+		case "remind_hours":
+			f, ok := val.(float64)
+			if !ok || f < 0 || f > 168 || f != float64(int(f)) {
+				return p, false
+			}
+			p.RemindHours = int(f)
+		default:
+			return p, false
+		}
+	}
+	if p.QuietOn && (p.QuietFrom == "" || p.QuietTo == "" || p.QuietFrom == p.QuietTo) {
+		return p, false
+	}
+	return p, true
 }

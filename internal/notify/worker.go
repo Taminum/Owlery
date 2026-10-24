@@ -118,6 +118,58 @@ func alertLine(n store.PendingAlertNotice) string {
 	return "⚠️ " + n.Label
 }
 
+// quietNow says whether the channel is in its quiet hours or muted: only critical alerts are announced then.
+func quietNow(c store.NotifyChannel, now time.Time) bool {
+	if c.MutedUntil != nil && c.MutedUntil.After(now) {
+		return true
+	}
+	p := c.Prefs
+	if !p.QuietOn || p.QuietFrom == "" || p.QuietTo == "" {
+		return false
+	}
+	loc, err := time.LoadLocation(c.DigestTZ)
+	if err != nil {
+		loc = time.UTC
+	}
+	l := now.In(loc)
+	cur := l.Hour()*60 + l.Minute()
+	from, to := minutesOf(p.QuietFrom), minutesOf(p.QuietTo)
+	if from < 0 || to < 0 || from == to {
+		return false
+	}
+	if from < to {
+		return cur >= from && cur < to
+	}
+	return cur >= from || cur < to // across midnight
+}
+
+func minutesOf(hhmm string) int {
+	var h, m int
+	if _, err := fmt.Sscanf(hhmm, "%d:%d", &h, &m); err != nil || h < 0 || h > 23 || m < 0 || m > 59 {
+		return -1
+	}
+	return h*60 + m
+}
+
+type verdict int
+
+const (
+	skip verdict = iota // this channel does not want it
+	hold                // it wants it, but not now
+	send
+)
+
+// judge decides what a channel does with one announcement.
+func judge(c store.NotifyChannel, kind string, closed bool, now time.Time) verdict {
+	if c.Prefs.GroupOff(kind) || (closed && c.Prefs.NoResolved) {
+		return skip
+	}
+	if quietNow(c, now) && !store.CriticalKinds[kind] {
+		return hold
+	}
+	return send
+}
+
 func (w *Worker) alerts(ctx context.Context, chans []store.NotifyChannel) {
 	var targets []store.NotifyChannel
 	for _, c := range chans {
@@ -128,29 +180,59 @@ func (w *Worker) alerts(ctx context.Context, chans []store.NotifyChannel) {
 	if len(targets) == 0 {
 		return
 	}
+	now := w.now()
 	pending, err := w.Store.PendingAlertNotices(ctx, 50)
-	if err != nil || len(pending) == 0 {
+	if err != nil {
 		return
 	}
-	var texts []string
-	if len(pending) > maxPerRound {
-		var b strings.Builder
-		fmt.Fprintf(&b, "RemnaScope: оповещений за раз: %d\n", len(pending))
-		for i, n := range pending {
-			if i >= 10 {
-				b.WriteString("…\n")
-				break
-			}
-			b.WriteString(alertLine(n) + "\n")
-		}
-		texts = []string{b.String()}
-	} else {
-		for _, n := range pending {
-			texts = append(texts, alertLine(n))
+	var opened, closed []string
+	mark := func(n store.PendingAlertNotice) {
+		if n.Closed {
+			closed = append(closed, n.ID)
+		} else {
+			opened = append(opened, n.ID)
 		}
 	}
-	ok := false
+	batches := map[string][]store.PendingAlertNotice{} // channel id -> what it is to get now
+	wantedBy := map[string][]string{}                  // alert id -> the channels that are to get it
+	for _, n := range pending {
+		held := false
+		for _, c := range targets {
+			switch judge(c, n.Kind, n.Closed, now) {
+			case send:
+				batches[c.ID] = append(batches[c.ID], n)
+				wantedBy[n.ID] = append(wantedBy[n.ID], c.ID)
+			case hold:
+				held = true
+			}
+		}
+		if len(wantedBy[n.ID]) == 0 && !held {
+			mark(n) // nobody wants it: it is settled without a word
+		}
+	}
+	delivered := map[string]bool{}
 	for _, c := range targets {
+		list := batches[c.ID]
+		if len(list) == 0 {
+			continue
+		}
+		var texts []string
+		if len(list) > maxPerRound {
+			var b strings.Builder
+			fmt.Fprintf(&b, "RemnaScope: оповещений за раз: %d\n", len(list))
+			for i, n := range list {
+				if i >= 10 {
+					b.WriteString("…\n")
+					break
+				}
+				b.WriteString(alertLine(n) + "\n")
+			}
+			texts = []string{b.String()}
+		} else {
+			for _, n := range list {
+				texts = append(texts, alertLine(n))
+			}
+		}
 		allSent := true
 		for _, tx := range texts {
 			if err := w.SendTo(ctx, c, tx); err != nil {
@@ -158,22 +240,65 @@ func (w *Worker) alerts(ctx context.Context, chans []store.NotifyChannel) {
 				break
 			}
 		}
-		ok = ok || allSent
-	}
-	if !ok {
-		return // nobody got it: try again next round
-	}
-	var opened, closed []string
-	for _, n := range pending {
-		if n.Closed {
-			closed = append(closed, n.ID)
-		} else {
-			opened = append(opened, n.ID)
+		if allSent {
+			for _, n := range list {
+				delivered[n.ID] = true
+			}
 		}
 	}
-	if err := w.Store.MarkAlertsNotified(ctx, opened, closed); err != nil {
-		w.Log.Error("notify: marking alerts", "err", err)
+	for _, n := range pending {
+		if delivered[n.ID] {
+			mark(n)
+		}
 	}
+	if len(opened) > 0 || len(closed) > 0 {
+		if err := w.Store.MarkAlertsNotified(ctx, opened, closed); err != nil {
+			w.Log.Error("notify: marking alerts", "err", err)
+		}
+	}
+	w.reminders(ctx, targets, now)
+}
+
+// reminders repeats alerts that are still open, for the channels that asked for it.
+func (w *Worker) reminders(ctx context.Context, targets []store.NotifyChannel, now time.Time) {
+	for _, c := range targets {
+		h := c.Prefs.RemindHours
+		if h <= 0 {
+			continue
+		}
+		due, err := w.Store.AlertsDueReminder(ctx, now.Add(-time.Duration(h)*time.Hour), 5)
+		if err != nil || len(due) == 0 {
+			continue
+		}
+		var ids []string
+		for _, n := range due {
+			if judge(c, n.Kind, false, now) != send {
+				continue
+			}
+			line := fmt.Sprintf("🔔 Всё ещё открыто (%s): %s", sinceText(now.Sub(n.OpenedAt)), n.Label)
+			if n.Detail != "" {
+				line += "\n" + n.Detail
+			}
+			if err := w.SendTo(ctx, c, line); err != nil {
+				break
+			}
+			ids = append(ids, n.ID)
+		}
+		if len(ids) > 0 {
+			_ = w.Store.MarkAlertsReminded(ctx, ids)
+		}
+	}
+}
+
+func sinceText(d time.Duration) string {
+	h := int(d.Hours())
+	if h >= 48 {
+		return fmt.Sprintf("%d дн.", h/24)
+	}
+	if h >= 1 {
+		return fmt.Sprintf("%d ч", h)
+	}
+	return fmt.Sprintf("%d мин", int(d.Minutes()))
 }
 
 func (w *Worker) digests(ctx context.Context, chans []store.NotifyChannel) {
@@ -207,17 +332,11 @@ func (w *Worker) digests(ctx context.Context, chans []store.NotifyChannel) {
 	}
 }
 
-// BuildDigest writes the last 24 hours as a short message, the same facts as the "what changed" page for the
+// buildDayEvents writes what happened in the last 24 hours, the same facts as the "what changed" page for the
 // owner (all panels, all servers).
-func BuildDigest(ctx context.Context, st *store.Store, now time.Time, loc *time.Location) (string, error) {
+func buildDayEvents(ctx context.Context, st *store.Store, now time.Time, loc *time.Location) (string, error) {
 	from, to := now.Add(-24*time.Hour), now
 	var b strings.Builder
-	fmt.Fprintf(&b, "RemnaScope: за сутки (до %s)\n", now.In(loc).Format("02.01 15:04"))
-
-	open, err := st.ListAlerts(ctx, nil, true, true, 50)
-	if err != nil {
-		return "", err
-	}
 	panels, err := st.ListPanels(ctx, store.Scope{All: true})
 	if err != nil {
 		return "", err
@@ -228,23 +347,6 @@ func BuildDigest(ctx context.Context, st *store.Store, now time.Time, loc *time.
 			ids = append(ids, p.ID)
 		}
 	}
-	all, err := st.ListAlerts(ctx, ids, true, true, 50)
-	if err == nil {
-		open = all
-	}
-	if len(open) == 0 {
-		b.WriteString("\nОткрытых оповещений нет.\n")
-	} else {
-		fmt.Fprintf(&b, "\nОткрытых оповещений: %d\n", len(open))
-		for i, a := range open {
-			if i >= 5 {
-				b.WriteString("…\n")
-				break
-			}
-			b.WriteString("• " + a.Label + "\n")
-		}
-	}
-
 	ev, err := st.SecurityEventCounts(ctx, store.Scope{All: true}, from, to)
 	if err != nil {
 		return "", err
@@ -307,4 +409,20 @@ func eventWord(t string) string {
 		return w
 	}
 	return t
+}
+
+// BuildDigest is the daily message: the summary of the whole cluster, then what happened in the last day.
+func BuildDigest(ctx context.Context, st *store.Store, now time.Time, loc *time.Location) (string, error) {
+	head, err := buildStats(ctx, st, now, loc, "ЕЖЕДНЕВНАЯ СВОДКА RemnaScope")
+	if err != nil {
+		return "", err
+	}
+	day, err := buildDayEvents(ctx, st, now, loc)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(day) == "" {
+		return head, nil
+	}
+	return head + "\n📈 За последние сутки:\n" + strings.TrimLeft(day, "\n"), nil
 }
