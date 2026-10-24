@@ -192,6 +192,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/panels/{id}/nodes", s.session(s.listNodes))
 	mux.Handle("GET /api/v1/panels/{id}/users", s.session(s.listUsers))
 	mux.Handle("GET /api/v1/subscriptions", s.session(s.subscriptions))
+	mux.Handle("GET /api/v1/hosts", s.session(s.hostList))
+	mux.Handle("GET /api/v1/hosts/{id}/series", s.session(s.hostSeries))
 	mux.Handle("GET /api/v1/pulse/nodes", s.session(s.pulseNodes))
 	mux.Handle("GET /api/v1/billing", s.session(s.listBills))
 	mux.Handle("POST /api/v1/billing", s.session(s.createBill))
