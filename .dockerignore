@@ -3,4 +3,5 @@
 .git
 docs/screenshots
 assets
+apps/web/public/ember
 secrets

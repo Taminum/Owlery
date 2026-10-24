@@ -192,4 +192,16 @@ describe('Mascot scenes', () => {
     expect(screen.queryByRole('menuitem', { name: 'Снять худи' })).toBeNull()
     expect(screen.queryByRole('menuitem', { name: 'Воздушный поцелуй' })).toBeNull()
   })
+
+  it('offers only the scenes that the installed pack has', async () => {
+    setKawaii({ enabled: true })
+    stubFetch([], manifest, scenePhrases) // the plain manifest: idle and alert only, as in a pack without the cheeky scenes
+    render(<MemoryRouter><Mascot /></MemoryRouter>)
+    await screen.findByTestId('ember')
+    screen.getByRole('button', { name: 'Меню талисмана' }).click()
+    await screen.findByRole('menuitem', { name: 'Выключить талисмана' })
+    for (const name of ['Воздушный поцелуй', 'Поймана за флиртом', 'Снять худи', 'Подразнить']) {
+      expect(screen.queryByRole('menuitem', { name })).toBeNull()
+    }
+  })
 })

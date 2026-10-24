@@ -35,8 +35,21 @@ sudo docker compose -f compose.prod.yml logs caddy | tail -5    # certificate ob
 Open `https://scope.example.com`, sign in as `owner` (`sudo cat secrets/owner_password`) and change the password in
 Settings. Turn on two-factor authentication there as well.
 
-Images are pulled from `ghcr.io/taminum/remnascope-api` and `-web`. If the packages are private, run
-`docker login ghcr.io` with a token that has `read:packages`, or build your own (below).
+Images are pulled from `ghcr.io/taminum/remnascope-api` and `-web`. `RELEASE` in `.env` is `latest` by default; pin a
+tag such as `v0.3.2` to stay on one version (see Updating). If the packages are private (a `403 Forbidden` on pull), run
+`docker login ghcr.io` with a token that has `read:packages`, or build your own (below). The owner of the packages makes
+them public under *Package settings → Change visibility*.
+
+### Optional: the Ember mascot (Kawaii Mode)
+The mascot's pictures are not part of the project or of the images: they are a separate pack that its owner gives you.
+With the pack file (for example `ember-pack.tar.gz`):
+```bash
+cd RemnaScope/deploy/prod
+./install-ember.sh ember-pack.tar.gz      # unpacks into ./ember, which the web container reads
+```
+Nothing is rebuilt or restarted: turn on *Settings → Appearance → Kawaii Mode* and she is there. `./install-ember.sh
+--remove` takes her away. The folder can be elsewhere: set `EMBER_DIR=/path` in `.env`. Without a pack the theme still
+works and there is simply no mascot.
 
 ## 3. Connect a panel and the nodes
 1. **Panels → Add panel**: name, HTTPS URL of the panel API, API token. The wizard tests the connection before saving.

@@ -47,6 +47,9 @@ services:
     depends_on: [api]
     read_only: true
     tmpfs: [/tmp]
+    volumes:
+      # The Kawaii Mode mascot: a folder the owner fills with install-ember.sh. Empty or missing: no mascot.
+      - ${EMBER_DIR:-./ember}:/usr/share/nginx/html/ember:ro
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     deploy: { resources: { limits: { memory: 64M } } }
