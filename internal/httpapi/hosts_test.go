@@ -21,7 +21,8 @@ func TestHostResourcesAreListedChartedAndRaiseAlertsForAFullDisk(t *testing.T) {
 	now := time.Now().UTC()
 	host := func(cpu float64, diskUsed int64) secproto.Host {
 		return secproto.Host{Type: "host", At: now, OS: "Ubuntu 24.04", Kernel: "6.8.0", Arch: "amd64", CPUModel: "Test CPU", CPUs: 2, MemTotal: 4 * gb, MemUsed: gb,
-			CPUPct: cpu, Load1: 0.5, UptimeSec: 3600, NetRX: 1000, NetTX: 2000, Disks: []secproto.HostDisk{{Mount: "/", FS: "ext4", Total: 100 * gb, Used: diskUsed}}}
+			CPUPct: cpu, Load1: 0.5, UptimeSec: 3600, NetRX: 1000, NetTX: 2000, Disks: []secproto.HostDisk{{Mount: "/", FS: "ext4", Total: 100 * gb, Used: diskUsed}},
+			Procs: []secproto.HostProc{{Name: "xray", Unit: "docker:0123456789ab", Count: 1, CPU: 41.27, RSS: gb / 4}, {Name: "", Count: 3}, {Name: "ghost", Count: 0, CPU: 5}, {Name: "weird", Count: 1, CPU: -5, RSS: -1}}}
 	}
 	// A server with no reading is listed, without data.
 	_, b := w.owner.get("/api/v1/hosts")
@@ -41,6 +42,13 @@ func TestHostResourcesAreListedChartedAndRaiseAlertsForAFullDisk(t *testing.T) {
 		if !strings.Contains(string(b), want) && !strings.Contains(strings.ReplaceAll(string(b), `"m":"/"`, `"mount":"/"`), want) {
 			t.Errorf("%s is missing from %s", want, b)
 		}
+	}
+	// The busiest programs are kept; a group with no name or no process is not, and numbers are made sensible.
+	if !strings.Contains(string(b), `"n":"xray"`) || !strings.Contains(string(b), `"cpu":41.3`) || strings.Contains(string(b), "ghost") {
+		t.Fatalf("%s", b)
+	}
+	if strings.Contains(string(b), `"rss":-1`) || strings.Contains(string(b), `"cpu":-5`) {
+		t.Fatalf("a negative figure got through: %s", b)
 	}
 	st, sb := w.owner.get("/api/v1/hosts/" + vps.ID + "/series?hours=1")
 	if st != 200 || !strings.Contains(string(sb), `"rx_bps":1000`) || !strings.Contains(string(sb), `"disk_pct":95`) {

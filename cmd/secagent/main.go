@@ -40,6 +40,7 @@ func main() {
 		noSock    = flag.Bool("no-sockets", false, "do not read listening sockets")
 		noFW      = flag.Bool("no-firewall", false, "do not read the firewall")
 		noHost    = flag.Bool("no-host", false, "do not report CPU, memory, disk and network use")
+		contFile  = flag.String("containers-file", "/run/remnascope-sec/containers.tsv", "the list of running containers written by remnascope-containers-list (optional)")
 		probe     = flag.Bool("probe", false, "act as a checker: let the server ask this host to connect to a public TCP port or read a TLS certificate")
 		showVer   = flag.Bool("version", false, "print the version and exit")
 	)
@@ -56,7 +57,7 @@ func main() {
 	defer stop()
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	err := secagent.Run(ctx, secagent.Config{ServerURL: *server, TokenFile: *tokenFile, CAFile: *caFile, AllowInsecure: *insecure,
-		Interval: *interval, Version: version, Log: log, HelperSocket: *helper, StateDir: *stateDir, NoFail2ban: *noF2B, NoSockets: *noSock, NoFirewall: *noFW, NoHost: *noHost, Probe: *probe})
+		Interval: *interval, Version: version, Log: log, HelperSocket: *helper, StateDir: *stateDir, NoFail2ban: *noF2B, NoSockets: *noSock, NoFirewall: *noFW, NoHost: *noHost, ContainersFile: *contFile, Probe: *probe})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "secagent:", err)
 		os.Exit(1)

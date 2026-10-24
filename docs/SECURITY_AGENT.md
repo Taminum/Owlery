@@ -61,6 +61,16 @@ only process that touches Fail2ban's socket.
    then `sudo systemctl daemon-reload && sudo systemctl restart fail2ban`.
 4. Start both: `sudo systemctl enable --now remnascope-secagent-f2b remnascope-secagent`.
 
+5. Optional, for container names on the resources page (the agent has no access to Docker, so it would show
+   a container by its short id): a small root timer writes the list of running containers for it.
+   ```sh
+   sudo install -m 0755 remnascope-containers-list /usr/local/sbin/
+   sudo cp remnascope-containers-list.service remnascope-containers-list.timer /etc/systemd/system/
+   sudo systemctl daemon-reload && sudo systemctl enable --now remnascope-containers-list.timer
+   ```
+   It runs `docker ps` and writes `/run/remnascope-sec/containers.tsv` (short id and name, nothing else, names
+   checked against a strict pattern), readable by the agent's group. Without it everything else works.
+
 The binary and the units are attached to each release (`deploy/secagent` in the deploy-files archive).
 
 Without Fail2ban, or without wanting ban/unban, install only the agent: drop `-helper-socket` and `-state-dir`

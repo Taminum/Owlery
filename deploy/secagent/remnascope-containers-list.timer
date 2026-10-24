@@ -1,0 +1,10 @@
+[Unit]
+Description=RemnaScope: refresh the list of running containers
+
+[Timer]
+OnBootSec=20s
+OnUnitActiveSec=30s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target
