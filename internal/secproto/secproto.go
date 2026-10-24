@@ -284,4 +284,32 @@ type Host struct {
 	NetRX     int64      `json:"rx"` // counters over the real interfaces since boot
 	NetTX     int64      `json:"tx"`
 	Disks     []HostDisk `json:"disks,omitempty"`
+	// Procs are the busiest groups of processes by processor and by memory, at most MaxHostProcs. Only the short
+	// program name and the unit it runs in are sent, never the command line, which may carry a secret.
+	Procs []HostProc `json:"procs,omitempty"`
+	// Units are the busiest services and containers as a whole: all their processes added up.
+	Units []HostUnit `json:"units,omitempty"`
+}
+
+const MaxHostUnits = 16
+
+// HostUnit is one service or container with everything that runs in it.
+type HostUnit struct {
+	Unit  string  `json:"u"`           // "name.service" or "docker:<12 characters>"
+	Label string  `json:"l,omitempty"` // the container's name, when the host could tell
+	Count int     `json:"c"`           // processes in it
+	CPU   float64 `json:"cpu"`         // percent of one core
+	RSS   int64   `json:"rss"`
+}
+
+const MaxHostProcs = 24
+
+// HostProc is a group of processes with the same program name in the same unit (a service or a container).
+type HostProc struct {
+	Name  string  `json:"n"`
+	Label string  `json:"l,omitempty"` // the container's name, when the host could tell
+	Unit  string  `json:"u,omitempty"` // a systemd unit, or "docker:<12 characters>" for a container
+	Count int     `json:"c"`           // how many processes
+	CPU   float64 `json:"cpu"`         // percent of one core, so more than 100 is possible on several cores
+	RSS   int64   `json:"rss"`         // resident memory in bytes
 }

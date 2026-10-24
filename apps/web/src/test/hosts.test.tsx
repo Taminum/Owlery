@@ -28,7 +28,9 @@ const GB = 1024 ** 3
 const host = (over: object) => ({
   id: 'h1', name: 'exit-nl', online: true, has_data: true, updated_at: new Date().toISOString(), os: 'Ubuntu 24.04.3 LTS', kernel: '6.8.0-147-generic', arch: 'amd64',
   cpu_model: 'Test CPU', cpus: 2, mem_total: 4 * GB, swap_total: 0, cpu: 12.4, load1: 0.31, load5: 0.2, load15: 0.1, mem_used: 2 * GB, swap_used: 0, uptime: 90000,
-  disks: [{ m: '/', fs: 'ext4', t: 100 * GB, u: 93 * GB }], cpu_spark: [10, 12, null, 14], mem_spark: [50, 50, 50, 51], ...over,
+  disks: [{ m: '/', fs: 'ext4', t: 100 * GB, u: 93 * GB }], cpu_spark: [10, 12, null, 14], mem_spark: [50, 50, 50, 51],
+  units: [{ u: 'docker:0123456789ab', l: 'remnanode', c: 5, cpu: 44.3, rss: 420 * 1024 ** 2 }, { u: 'nginx.service', c: 4, cpu: 3.1, rss: 80 * 1024 ** 2 }],
+  procs: [{ n: 'xray', u: 'docker:0123456789ab', l: 'remnanode', c: 1, cpu: 41.2, rss: 300 * 1024 ** 2 }, { n: 'nginx', u: 'nginx.service', c: 4, cpu: 3.1, rss: 80 * 1024 ** 2 }, { n: 'sshd', c: 1, cpu: 0, rss: 5 * 1024 ** 2 }], ...over,
 })
 
 describe('Server resources', () => {
@@ -62,6 +64,15 @@ describe('Server resources', () => {
     renderHosts()
     await userEvent.click(await screen.findByRole('button', { name: 'подробнее' }))
     expect(await screen.findByText('6.8.0-147-generic', { exact: false })).toBeInTheDocument()
+    const procs = screen.getByRole('region', { name: 'Что занимает ресурсы' })
+    expect(within(procs).getAllByText('xray')).toHaveLength(2) // once by processor, once by memory
+    expect(within(procs).getAllByText('контейнер remnanode').length).toBeGreaterThan(0) // the name, not the id, when the host knows it
+    const units = screen.getByRole('region', { name: 'Контейнеры и службы' })
+    expect(within(units).getByText('контейнер remnanode')).toBeInTheDocument()
+    expect(within(units).getByText('44%')).toBeInTheDocument()
+    expect(within(units).getByText('nginx')).toBeInTheDocument()
+    expect(within(procs).getAllByText('×4').length).toBeGreaterThan(0) // four workers of one program are one line
+    expect(within(procs).getByText(/Доля одного ядра: у сервера их 2/)).toBeInTheDocument()
     expect(screen.getByText('Test CPU')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'неделя' }))
     expect(mock.calls.some((c) => c.url.includes('/hosts/h1/series?hours=168'))).toBe(true)

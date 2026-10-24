@@ -34,6 +34,42 @@ func (s *Store) SaveHost(ctx context.Context, vpsID string, h secproto.Host, now
 	if len(h.Disks) > secproto.MaxHostDisks {
 		h.Disks = h.Disks[:secproto.MaxHostDisks]
 	}
+	if len(h.Procs) > secproto.MaxHostProcs {
+		h.Procs = h.Procs[:secproto.MaxHostProcs]
+	}
+	procs := make([]secproto.HostProc, 0, len(h.Procs))
+	for _, p := range h.Procs {
+		name := cleanText(p.Name, 40)
+		if name == "" || p.Count < 1 {
+			continue
+		}
+		cpu := p.CPU
+		if math.IsNaN(cpu) || cpu < 0 {
+			cpu = 0
+		}
+		if cpu > 100000 {
+			cpu = 100000
+		}
+		procs = append(procs, secproto.HostProc{Name: name, Unit: cleanText(p.Unit, 80), Label: cleanText(p.Label, 80), Count: p.Count, CPU: math.Round(cpu*10) / 10, RSS: nz(p.RSS)})
+	}
+	if len(h.Units) > secproto.MaxHostUnits {
+		h.Units = h.Units[:secproto.MaxHostUnits]
+	}
+	units := make([]secproto.HostUnit, 0, len(h.Units))
+	for _, u := range h.Units {
+		unit := cleanText(u.Unit, 80)
+		if unit == "" || u.Count < 1 {
+			continue
+		}
+		cpu := u.CPU
+		if math.IsNaN(cpu) || cpu < 0 {
+			cpu = 0
+		}
+		if cpu > 100000 {
+			cpu = 100000
+		}
+		units = append(units, secproto.HostUnit{Unit: unit, Label: cleanText(u.Label, 80), Count: u.Count, CPU: math.Round(cpu*10) / 10, RSS: nz(u.RSS)})
+	}
 	h.MemTotal, h.MemUsed, h.SwapTotal, h.SwapUsed = nz(h.MemTotal), nz(h.MemUsed), nz(h.SwapTotal), nz(h.SwapUsed)
 	if h.MemUsed > h.MemTotal && h.MemTotal > 0 {
 		h.MemUsed = h.MemTotal
@@ -50,7 +86,9 @@ func (s *Store) SaveHost(ctx context.Context, vpsID string, h secproto.Host, now
 		NetRX     int64               `json:"rx"`
 		NetTX     int64               `json:"tx"`
 		Disks     []secproto.HostDisk `json:"disks"`
-	}{now, h.CPUPct, h.Load1, h.Load5, h.Load15, h.MemUsed, h.SwapUsed, h.UptimeSec, nz(h.NetRX), nz(h.NetTX), h.Disks})
+		Procs     []secproto.HostProc `json:"procs"`
+		Units     []secproto.HostUnit `json:"units"`
+	}{now, h.CPUPct, h.Load1, h.Load5, h.Load15, h.MemUsed, h.SwapUsed, h.UptimeSec, nz(h.NetRX), nz(h.NetTX), h.Disks, procs, units})
 	if err != nil {
 		return err
 	}
@@ -110,6 +148,8 @@ type HostRow struct {
 	SwapUsed  int64               `json:"swap_used"`
 	UptimeSec int64               `json:"uptime"`
 	Disks     []secproto.HostDisk `json:"disks"`
+	Procs     []secproto.HostProc `json:"procs"`
+	Units     []secproto.HostUnit `json:"units"`
 	CPUSpark  []*float64          `json:"cpu_spark"` // the last hour, a point a minute
 	MemSpark  []float64           `json:"mem_spark"` // percent
 }
@@ -140,6 +180,8 @@ func (s *Store) Hosts(ctx context.Context, sc Scope, now time.Time) ([]HostRow, 
 		h.Online = h.UpdatedAt != nil && now.Sub(*h.UpdatedAt) < 2*time.Minute
 		h.HasData = h.UpdatedAt != nil
 		h.Disks = []secproto.HostDisk{}
+		h.Procs = []secproto.HostProc{}
+		h.Units = []secproto.HostUnit{}
 		if h.HasData {
 			var l struct {
 				CPU      float64             `json:"cpu"`
@@ -150,6 +192,8 @@ func (s *Store) Hosts(ctx context.Context, sc Scope, now time.Time) ([]HostRow, 
 				SwapUsed int64               `json:"swap_used"`
 				Up       int64               `json:"up"`
 				Disks    []secproto.HostDisk `json:"disks"`
+				Procs    []secproto.HostProc `json:"procs"`
+				Units    []secproto.HostUnit `json:"units"`
 			}
 			if json.Unmarshal(last, &l) == nil {
 				if l.CPU >= 0 {
@@ -159,6 +203,12 @@ func (s *Store) Hosts(ctx context.Context, sc Scope, now time.Time) ([]HostRow, 
 				h.Load1, h.Load5, h.Load15, h.MemUsed, h.SwapUsed, h.UptimeSec = l.L1, l.L5, l.L15, l.MemUsed, l.SwapUsed, l.Up
 				if l.Disks != nil {
 					h.Disks = l.Disks
+				}
+				if l.Procs != nil {
+					h.Procs = l.Procs
+				}
+				if l.Units != nil {
+					h.Units = l.Units
 				}
 			}
 		}
