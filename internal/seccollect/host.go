@@ -22,6 +22,8 @@ type HostReader struct {
 	mu                  sync.Mutex
 	prevBusy, prevTotal uint64
 	havePrev            bool
+	prevProc            map[int]procTicks
+	prevAt              time.Time
 }
 
 func NewHostReader() *HostReader { return &HostReader{Proc: "/proc", Etc: "/etc"} }
@@ -239,5 +241,6 @@ func (h *HostReader) Read(now time.Time) secproto.Host {
 			out.Disks = append(out.Disks, secproto.HostDisk{Mount: clean(m.Mount, 120), FS: m.FS, Total: total, Used: used})
 		}
 	}
+	out.Procs = h.readProcs(now)
 	return out
 }

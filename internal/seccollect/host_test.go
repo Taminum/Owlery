@@ -3,6 +3,8 @@ package seccollect
 import (
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -64,5 +66,88 @@ func TestParseCPUStatRejectsGarbage(t *testing.T) {
 	}
 	if _, _, ok := ParseCPUStat(""); ok {
 		t.Fatal("nothing accepted")
+	}
+}
+
+func procFiles(t *testing.T, proc string, pid int, name string, ticks, start uint64, rssPages int64, cgroup string) {
+	t.Helper()
+	d := filepath.Join(proc, strconv.Itoa(pid))
+	stat := strconv.Itoa(pid) + " (" + name + ") S 1 1 1 0 -1 4194560 0 0 0 0 " + strconv.FormatUint(ticks, 10) + " 0 0 0 20 0 1 0 " + strconv.FormatUint(start, 10) + " 1000 100\n"
+	put(t, d, "stat", stat)
+	put(t, d, "statm", "1000 "+strconv.FormatInt(rssPages, 10)+" 0 0 0 0 0\n")
+	put(t, d, "cgroup", cgroup)
+}
+
+func TestHostReaderGroupsProcessesByProgramAndUnitAndSendsNoCommandLine(t *testing.T) {
+	proc := t.TempDir()
+	put(t, proc, "stat", "cpu  100 0 100 700 100 0 0 0 0 0\n")
+	put(t, proc, "meminfo", "MemTotal: 1000 kB\nMemAvailable: 500 kB\n")
+	put(t, proc, "cmdline-must-not-be-read-by-name", "x")
+	cg := "0::/system.slice/docker-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef.scope\n"
+	// Two workers of one program in one container, a service, and a process with brackets in its name.
+	procFiles(t, proc, 100, "nginx", 1000, 5, 100, cg)
+	procFiles(t, proc, 101, "nginx", 1000, 6, 50, cg)
+	procFiles(t, proc, 200, "sshd", 50, 7, 10, "0::/system.slice/ssh.service\n")
+	procFiles(t, proc, 300, "a b)c", 10, 8, 5, "0::/user.slice/user-1000.slice/session-3.scope\n")
+	put(t, filepath.Join(proc, "100"), "cmdline", "nginx\x00--password=hunter2")
+	h := &HostReader{Proc: proc, Etc: t.TempDir()}
+	t0 := time.Now()
+	first := h.Read(t0)
+	for _, p := range first.Procs {
+		if p.CPU != 0 {
+			t.Fatalf("the first reading has no CPU share: %+v", p)
+		}
+	}
+	// A second later nginx has used 100 more ticks in all (one whole core), sshd none.
+	procFiles(t, proc, 100, "nginx", 1060, 5, 100, cg)
+	procFiles(t, proc, 101, "nginx", 1040, 6, 50, cg)
+	got := h.Read(t0.Add(time.Second))
+	var nginx, ssh *struct {
+		cpu   float64
+		count int
+		unit  string
+		rss   int64
+	}
+	for _, p := range got.Procs {
+		if p.Name == "nginx" {
+			nginx = &struct {
+				cpu   float64
+				count int
+				unit  string
+				rss   int64
+			}{p.CPU, p.Count, p.Unit, p.RSS}
+		}
+		if p.Name == "sshd" {
+			ssh = &struct {
+				cpu   float64
+				count int
+				unit  string
+				rss   int64
+			}{p.CPU, p.Count, p.Unit, p.RSS}
+		}
+	}
+	if nginx == nil || nginx.count != 2 || nginx.unit != "docker:0123456789ab" || nginx.cpu < 99 || nginx.cpu > 101 || nginx.rss != 150*int64(os.Getpagesize()) {
+		t.Fatalf("%+v", got.Procs)
+	}
+	if ssh == nil || ssh.unit != "ssh.service" || ssh.cpu != 0 {
+		t.Fatalf("%+v", got.Procs)
+	}
+	if got.Procs[0].Name != "nginx" {
+		t.Fatalf("the busiest comes first: %+v", got.Procs)
+	}
+	for _, p := range got.Procs {
+		if strings.Contains(p.Name, "hunter2") || strings.Contains(p.Unit, "hunter2") {
+			t.Fatalf("a command line leaked: %+v", p)
+		}
+	}
+}
+
+func TestParseProcStatHandlesNamesWithSpacesAndBrackets(t *testing.T) {
+	name, ticks, start, ok := ParseProcStat("4242 (my (odd) name) S 1 1 1 0 -1 0 0 0 0 0 30 12 0 0 20 0 1 0 99 1 1\n")
+	if !ok || name != "my (odd) name" || ticks != 42 || start != 99 {
+		t.Fatalf("%q %d %d %v", name, ticks, start, ok)
+	}
+	if _, _, _, ok := ParseProcStat("garbage"); ok {
+		t.Fatal("garbage accepted")
 	}
 }
