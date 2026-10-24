@@ -192,6 +192,7 @@ func serve(log *slog.Logger) error {
 	go alerts.Run(ctx, st, time.Minute, log)
 	go secChecker.Run(ctx)
 	go (&notify.Worker{Store: st, Ring: ring, Log: log}).Run(ctx)
+	go (&notify.Bot{Store: st, Ring: ring, Log: log}).Run(ctx)
 	go (&awglimits.Worker{Store: st, Ops: srv.AWGOps, Log: log}).Run(ctx)
 	go dnsWorker.Run(ctx)
 	go probe.Run(ctx, st, time.Minute, log)
