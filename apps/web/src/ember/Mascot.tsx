@@ -85,6 +85,8 @@ export function Mascot() {
   const [phrases, setPhrases] = useState<Phrases | null>(null)
   const [hidden, setHidden] = useState(false)
   const [menu, setMenu] = useState(false)
+  const gearRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement | null>(null)
   const [frame, setFrame] = useState<{ clip: string; i: number }>({ clip: 'idle', i: 0 })
   const [say, setSay] = useState<{ id: number; text: string } | null>(null)
   const [tank, setTank] = useState(false) // after "takes the hoodie off" the last picture stays
@@ -297,6 +299,20 @@ export function Mascot() {
     return () => { window.clearTimeout(start); window.clearInterval(blink); stop() }
   }, [manifest, active, animated, play, stop])
 
+  // A click anywhere else, or Escape, closes the menu.
+  useEffect(() => {
+    if (!menu) return
+    const away = (e: PointerEvent) => {
+      const n = e.target as Node
+      if (menuRef.current?.contains(n) || gearRef.current?.contains(n)) return
+      setMenu(false)
+    }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenu(false) }
+    document.addEventListener('pointerdown', away)
+    document.addEventListener('keydown', esc)
+    return () => { document.removeEventListener('pointerdown', away); document.removeEventListener('keydown', esc) }
+  }, [menu])
+
   useEffect(() => () => { window.clearTimeout(sayTimer.current); window.clearTimeout(hoverTimer.current); stop() }, [stop])
 
   const react = useCallback((mood: Mood) => {
@@ -375,6 +391,21 @@ export function Mascot() {
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
   }
+  // The menu is placed from where the gear is, below it, or above it when there is no room below, and always inside
+  // the window: the mascot may sit in any corner.
+  const placeMenu = (el: HTMLDivElement | null) => {
+    menuRef.current = el
+    const g = gearRef.current
+    if (!el || !g) return
+    const gr = g.getBoundingClientRect()
+    const mr = el.getBoundingClientRect()
+    const left = Math.min(Math.max(8, gr.left), Math.max(8, window.innerWidth - mr.width - 8))
+    let top = gr.bottom + 6
+    if (top + mr.height > window.innerHeight - 8) top = Math.max(8, gr.top - mr.height - 6)
+    el.style.left = `${left}px`
+    el.style.top = `${top}px`
+  }
+
   const clip = manifest.clips[frame.clip] ?? manifest.clips.idle
   const cell = !animated ? manifest.poster : clip.frames[Math.min(frame.i, clip.frames.length - 1)]
 
@@ -450,12 +481,12 @@ export function Mascot() {
     <div className="ember-root" data-testid="ember" style={shown ? { left: shown.x, top: shown.y, right: 'auto', bottom: 'auto' } : undefined}>
       {say && <Bubble key={say.id} text={say.text} theme={themeName} reduced={reduced} onClose={() => setSay(null)} />}
       <div ref={stageRef} className="ember-stage" style={{ width: size, height: size }}>
-        <button type="button" className="ember-gear" aria-label={t('kw.menu')} aria-expanded={menu} onClick={() => setMenu((v) => !v)}>⋯</button>
+        <button ref={gearRef} type="button" className="ember-gear" aria-label={t('kw.menu')} aria-expanded={menu} onClick={() => setMenu((v) => !v)}>⋯</button>
         <button type="button" className="ember-body" aria-label={t('kw.mascot')} onPointerDown={onDown} onPointerEnter={onEnter} onPointerLeave={onLeave} onClick={onBodyClick}
           style={{ width: size, height: size, backgroundImage: `url(${BASE}/atlas-${cell.a}.webp)`, backgroundSize: `${manifest.atlasSize * k}px ${manifest.atlasSize * k}px`, backgroundPosition: `-${cell.x * k}px -${cell.y * k}px` }} />
       </div>
       {menu && (
-        <div className="ember-menu" role="menu">
+        <div className="ember-menu" role="menu" ref={placeMenu}>
           {s.itemStorm && animated && !tank && manifest.clips.item_storm && <button role="menuitem" type="button" onClick={() => scene('item_storm')}>{t('kw.tease')}</button>}
           {s.playful && animated && !tank && manifest.clips.kiss_tease && <button role="menuitem" type="button" onClick={() => scene('kiss_tease')}>{t('kw.kiss')}</button>}
           {s.playful && animated && !tank && manifest.clips.caught_flirting && <button role="menuitem" type="button" onClick={() => scene('caught_flirting')}>{t('kw.caught')}</button>}
