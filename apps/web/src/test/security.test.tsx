@@ -166,6 +166,11 @@ describe('Security page', () => {
     expect(await screen.findByText(/echo 'AGENTID\.SECRETVALUE'/)).toBeInTheDocument()
     expect(screen.getByText(/useradd --system/)).toBeInTheDocument()
     expect(screen.getByText(/systemctl enable --now remnascope-secagent/)).toBeInTheDocument()
+    // The steps are complete: where the files come from, the address of this server in the unit, Fail2ban, the check.
+    expect(screen.getByText(/curl -fLO https:\/\/github\.com\/Taminum\/RemnaScope\/releases\/latest\/download\/remnascope-secagent-linux-\$A/)).toBeInTheDocument()
+    expect(screen.getByText((c) => c.includes(`wss://${window.location.host}`))).toBeInTheDocument()
+    expect(screen.getByText(/fail2ban\.service\.d\/remnascope\.conf/)).toBeInTheDocument()
+    expect(screen.getByText(/journalctl -u remnascope-secagent/)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Секрет сохранён' }))
     expect(screen.queryByText(/AGENTID\.SECRETVALUE/)).toBeNull()
     expect(await screen.findByText('ожидает первого подключения')).toBeInTheDocument()

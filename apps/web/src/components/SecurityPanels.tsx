@@ -454,10 +454,32 @@ export function AgentCard({ vpsId, canEdit }: { vpsId: string; canEdit: boolean 
             <p>{t('sec.onb.s2')}</p>
             <Code>{`install -d -m 0755 /etc/remnascope && umask 077 && echo '${token}' > /etc/remnascope/secagent.token && chown root:remnascope-sec /etc/remnascope/secagent.token && chmod 0640 /etc/remnascope/secagent.token`}</Code>
             <p>{t('sec.onb.s3')}</p>
-            <Code>{`install -m 0755 remnascope-secagent-linux-amd64 /usr/local/bin/remnascope-secagent
-sed -i 's#wss://SCOPE_HOST#wss://${window.location.host}#' remnascope-secagent.service
-cp remnascope-secagent.service remnascope-secagent-f2b.service /etc/systemd/system/ && systemctl daemon-reload && systemctl enable --now remnascope-secagent-f2b remnascope-secagent`}</Code>
-            <p className="text-muted">{t('sec.onb.s4')}</p>
+            <Code>{`cd /tmp
+case "$(uname -m)" in x86_64) A=amd64 ;; aarch64) A=arm64 ;; *) echo "unsupported processor"; exit 1 ;; esac
+curl -fLO https://github.com/Taminum/RemnaScope/releases/latest/download/remnascope-secagent-linux-$A
+curl -fLO https://github.com/Taminum/RemnaScope/releases/latest/download/remnascope-deploy-files.tar.gz
+tar -xzf remnascope-deploy-files.tar.gz`}</Code>
+            <p>{t('sec.onb.s4')}</p>
+            <Code>{`install -m 0755 remnascope-secagent-linux-$A /usr/local/bin/remnascope-secagent
+sed 's#wss://SCOPE_HOST#wss://${window.location.host}#' deploy/secagent/remnascope-secagent.service > /etc/systemd/system/remnascope-secagent.service
+cp deploy/secagent/remnascope-secagent-f2b.service /etc/systemd/system/`}</Code>
+            <p>{t('sec.onb.s5')}</p>
+            <Code>{`mkdir -p /etc/systemd/system/fail2ban.service.d
+cat > /etc/systemd/system/fail2ban.service.d/remnascope.conf <<'EOF'
+[Service]
+ExecStartPost=/bin/sh -c "for i in 1 2 3 4 5 6 7 8 9 10; do [ -S /run/fail2ban/fail2ban.sock ] && break; sleep 1; done; chgrp remnascope-f2b /run/fail2ban/fail2ban.sock && chmod 0660 /run/fail2ban/fail2ban.sock"
+EOF
+systemctl daemon-reload && systemctl restart fail2ban
+systemctl enable --now remnascope-secagent-f2b remnascope-secagent`}</Code>
+            <p className="text-muted">{t('sec.onb.s5hint')}</p>
+            <p>{t('sec.onb.s6')}</p>
+            <Code>{`install -m 0755 deploy/secagent/remnascope-containers-list /usr/local/sbin/
+cp deploy/secagent/remnascope-containers-list.service deploy/secagent/remnascope-containers-list.timer /etc/systemd/system/
+systemctl daemon-reload && systemctl enable --now remnascope-containers-list.timer`}</Code>
+            <p>{t('sec.onb.s7')}</p>
+            <Code>{`systemctl is-active remnascope-secagent
+journalctl -u remnascope-secagent -n 5 --no-pager`}</Code>
+            <p className="text-muted">{t('sec.onb.done')}</p>
           </div>
           <div className="mt-4 flex justify-end"><PrimaryButton onClick={() => setToken('')}>{t('sec.agent.tokenSaved')}</PrimaryButton></div>
         </Modal>
