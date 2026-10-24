@@ -12,8 +12,9 @@ interface Host {
   id: string; name: string; online: boolean; has_data: boolean; updated_at: string | null
   os: string; kernel: string; arch: string; cpu_model: string; cpus: number; mem_total: number; swap_total: number
   cpu: number | null; load1: number; load5: number; load15: number; mem_used: number; swap_used: number; uptime: number
-  disks: Disk[]; cpu_spark: (number | null)[]; mem_spark: number[]
+  disks: Disk[]; procs: Proc[]; cpu_spark: (number | null)[]; mem_spark: number[]
 }
+interface Proc { n: string; u?: string; c: number; cpu: number; rss: number }
 interface Point { at: string; cpu: number | null; load1: number; mem_pct: number; disk_pct: number; rx_bps: number; tx_bps: number }
 
 const HOURS = [1, 6, 24, 168] as const
@@ -69,6 +70,44 @@ function Line({ title, points, max, format, color = 'var(--color-cyan)' }: { tit
   )
 }
 
+function unitText(u: string | undefined): string {
+  if (!u) return ''
+  if (u.startsWith('docker:')) return t('host.container', { id: u.slice(7, 19) })
+  return u.replace(/\.service$/, '')
+}
+
+/** Who uses the processor or the memory right now: programs grouped with their unit, the busiest first. */
+function Procs({ host }: { host: Host }) {
+  const cores = Math.max(1, host.cpus)
+  const byCpu = [...host.procs].filter((p) => p.cpu > 0.05).sort((a, b) => b.cpu - a.cpu).slice(0, 8)
+  const byMem = [...host.procs].sort((a, b) => b.rss - a.rss).slice(0, 8)
+  const row = (p: Proc, value: string, share: number, key: string) => (
+    <li key={key} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1">
+      <span className="min-w-0 truncate"><span className="font-medium text-fg">{p.n}</span>{p.c > 1 && <span className="ml-1 text-xs text-muted">×{p.c}</span>}{p.u && <span className="ml-2 text-xs text-muted">{unitText(p.u)}</span>}</span>
+      <span className="tnum text-right">{value}</span>
+      <span className="col-span-2 h-1.5 overflow-hidden rounded-full bg-elevated"><span className="block h-full rounded-full bg-cyan" style={{ width: `${Math.max(2, Math.min(100, share))}%` }} /></span>
+    </li>
+  )
+  return (
+    <section aria-label={t('host.procs')} className="space-y-3">
+      <h3 className="text-[13px] font-medium">{t('host.procs')}</h3>
+      {host.procs.length === 0 ? <p className="text-[13px] text-muted">{t('host.procs.none')}</p> : (
+        <div className="grid gap-5 sm:grid-cols-2">
+          <div>
+            <h4 className="mb-2 text-xs text-muted">{t('host.procs.cpu')}</h4>
+            {byCpu.length === 0 ? <p className="text-[13px] text-muted">{t('host.procs.idle')}</p> : <ul className="space-y-2 text-[13px]">{byCpu.map((p) => row(p, `${p.cpu.toFixed(p.cpu < 10 ? 1 : 0)}%`, p.cpu / cores, `${p.n}:${p.u ?? ''}`))}</ul>}
+            <p className="mt-2 text-[11px] text-muted">{t('host.procs.cpu.hint', { n: cores })}</p>
+          </div>
+          <div>
+            <h4 className="mb-2 text-xs text-muted">{t('host.procs.mem')}</h4>
+            <ul className="space-y-2 text-[13px]">{byMem.map((p) => row(p, formatBytes(p.rss), host.mem_total > 0 ? (p.rss * 100) / host.mem_total : 0, `${p.n}:${p.u ?? ''}`))}</ul>
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
 function Detail({ host }: { host: Host }) {
   const [hours, setHours] = useState<(typeof HOURS)[number]>(24)
   const q = useLoad((s) => api.get<{ points: Point[] }>(`/api/v1/hosts/${host.id}/series?hours=${hours}`, s), [host.id, hours], 60_000)
@@ -82,6 +121,7 @@ function Detail({ host }: { host: Host }) {
             className={`h-8 rounded-control border px-3 text-[12px] ${hours === h ? 'border-blue bg-blue/20 text-fg' : 'border-line text-muted hover:text-fg'}`}>{t(`host.h.${h}` as MsgKey)}</button>
         ))}
       </div>
+      <Procs host={host} />
       {q.error && <p role="alert" className="text-[13px] text-red">{q.error}</p>}
       {pts.length === 0 && !q.error && <p className="text-[13px] text-muted">{t('host.nodata')}</p>}
       {pts.length > 0 && (
@@ -142,10 +182,11 @@ export default function Hosts() {
             <Card key={h.id} title={h.name} note={[h.os, h.cpus > 0 ? `${h.cpus} ${t('host.cores')}` : '', h.mem_total > 0 ? formatBytes(h.mem_total) : ''].filter(Boolean).join(' · ') || undefined}
               right={<Chip tone={!h.has_data ? 'muted' : h.online ? 'green' : 'amber'}>{!h.has_data ? t('host.noAgent') : h.online ? t('host.online') : t('host.stale')}</Chip>}>
               {!h.has_data ? <p className="text-[13px] text-muted">{t('host.noAgent.hint')}</p> : (
-                <div className="space-y-3">
+                <div className="cursor-pointer space-y-3" onClick={() => setOpen(h)}>
                   <Meter label={t('host.cpu')} pct={h.cpu} detail={t('host.loadAvg', { n: h.load1.toFixed(2) })} />
                   <Meter label={t('host.mem')} pct={memPct} detail={`${formatBytes(h.mem_used)} / ${formatBytes(h.mem_total)}`} />
                   <Meter label={root ? `${t('host.disk')} ${root.m}` : t('host.disk')} pct={root && root.t > 0 ? (root.u * 100) / root.t : null} detail={root ? `${formatBytes(root.u)} / ${formatBytes(root.t)}` : ''} />
+                  {h.procs.length > 0 && <p className="truncate text-xs text-muted" title={t('host.top')}>{t('host.top')}: {[...h.procs].filter((p) => p.cpu > 0.05).sort((a, b) => b.cpu - a.cpu).slice(0, 3).map((p) => `${p.n} ${Math.round(p.cpu)}%`).join(' · ') || t('host.procs.idle')}</p>}
                   <div className="flex items-center justify-between gap-3 pt-1 text-xs text-muted">
                     <span title={t('host.spark')}><Spark values={h.cpu_spark} /></span>
                     <span>{t('host.up')} {uptimeText(h.uptime)}</span>
