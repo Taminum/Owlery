@@ -12,9 +12,9 @@ Only Caddy publishes ports. Memory limits: postgres 512M, api 256M, web 64M, cad
 ## 1. Get the files and create secrets
 ```bash
 git clone https://github.com/Taminum/RemnaScope.git && cd RemnaScope/deploy/prod
-sudo ./init-secrets.sh scope.example.com v0.2.0
+sudo ./init-secrets.sh scope.example.com latest
 ```
-The arguments are your host name and the release tag (see the [releases](../../../releases) page; `latest` also works).
+The arguments are your host name and the release tag (see the [releases](../../../releases) page: `latest` follows the newest release, a tag such as `v0.3.2` stays on that version).
 The script creates, once and without printing anything:
 
 | File | Purpose |
@@ -63,7 +63,7 @@ Optional parts: a router agent (`deploy/router`) for devices behind a shared acc
 ## Updating
 ```bash
 cd RemnaScope/deploy/prod && git pull
-sudo sed -i 's/^RELEASE=.*/RELEASE=v0.1.3/' .env      # the new tag
+sudo sed -i 's/^RELEASE=.*/RELEASE=v0.3.2/' .env      # the new tag (with RELEASE=latest, just pull)
 sudo docker compose -f compose.prod.yml pull && sudo docker compose -f compose.prod.yml up -d
 ```
 Database migrations run when the API starts, under an advisory lock. Read the release notes first.
