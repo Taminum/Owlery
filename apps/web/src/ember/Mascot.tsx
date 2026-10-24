@@ -456,10 +456,10 @@ export function Mascot() {
       </div>
       {menu && (
         <div className="ember-menu" role="menu">
-          {s.itemStorm && animated && !tank && <button role="menuitem" type="button" onClick={() => scene('item_storm')}>{t('kw.tease')}</button>}
-          {s.playful && animated && !tank && <button role="menuitem" type="button" onClick={() => scene('kiss_tease')}>{t('kw.kiss')}</button>}
-          {s.playful && animated && !tank && <button role="menuitem" type="button" onClick={() => scene('caught_flirting')}>{t('kw.caught')}</button>}
-          {s.playful && animated && !tank && <button role="menuitem" type="button" onClick={() => scene('hoodie_off')}>{t('kw.hoodieOff')}</button>}
+          {s.itemStorm && animated && !tank && manifest.clips.item_storm && <button role="menuitem" type="button" onClick={() => scene('item_storm')}>{t('kw.tease')}</button>}
+          {s.playful && animated && !tank && manifest.clips.kiss_tease && <button role="menuitem" type="button" onClick={() => scene('kiss_tease')}>{t('kw.kiss')}</button>}
+          {s.playful && animated && !tank && manifest.clips.caught_flirting && <button role="menuitem" type="button" onClick={() => scene('caught_flirting')}>{t('kw.caught')}</button>}
+          {s.playful && animated && !tank && manifest.clips.hoodie_off && <button role="menuitem" type="button" onClick={() => scene('hoodie_off')}>{t('kw.hoodieOff')}</button>}
           {tank && <button role="menuitem" type="button" onClick={dress}>{t('kw.hoodieOn')}</button>}
           {s.pos && <button role="menuitem" type="button" onClick={() => { setMenu(false); setKawaii({ pos: null }) }}>{t('kw.reset')}</button>}
           <button role="menuitem" type="button" onClick={() => { setMenu(false); setHidden(true) }}>{t('kw.hide')}</button>
