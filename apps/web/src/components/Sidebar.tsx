@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom'
-import { BarChart3, Bell, Compass, Wallet, Cpu, Gauge, Globe2, Laptop, Shield, ShieldCheck, Telescope, LayoutDashboard, History, Radio, Server, Settings, Users, Waypoints, X, type LucideIcon } from 'lucide-react'
+import { BarChart3, Bell, Compass, Wallet, Cpu, Rocket, Gauge, Globe2, Laptop, Shield, ShieldCheck, Telescope, LayoutDashboard, History, Radio, Server, Settings, Users, Waypoints, X, type LucideIcon } from 'lucide-react'
 import { t, type MsgKey } from '../i18n'
 import { api } from '../lib/api'
 import { useLoad } from '../hooks/useLoad'
@@ -25,6 +25,7 @@ const MAIN: Item[] = [
   { to: '/devices', key: 'nav.devices', icon: Laptop },
   { to: '/panels', key: 'nav.panels', icon: Waypoints },
   { to: '/billing', key: 'nav.billing', icon: Wallet },
+  { to: '/start', key: 'nav.start', icon: Rocket },
   { to: '/alerts', key: 'nav.alerts', icon: Bell },
 ]
 
@@ -76,7 +77,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           </button>
         </div>
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2">
-          {MAIN.filter((i) => owner || i.to !== '/billing').map((i) => <NavItem key={i.to} item={i} onNavigate={onClose} />)}
+          {MAIN.filter((i) => owner || (i.to !== '/billing' && i.to !== '/start')).map((i) => <NavItem key={i.to} item={i} onNavigate={onClose} />)}
         </nav>
         <div className="border-t border-line p-3">
           <NavItem item={{ to: '/settings', key: 'nav.settings', icon: Settings }} onNavigate={onClose} />

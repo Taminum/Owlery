@@ -39,3 +39,19 @@ func (s *Server) hostSeries(w http.ResponseWriter, r *http.Request, a auth.Actor
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, map[string]any{"hours": hours, "points": pts})
 }
+
+// onboarding says what is already set up, for the getting-started page. It is the owner's: the page leads to
+// things only the owner can do.
+func (s *Server) onboarding(w http.ResponseWriter, r *http.Request, a auth.Actor, _ store.Session) {
+	if !a.IsOwner {
+		s.writeErr(w, r, http.StatusForbidden, "forbidden", "only the owner can see this")
+		return
+	}
+	c, err := s.Store.OnboardingCounts(r.Context(), time.Now().UTC())
+	if err != nil {
+		s.writeErr(w, r, http.StatusInternalServerError, "internal", "internal error")
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, c)
+}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/Taminum/RemnaScope/internal/alerts"
 	"github.com/Taminum/RemnaScope/internal/secproto"
+	"github.com/Taminum/RemnaScope/internal/store"
 )
 
 func TestHostResourcesAreListedChartedAndRaiseAlertsForAFullDisk(t *testing.T) {
@@ -138,5 +139,24 @@ func TestAFloodOfTrafficRaisesAnAlertThatNamesTheNumbersAndClosesWhenItEnds(t *t
 	}
 	if open(now.Add(14 * time.Minute)) {
 		t.Fatal("the alert did not close")
+	}
+}
+
+func TestOnboardingCountsAreTheOwnersAndSayWhatIsSetUp(t *testing.T) {
+	w := newWorld(t)
+	for _, c := range []*client{w.viewer, w.op, w.adm} {
+		if st, _ := c.get("/api/v1/onboarding"); st != 403 {
+			t.Fatalf("only the owner: %d", st)
+		}
+	}
+	st, b := w.owner.get("/api/v1/onboarding")
+	if st != 200 || !strings.Contains(string(b), `"panels":2`) || !strings.Contains(string(b), `"notify_channels":0`) || !strings.Contains(string(b), `"bills":0`) {
+		t.Fatalf("%d %s", st, b)
+	}
+	if _, err := w.h.st.CreateBill(context.Background(), store.BillInput{Name: "x", Amount: 1, Currency: "EUR", PeriodMonths: 1, NextDue: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	if _, b = w.owner.get("/api/v1/onboarding"); !strings.Contains(string(b), `"bills":1`) {
+		t.Fatalf("%s", b)
 	}
 }
