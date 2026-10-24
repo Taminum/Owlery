@@ -12,9 +12,10 @@ interface Host {
   id: string; name: string; online: boolean; has_data: boolean; updated_at: string | null
   os: string; kernel: string; arch: string; cpu_model: string; cpus: number; mem_total: number; swap_total: number
   cpu: number | null; load1: number; load5: number; load15: number; mem_used: number; swap_used: number; uptime: number
-  disks: Disk[]; procs: Proc[]; cpu_spark: (number | null)[]; mem_spark: number[]
+  disks: Disk[]; procs: Proc[]; units: Unit[]; cpu_spark: (number | null)[]; mem_spark: number[]
 }
-interface Proc { n: string; u?: string; c: number; cpu: number; rss: number }
+interface Proc { n: string; u?: string; l?: string; c: number; cpu: number; rss: number }
+interface Unit { u: string; l?: string; c: number; cpu: number; rss: number }
 interface Point { at: string; cpu: number | null; load1: number; mem_pct: number; disk_pct: number; rx_bps: number; tx_bps: number }
 
 const HOURS = [1, 6, 24, 168] as const
@@ -70,20 +71,53 @@ function Line({ title, points, max, format, color = 'var(--color-cyan)' }: { tit
   )
 }
 
-function unitText(u: string | undefined): string {
+function unitText(u: string | undefined, label?: string): string {
   if (!u) return ''
-  if (u.startsWith('docker:')) return t('host.container', { id: u.slice(7, 19) })
+  if (u.startsWith('docker:')) return label ? t('host.container.named', { name: label }) : t('host.container', { id: u.slice(7, 19) })
   return u.replace(/\.service$/, '')
 }
 
 /** Who uses the processor or the memory right now: programs grouped with their unit, the busiest first. */
+/** Containers and services as a whole: everything that runs in each, added up. */
+function Units({ host }: { host: Host }) {
+  const cores = Math.max(1, host.cpus)
+  if (host.units.length === 0) return null
+  const list = [...host.units].sort((a, b) => b.cpu - a.cpu || b.rss - a.rss)
+  return (
+    <section aria-label={t('host.units')} className="space-y-3">
+      <h3 className="text-[13px] font-medium">{t('host.units')}</h3>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-[13px]">
+          <caption className="sr-only">{t('host.units')}</caption>
+          <thead><tr className="text-left text-xs text-muted">
+            <th scope="col" className="px-2 py-1 font-medium">{t('host.units.name')}</th>
+            <th scope="col" className="px-2 py-1 text-right font-medium">{t('host.cpu')}</th>
+            <th scope="col" className="px-2 py-1 text-right font-medium">{t('host.mem')}</th>
+            <th scope="col" className="px-2 py-1 text-right font-medium">{t('host.units.procs')}</th>
+          </tr></thead>
+          <tbody>
+            {list.map((u) => (
+              <tr key={u.u} className="border-t border-line/60">
+                <td className="px-2 py-1.5 font-medium text-fg">{unitText(u.u, u.l)}</td>
+                <td className="tnum px-2 py-1.5 text-right" title={t('host.units.cpu.title', { n: cores })}>{u.cpu.toFixed(u.cpu < 10 ? 1 : 0)}%</td>
+                <td className="tnum px-2 py-1.5 text-right">{formatBytes(u.rss)}</td>
+                <td className="tnum px-2 py-1.5 text-right text-muted">{u.c}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
 function Procs({ host }: { host: Host }) {
   const cores = Math.max(1, host.cpus)
   const byCpu = [...host.procs].filter((p) => p.cpu > 0.05).sort((a, b) => b.cpu - a.cpu).slice(0, 8)
   const byMem = [...host.procs].sort((a, b) => b.rss - a.rss).slice(0, 8)
   const row = (p: Proc, value: string, share: number, key: string) => (
     <li key={key} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1">
-      <span className="min-w-0 truncate"><span className="font-medium text-fg">{p.n}</span>{p.c > 1 && <span className="ml-1 text-xs text-muted">×{p.c}</span>}{p.u && <span className="ml-2 text-xs text-muted">{unitText(p.u)}</span>}</span>
+      <span className="min-w-0 truncate"><span className="font-medium text-fg">{p.n}</span>{p.c > 1 && <span className="ml-1 text-xs text-muted">×{p.c}</span>}{p.u && <span className="ml-2 text-xs text-muted">{unitText(p.u, p.l)}</span>}</span>
       <span className="tnum text-right">{value}</span>
       <span className="col-span-2 h-1.5 overflow-hidden rounded-full bg-elevated"><span className="block h-full rounded-full bg-cyan" style={{ width: `${Math.max(2, Math.min(100, share))}%` }} /></span>
     </li>
@@ -121,6 +155,7 @@ function Detail({ host }: { host: Host }) {
             className={`h-8 rounded-control border px-3 text-[12px] ${hours === h ? 'border-blue bg-blue/20 text-fg' : 'border-line text-muted hover:text-fg'}`}>{t(`host.h.${h}` as MsgKey)}</button>
         ))}
       </div>
+      <Units host={host} />
       <Procs host={host} />
       {q.error && <p role="alert" className="text-[13px] text-red">{q.error}</p>}
       {pts.length === 0 && !q.error && <p className="text-[13px] text-muted">{t('host.nodata')}</p>}

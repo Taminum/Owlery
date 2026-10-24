@@ -54,6 +54,9 @@ type Config struct {
 	NoFail2ban, NoSockets, NoFirewall bool
 	// NoHost turns off the report of CPU, memory, disks and network that goes with every full tick.
 	NoHost bool
+	// ContainersFile is the list of running containers written by a small root unit (the agent itself cannot ask
+	// Docker). Empty: containers are shown by their short id.
+	ContainersFile string
 	// Probe makes this host a checker: the server may ask it to connect to a public TCP port or read a TLS
 	// certificate, so that a target is seen from somewhere other than the target. Off unless the host chooses it.
 	Probe bool
@@ -126,7 +129,7 @@ func Run(ctx context.Context, cfg Config) error {
 	if err != nil {
 		return err
 	}
-	a := &agent{cfg: cfg, url: url, hc: hc, epoch: newEpoch(), probes: make(chan struct{}, maxProbes), socks: seccollect.NewSocketWatch(10 * time.Minute), host: seccollect.NewHostReader()}
+	a := &agent{cfg: cfg, url: url, hc: hc, epoch: newEpoch(), probes: make(chan struct{}, maxProbes), socks: seccollect.NewSocketWatch(10 * time.Minute), host: newHostReader(cfg)}
 	if cfg.HelperSocket != "" {
 		a.helper = f2bhelper.Client{Path: cfg.HelperSocket}
 		// Fail2ban is read through the helper, and the agent never runs fail2ban-client itself.
@@ -597,4 +600,10 @@ func bannedSet(s seccollect.Snapshot) map[string]bool {
 		}
 	}
 	return m
+}
+
+func newHostReader(cfg Config) *seccollect.HostReader {
+	h := seccollect.NewHostReader()
+	h.ContainersFile = cfg.ContainersFile
+	return h
 }

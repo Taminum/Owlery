@@ -1,0 +1,19 @@
+[Unit]
+Description=RemnaScope: list running containers for the security agent
+ConditionPathExists=/usr/bin/docker
+ConditionPathIsDirectory=/run/remnascope-sec
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/remnascope-containers-list
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/run/remnascope-sec
+RestrictNamespaces=true
+LockPersonality=true
+MemoryMax=64M
+TasksMax=32

@@ -1,6 +1,7 @@
 package seccollect
 
 import (
+	"github.com/Taminum/RemnaScope/internal/secproto"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -149,5 +150,47 @@ func TestParseProcStatHandlesNamesWithSpacesAndBrackets(t *testing.T) {
 	}
 	if _, _, _, ok := ParseProcStat("garbage"); ok {
 		t.Fatal("garbage accepted")
+	}
+}
+
+func TestHostReaderNamesContainersFromTheListAndAddsUpAUnit(t *testing.T) {
+	proc := t.TempDir()
+	put(t, proc, "stat", "cpu  100 0 100 700 100 0 0 0 0 0\n")
+	put(t, proc, "meminfo", "MemTotal: 1000 kB\nMemAvailable: 500 kB\n")
+	cg := "0::/system.slice/docker-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef.scope\n"
+	procFiles(t, proc, 100, "xray", 1000, 5, 100, cg)
+	procFiles(t, proc, 101, "sh", 10, 6, 10, cg)
+	procFiles(t, proc, 200, "sshd", 50, 7, 10, "0::/system.slice/ssh.service\n")
+	list := filepath.Join(t.TempDir(), "containers.tsv")
+	if err := os.WriteFile(list, []byte("0123456789ab\tremnanode\nbadbadbadbad\tevil name;rm\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h := &HostReader{Proc: proc, Etc: t.TempDir(), ContainersFile: list}
+	t0 := time.Now()
+	h.Read(t0)
+	procFiles(t, proc, 100, "xray", 1080, 5, 100, cg)
+	procFiles(t, proc, 101, "sh", 30, 6, 10, cg)
+	got := h.Read(t0.Add(time.Second))
+	var c *secproto.HostUnit
+	for i := range got.Units {
+		if got.Units[i].Unit == "docker:0123456789ab" {
+			c = &got.Units[i]
+		}
+	}
+	if c == nil || c.Label != "remnanode" || c.Count != 2 || c.CPU < 99 || c.CPU > 101 {
+		t.Fatalf("a container is the sum of its processes and has a name: %+v", got.Units)
+	}
+	for _, p := range got.Procs {
+		if p.Name == "xray" && p.Label != "remnanode" {
+			t.Fatalf("%+v", p)
+		}
+	}
+	// Without the list the container is known by its id only, and a bad name in it is never used.
+	h2 := &HostReader{Proc: proc, Etc: t.TempDir()}
+	h2.Read(t0)
+	for _, u := range h2.Read(t0.Add(time.Second)).Units {
+		if u.Label != "" {
+			t.Fatalf("%+v", u)
+		}
 	}
 }

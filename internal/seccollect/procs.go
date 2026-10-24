@@ -70,11 +70,12 @@ func UnitOf(cgroup string) string {
 
 // readProcs groups the processes by program name and unit and returns the busiest by processor and by memory.
 // The CPU share needs the previous reading: a process that is new, or a pid that was reused, has none yet.
-func (h *HostReader) readProcs(now time.Time) []secproto.HostProc {
+func (h *HostReader) readProcs(now time.Time) ([]secproto.HostProc, []secproto.HostUnit) {
 	entries, err := os.ReadDir(h.Proc)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
+	names := h.containerNames()
 	page := int64(os.Getpagesize())
 	cur := map[int]procTicks{}
 	type group struct {
@@ -84,6 +85,7 @@ func (h *HostReader) readProcs(now time.Time) []secproto.HostProc {
 		rss        int64
 	}
 	groups := map[string]*group{}
+	units := map[string]*group{}
 	elapsed := now.Sub(h.prevAt).Seconds()
 	for _, e := range entries {
 		pid, err := strconv.Atoi(e.Name())
@@ -119,8 +121,20 @@ func (h *HostReader) readProcs(now time.Time) []secproto.HostProc {
 		}
 		g.count++
 		g.rss += rss
+		var d uint64
 		if p, ok := h.prevProc[pid]; ok && p.start == start && ticks >= p.ticks {
-			g.ticks += ticks - p.ticks
+			d = ticks - p.ticks
+			g.ticks += d
+		}
+		if unit != "" {
+			u := units[unit]
+			if u == nil {
+				u = &group{name: unit, unit: unit}
+				units[unit] = u
+			}
+			u.count++
+			u.rss += rss
+			u.ticks += d
 		}
 	}
 	hadPrev := len(h.prevProc) > 0
@@ -152,5 +166,54 @@ func (h *HostReader) readProcs(now time.Time) []secproto.HostProc {
 			out = append(out, p)
 		}
 	}
+	var us []secproto.HostUnit
+	for _, u := range units {
+		x := secproto.HostUnit{Unit: u.unit, Label: names[u.unit], Count: u.count, RSS: u.rss}
+		if hadPrev && elapsed > 0 {
+			x.CPU = float64(u.ticks) * 100 / (clockTicks * elapsed)
+		}
+		us = append(us, x)
+	}
+	topUnits := func(less func(a, b secproto.HostUnit) bool, n int) []secproto.HostUnit {
+		s := append([]secproto.HostUnit(nil), us...)
+		sort.Slice(s, func(i, j int) bool { return less(s[i], s[j]) })
+		if len(s) > n {
+			s = s[:n]
+		}
+		return s
+	}
+	var outUnits []secproto.HostUnit
+	seenU := map[string]bool{}
+	for _, u := range append(topUnits(func(a, b secproto.HostUnit) bool { return a.CPU > b.CPU }, secproto.MaxHostUnits/2), topUnits(func(a, b secproto.HostUnit) bool { return a.RSS > b.RSS }, secproto.MaxHostUnits/2)...) {
+		if !seenU[u.Unit] {
+			seenU[u.Unit] = true
+			outUnits = append(outUnits, u)
+		}
+	}
+	for i := range out {
+		out[i].Label = names[out[i].Unit]
+	}
+	return out, outUnits
+}
+
+// containerNames reads the list of running containers: the first 12 characters of the id, tab, the name.
+func (h *HostReader) containerNames() map[string]string {
+	out := map[string]string{}
+	if h.ContainersFile == "" {
+		return out
+	}
+	b, err := os.ReadFile(h.ContainersFile)
+	if err != nil || len(b) > 256<<10 {
+		return out
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		f := strings.Split(strings.TrimRight(line, "\r"), "\t")
+		if len(f) < 2 || len(f[0]) < 12 || !containerName.MatchString(f[1]) {
+			continue
+		}
+		out["docker:"+f[0][:12]] = f[1]
+	}
 	return out
 }
+
+var containerName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$`)
