@@ -52,6 +52,8 @@ type Config struct {
 	StateDir string
 	// Disabled categories are neither collected nor announced as capabilities.
 	NoFail2ban, NoSockets, NoFirewall bool
+	// NoHost turns off the report of CPU, memory, disks and network that goes with every full tick.
+	NoHost bool
 	// Probe makes this host a checker: the server may ask it to connect to a public TCP port or read a TLS
 	// certificate, so that a target is seen from somewhere other than the target. Off unless the host chooses it.
 	Probe bool
@@ -124,7 +126,7 @@ func Run(ctx context.Context, cfg Config) error {
 	if err != nil {
 		return err
 	}
-	a := &agent{cfg: cfg, url: url, hc: hc, epoch: newEpoch(), probes: make(chan struct{}, maxProbes), socks: seccollect.NewSocketWatch(10 * time.Minute)}
+	a := &agent{cfg: cfg, url: url, hc: hc, epoch: newEpoch(), probes: make(chan struct{}, maxProbes), socks: seccollect.NewSocketWatch(10 * time.Minute), host: seccollect.NewHostReader()}
 	if cfg.HelperSocket != "" {
 		a.helper = f2bhelper.Client{Path: cfg.HelperSocket}
 		// Fail2ban is read through the helper, and the agent never runs fail2ban-client itself.
@@ -170,6 +172,7 @@ type agent struct {
 	cmdMu  sync.Mutex // one command at a time, in the order they arrive
 	probes chan struct{}
 	socks  *seccollect.SocketWatch
+	host   *seccollect.HostReader
 }
 
 func (a *agent) token() (string, error) {
@@ -261,6 +264,12 @@ func (a *agent) session(ctx context.Context) error {
 		if full {
 			for _, s := range a.collect(sctx) {
 				if err := a.send(sctx, c, s, acks, errc); err != nil {
+					return err
+				}
+			}
+			// How loaded the host is: nothing to acknowledge, a lost one is a gap in a chart.
+			if !a.cfg.NoHost {
+				if err := write(sctx, c, a.host.Read(time.Now())); err != nil {
 					return err
 				}
 			}
