@@ -12,6 +12,7 @@ import Devices from './pages/Devices'
 import Digest from './pages/Digest'
 import Awg from './pages/Awg'
 import Billing from './pages/Billing'
+import Hosts from './pages/Hosts'
 import Intel from './pages/Intel'
 import { DnsMapDetail } from './pages/DnsMap'
 import Security, { SecurityDetail } from './pages/Security'
@@ -42,6 +43,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="security/:id" element={<SecurityDetail />} />
             <Route path="awg" element={<Awg />} />
             <Route path="billing" element={<Billing />} />
+            <Route path="hosts" element={<Hosts />} />
             <Route path="domains" element={<Destinations />} />
             <Route path="users" element={<Users />} />
             <Route path="nodes" element={<Nodes />} />
