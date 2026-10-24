@@ -10,6 +10,7 @@ import { TimelineCard, TrafficCard, TrafficTotalCard, UsersDonut } from '../comp
 import { AgentsNotConnected, FailureState, NoData, OverviewSkeleton, SyncPending } from '../components/States'
 import { useNavigate } from 'react-router-dom'
 import { Card, Chip } from '../components/ui'
+import { StartHint } from './Start'
 import type { Overview as OverviewData } from '../lib/types'
 
 function NoCountersCard() {
@@ -58,9 +59,9 @@ export default function Overview() {
 
   if (failure) return <FailureState failure={failure} onRetry={refresh} onReset={reset} />
   if (!ov) return loading ? <OverviewSkeleton /> : null
-  if (ov.meta.state === 'no_data' && ov.meta.reason === 'agents_not_connected') return <AgentsNotConnected onOpenPanels={() => navigate({ pathname: '/panels', search: location.search })} />
-  if (ov.meta.state === 'no_data') return <NoData onWiden={() => update({ range: '7d' })} />
-  if (ov.meta.state === 'sync_pending') return <SyncPending onRetry={refresh} />
+  if (ov.meta.state === 'no_data' && ov.meta.reason === 'agents_not_connected') return <div className="space-y-4"><StartHint /><AgentsNotConnected onOpenPanels={() => navigate({ pathname: '/panels', search: location.search })} /></div>
+  if (ov.meta.state === 'no_data') return <div className="space-y-4"><StartHint /><NoData onWiden={() => update({ range: '7d' })} /></div>
+  if (ov.meta.state === 'sync_pending') return <div className="space-y-4"><StartHint /><SyncPending onRetry={refresh} /></div>
 
   const tz = filters.tz
   const multi = ov.meta.panel_ids.length > 1
