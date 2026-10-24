@@ -195,6 +195,14 @@ func (s *Server) session(ctx context.Context, c *websocket.Conn, agent store.Sec
 			}
 		case "command_result":
 			s.commandResult(ctx, agent, data)
+		case "host":
+			// How loaded the host is: best effort, unanswered, a bad one is dropped.
+			var h secproto.Host
+			if len(data) <= 16<<10 && json.Unmarshal(data, &h) == nil {
+				if err := s.Store.SaveHost(ctx, agent.VPSID, h, time.Now().UTC()); err != nil {
+					s.log().Error("saving host reading", "agent", agent.ID)
+				}
+			}
 		case "probe_result":
 			var r secproto.ProbeResult
 			if len(data) <= 16<<10 && json.Unmarshal(data, &r) == nil && s.Ops != nil {

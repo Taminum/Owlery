@@ -247,3 +247,41 @@ type ProbeResult struct {
 	// TLS
 	TLS *ProbeTLSResult `json:"tls,omitempty"`
 }
+
+// --- host resources -------------------------------------------------------------------------------
+//
+// Every full tick the agent also tells how loaded the host is. It is not a snapshot of the journal: it carries no
+// sequence number, is not acknowledged and is not kept as a history of changes. A lost one is a gap in a chart.
+
+const MaxHostDisks = 8
+
+type HostDisk struct {
+	Mount string `json:"m"`
+	FS    string `json:"fs,omitempty"`
+	Total int64  `json:"t"`
+	Used  int64  `json:"u"`
+}
+
+type Host struct {
+	Type string    `json:"type"` // "host"
+	At   time.Time `json:"at"`
+	// What the machine is: it changes only with an upgrade.
+	OS       string `json:"os,omitempty"`
+	Kernel   string `json:"kernel,omitempty"`
+	Arch     string `json:"arch,omitempty"`
+	CPUModel string `json:"cpu_model,omitempty"`
+	CPUs     int    `json:"cpus,omitempty"`
+	MemTotal int64  `json:"mem_total,omitempty"`
+	// What it does now. CPUPct is -1 until the agent has two readings to compare.
+	CPUPct    float64    `json:"cpu"`
+	Load1     float64    `json:"l1"`
+	Load5     float64    `json:"l5"`
+	Load15    float64    `json:"l15"`
+	MemUsed   int64      `json:"mem_used"` // total minus what can be had without swapping
+	SwapTotal int64      `json:"swap_total,omitempty"`
+	SwapUsed  int64      `json:"swap_used,omitempty"`
+	UptimeSec int64      `json:"up"`
+	NetRX     int64      `json:"rx"` // counters over the real interfaces since boot
+	NetTX     int64      `json:"tx"`
+	Disks     []HostDisk `json:"disks,omitempty"`
+}
