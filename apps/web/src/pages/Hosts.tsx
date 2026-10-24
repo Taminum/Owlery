@@ -12,11 +12,12 @@ interface Host {
   id: string; name: string; online: boolean; has_data: boolean; updated_at: string | null
   os: string; kernel: string; arch: string; cpu_model: string; cpus: number; mem_total: number; swap_total: number
   cpu: number | null; load1: number; load5: number; load15: number; mem_used: number; swap_used: number; uptime: number
+  estab: number; syn_recv: number; rx_bps: number; tx_bps: number; rx_pps: number
   disks: Disk[]; procs: Proc[]; units: Unit[]; cpu_spark: (number | null)[]; mem_spark: number[]
 }
 interface Proc { n: string; u?: string; l?: string; c: number; cpu: number; rss: number }
 interface Unit { u: string; l?: string; c: number; cpu: number; rss: number }
-interface Point { at: string; cpu: number | null; load1: number; mem_pct: number; disk_pct: number; rx_bps: number; tx_bps: number }
+interface Point { at: string; cpu: number | null; load1: number; mem_pct: number; disk_pct: number; rx_bps: number; tx_bps: number; rx_pps: number; tx_pps: number; estab: number; syn_recv: number }
 
 const HOURS = [1, 6, 24, 168] as const
 
@@ -167,6 +168,9 @@ function Detail({ host }: { host: Host }) {
           <Line title={t('host.load')} points={series((p) => p.load1)} max={null} format={(v) => v.toFixed(2)} />
           <Line title={t('host.rx')} points={series((p) => p.rx_bps)} max={null} format={formatRate} />
           <Line title={t('host.tx')} points={series((p) => p.tx_bps)} max={null} format={formatRate} color="var(--color-blue)" />
+          <Line title={t('host.rxp')} points={series((p) => p.rx_pps)} max={null} format={(v) => `${Math.round(v).toLocaleString('ru-RU')}/с`} />
+          <Line title={t('host.estab')} points={series((p) => p.estab)} max={null} format={(v) => String(Math.round(v))} color="var(--color-blue)" />
+          <Line title={t('host.syn')} points={series((p) => p.syn_recv)} max={null} format={(v) => String(Math.round(v))} color="var(--color-amber)" />
         </div>
       )}
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[13px]">
@@ -221,6 +225,7 @@ export default function Hosts() {
                   <Meter label={t('host.cpu')} pct={h.cpu} detail={t('host.loadAvg', { n: h.load1.toFixed(2) })} />
                   <Meter label={t('host.mem')} pct={memPct} detail={`${formatBytes(h.mem_used)} / ${formatBytes(h.mem_total)}`} />
                   <Meter label={root ? `${t('host.disk')} ${root.m}` : t('host.disk')} pct={root && root.t > 0 ? (root.u * 100) / root.t : null} detail={root ? `${formatBytes(root.u)} / ${formatBytes(root.t)}` : ''} />
+                  <p className="text-xs text-muted" title={t('host.net.title')}>{t('host.net')}: ↓ {formatRate(h.rx_bps)} · ↑ {formatRate(h.tx_bps)} · {t('host.conns', { n: h.estab })}{h.syn_recv > 0 && <span className={h.syn_recv >= 300 ? 'text-red' : ''}> · {t('host.synShort', { n: h.syn_recv })}</span>}</p>
                   {h.procs.length > 0 && <p className="truncate text-xs text-muted" title={t('host.top')}>{t('host.top')}: {[...h.procs].filter((p) => p.cpu > 0.05).sort((a, b) => b.cpu - a.cpu).slice(0, 3).map((p) => `${p.n} ${Math.round(p.cpu)}%`).join(' · ') || t('host.procs.idle')}</p>}
                   <div className="flex items-center justify-between gap-3 pt-1 text-xs text-muted">
                     <span title={t('host.spark')}><Spark values={h.cpu_spark} /></span>
