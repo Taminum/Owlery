@@ -150,7 +150,7 @@ func TestTelegramChannelIsStoredSealedAndAnnouncesAlertsOnce(t *testing.T) {
 	n := len(fake.texts())
 	wk.Round(ctx)
 	wk.Round(ctx)
-	if d := fake.texts()[n:]; len(d) != 1 || !strings.HasPrefix(d[0], "RemnaScope: за сутки") {
+	if d := fake.texts()[n:]; len(d) != 1 || !strings.HasPrefix(d[0], "📊 ЕЖЕДНЕВНАЯ СВОДКА") {
 		t.Fatalf("%v", d)
 	}
 	wk.Now = func() time.Time { return day.Add(24 * time.Hour) }
