@@ -13,9 +13,10 @@ import (
 
 // Alert kinds about the load of a monitored server. They are the owner's, like the servers' own list.
 const (
-	AlertHostDisk = "host_disk" // a file system is nearly full
-	AlertHostCPU  = "host_cpu"  // the processor has been busy for a long time
-	AlertHostMem  = "host_mem"  // memory has been nearly used up for a while
+	AlertHostDisk  = "host_disk"  // a file system is nearly full
+	AlertHostCPU   = "host_cpu"   // the processor has been busy for a long time
+	AlertHostMem   = "host_mem"   // memory has been nearly used up for a while
+	AlertHostFlood = "host_flood" // traffic or connections far above the usual, or the kernel's queues overflowing
 )
 
 // SaveHost keeps what a security agent said about its host: the machine, the latest reading, and one sample a
@@ -88,7 +89,9 @@ func (s *Store) SaveHost(ctx context.Context, vpsID string, h secproto.Host, now
 		Disks     []secproto.HostDisk `json:"disks"`
 		Procs     []secproto.HostProc `json:"procs"`
 		Units     []secproto.HostUnit `json:"units"`
-	}{now, h.CPUPct, h.Load1, h.Load5, h.Load15, h.MemUsed, h.SwapUsed, h.UptimeSec, nz(h.NetRX), nz(h.NetTX), h.Disks, procs, units})
+		Estab     int                 `json:"estab"`
+		SynRecv   int                 `json:"syn"`
+	}{now, h.CPUPct, h.Load1, h.Load5, h.Load15, h.MemUsed, h.SwapUsed, h.UptimeSec, nz(h.NetRX), nz(h.NetTX), h.Disks, procs, units, h.Estab, h.SynRecv})
 	if err != nil {
 		return err
 	}
@@ -113,9 +116,11 @@ func (s *Store) SaveHost(ctx context.Context, vpsID string, h secproto.Host, now
 		}
 		du, dt = nz(d.Used), nz(d.Total)
 	}
-	_, err = s.pool.Exec(ctx, `INSERT INTO host_samples (vps_id, at, cpu, load1, mem_used, mem_total, disk_used, disk_total, net_rx, net_tx)
-		VALUES ($1, date_trunc('minute', $2::timestamptz), $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT DO NOTHING`,
-		vid, now, cpu, float32(h.Load1), h.MemUsed, h.MemTotal, du, dt, nz(h.NetRX), nz(h.NetTX))
+	_, err = s.pool.Exec(ctx, `INSERT INTO host_samples (vps_id, at, cpu, load1, mem_used, mem_total, disk_used, disk_total, net_rx, net_tx,
+			rx_pkts, tx_pkts, estab, syn_recv, cookies, listen_drops)
+		VALUES ($1, date_trunc('minute', $2::timestamptz), $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) ON CONFLICT DO NOTHING`,
+		vid, now, cpu, float32(h.Load1), h.MemUsed, h.MemTotal, du, dt, nz(h.NetRX), nz(h.NetTX),
+		nz(h.NetRXPkts), nz(h.NetTXPkts), int32(max(0, min(h.Estab, 1<<30))), int32(max(0, min(h.SynRecv, 1<<30))), nz(h.Syncookie), nz(h.ListenDrp))
 	return err
 }
 
@@ -150,6 +155,11 @@ type HostRow struct {
 	Disks     []secproto.HostDisk `json:"disks"`
 	Procs     []secproto.HostProc `json:"procs"`
 	Units     []secproto.HostUnit `json:"units"`
+	Estab     int                 `json:"estab"`
+	SynRecv   int                 `json:"syn_recv"`
+	RXBps     float64             `json:"rx_bps"`
+	TXBps     float64             `json:"tx_bps"`
+	RXPps     float64             `json:"rx_pps"`
 	CPUSpark  []*float64          `json:"cpu_spark"` // the last hour, a point a minute
 	MemSpark  []float64           `json:"mem_spark"` // percent
 }
@@ -194,6 +204,8 @@ func (s *Store) Hosts(ctx context.Context, sc Scope, now time.Time) ([]HostRow, 
 				Disks    []secproto.HostDisk `json:"disks"`
 				Procs    []secproto.HostProc `json:"procs"`
 				Units    []secproto.HostUnit `json:"units"`
+				Estab    int                 `json:"estab"`
+				Syn      int                 `json:"syn"`
 			}
 			if json.Unmarshal(last, &l) == nil {
 				if l.CPU >= 0 {
@@ -210,6 +222,7 @@ func (s *Store) Hosts(ctx context.Context, sc Scope, now time.Time) ([]HostRow, 
 				if l.Units != nil {
 					h.Units = l.Units
 				}
+				h.Estab, h.SynRecv = l.Estab, l.Syn
 			}
 		}
 		out = append(out, h)
@@ -241,6 +254,27 @@ func (s *Store) Hosts(ctx context.Context, sc Scope, now time.Time) ([]HostRow, 
 			out[i].MemSpark = append(out[i].MemSpark, m)
 		}
 		sr.Close()
+		two, err := s.pool.Query(ctx, `SELECT at, net_rx, net_tx, rx_pkts FROM host_samples WHERE vps_id=$1 ORDER BY at DESC LIMIT 2`, vid)
+		if err != nil {
+			return nil, err
+		}
+		var ats []time.Time
+		var rx, tx, rp []int64
+		for two.Next() {
+			var at time.Time
+			var a, b, c int64
+			if err := two.Scan(&at, &a, &b, &c); err != nil {
+				two.Close()
+				return nil, err
+			}
+			ats, rx, tx, rp = append(ats, at), append(rx, a), append(tx, b), append(rp, c)
+		}
+		two.Close()
+		if len(ats) == 2 {
+			if dt := ats[0].Sub(ats[1]).Seconds(); dt > 0 && rx[0] >= rx[1] && tx[0] >= tx[1] && rp[0] >= rp[1] {
+				out[i].RXBps, out[i].TXBps, out[i].RXPps = float64(rx[0]-rx[1])/dt, float64(tx[0]-tx[1])/dt, float64(rp[0]-rp[1])/dt
+			}
+		}
 	}
 	return out, nil
 }
@@ -254,6 +288,10 @@ type HostPoint struct {
 	DiskPct float64   `json:"disk_pct"`
 	RXBps   float64   `json:"rx_bps"`
 	TXBps   float64   `json:"tx_bps"`
+	RXPps   float64   `json:"rx_pps"`
+	TXPps   float64   `json:"tx_pps"`
+	Estab   float64   `json:"estab"`
+	SynRecv float64   `json:"syn_recv"`
 }
 
 // HostSeries returns the history of one server over the last hours, averaged into at most about maxPoints points.
@@ -268,7 +306,7 @@ func (s *Store) HostSeries(ctx context.Context, sc Scope, vpsID string, hours in
 	if err := s.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM security_vps v WHERE v.id=$1 AND v.archived_at IS NULL AND `+pred+`)`, append([]any{vid}, args...)...).Scan(&ok); err != nil || !ok {
 		return nil, ErrNotFound
 	}
-	rows, err := s.pool.Query(ctx, `SELECT at, cpu, load1, mem_used, mem_total, disk_used, disk_total, net_rx, net_tx FROM host_samples
+	rows, err := s.pool.Query(ctx, `SELECT at, cpu, load1, mem_used, mem_total, disk_used, disk_total, net_rx, net_tx, rx_pkts, tx_pkts, estab, syn_recv FROM host_samples
 		WHERE vps_id=$1 AND at > $2 ORDER BY at`, vid, now.Add(-time.Duration(hours)*time.Hour))
 	if err != nil {
 		return nil, err
@@ -280,11 +318,13 @@ func (s *Store) HostSeries(ctx context.Context, sc Scope, vpsID string, hours in
 		load           float32
 		mu, mt, du, dt int64
 		rx, tx         int64
+		rxp, txp       int64
+		estab, syn     int32
 	}
 	var all []raw
 	for rows.Next() {
 		var r raw
-		if err := rows.Scan(&r.at, &r.cpu, &r.load, &r.mu, &r.mt, &r.du, &r.dt, &r.rx, &r.tx); err != nil {
+		if err := rows.Scan(&r.at, &r.cpu, &r.load, &r.mu, &r.mt, &r.du, &r.dt, &r.rx, &r.tx, &r.rxp, &r.txp, &r.estab, &r.syn); err != nil {
 			return nil, err
 		}
 		all = append(all, r)
@@ -305,13 +345,15 @@ func (s *Store) HostSeries(ctx context.Context, sc Scope, vpsID string, hours in
 		var p HostPoint
 		var cpuSum float64
 		var cpuN int
-		var lo, mp, dp float64
+		var lo, mp, dp, es, sy float64
 		for _, r := range all[i:end] {
 			if r.cpu != nil {
 				cpuSum += float64(*r.cpu)
 				cpuN++
 			}
 			lo += float64(r.load)
+			es += float64(r.estab)
+			sy += float64(r.syn)
 			if r.mt > 0 {
 				mp += float64(r.mu) * 100 / float64(r.mt)
 			}
@@ -326,6 +368,7 @@ func (s *Store) HostSeries(ctx context.Context, sc Scope, vpsID string, hours in
 			p.CPU = &c
 		}
 		p.Load1, p.MemPct, p.DiskPct = lo/n, mp/n, dp/n
+		p.Estab, p.SynRecv = es/n, sy/n
 		first, last := all[i], all[end-1]
 		prev := first
 		if i > 0 {
@@ -334,6 +377,10 @@ func (s *Store) HostSeries(ctx context.Context, sc Scope, vpsID string, hours in
 		if dt := last.at.Sub(prev.at).Seconds(); dt > 0 && last.rx >= prev.rx && last.tx >= prev.tx {
 			p.RXBps = float64(last.rx-prev.rx) / dt
 			p.TXBps = float64(last.tx-prev.tx) / dt
+			if last.rxp >= prev.rxp && last.txp >= prev.txp {
+				p.RXPps = float64(last.rxp-prev.rxp) / dt
+				p.TXPps = float64(last.txp-prev.txp) / dt
+			}
 		}
 		out = append(out, p)
 	}
@@ -388,6 +435,73 @@ func (s *Store) HostAlertStates(ctx context.Context, now time.Time) ([]HostAlert
 		var mem *float64
 		if err := s.pool.QueryRow(ctx, `SELECT avg(mem_used * 100.0 / NULLIF(mem_total, 0))::float8, count(*) FROM host_samples WHERE vps_id=$1 AND at > $2 AND mem_total > 0`, vid, now.Add(-5*time.Minute)).Scan(&mem, &n); err == nil && n >= 4 {
 			out[i].MemAvg = mem
+		}
+	}
+	return out, nil
+}
+
+// FloodSample is one minute sample with the counters that a flood moves.
+type FloodSample struct {
+	At                   time.Time
+	RX, RXPkts           int64
+	Estab, SynRecv       int
+	Cookies, ListenDrops int64
+}
+
+// HostFloodState is what the flood check looks at for one server: the last minutes, and the day before them as
+// the picture of what is usual.
+type HostFloodState struct {
+	VPSID    string
+	Name     string
+	Online   bool
+	Recent   []FloodSample // the last twelve minutes, oldest first
+	Baseline []FloodSample // from a day ago to a quarter of an hour ago
+}
+
+func (s *Store) HostFloodStates(ctx context.Context, now time.Time) ([]HostFloodState, error) {
+	rows, err := s.pool.Query(ctx, `SELECT v.id, v.name, i.updated_at FROM security_vps v JOIN host_info i ON i.vps_id = v.id WHERE v.archived_at IS NULL AND v.enabled`)
+	if err != nil {
+		return nil, err
+	}
+	var out []HostFloodState
+	for rows.Next() {
+		var st HostFloodState
+		var id uuid.UUID
+		var upd time.Time
+		if err := rows.Scan(&id, &st.Name, &upd); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		st.VPSID, st.Online = id.String(), now.Sub(upd) < 5*time.Minute
+		out = append(out, st)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	load := func(vid uuid.UUID, from, to time.Time) ([]FloodSample, error) {
+		r, err := s.pool.Query(ctx, `SELECT at, net_rx, rx_pkts, estab, syn_recv, cookies, listen_drops FROM host_samples WHERE vps_id=$1 AND at > $2 AND at <= $3 ORDER BY at`, vid, from, to)
+		if err != nil {
+			return nil, err
+		}
+		defer r.Close()
+		var xs []FloodSample
+		for r.Next() {
+			var x FloodSample
+			if err := r.Scan(&x.At, &x.RX, &x.RXPkts, &x.Estab, &x.SynRecv, &x.Cookies, &x.ListenDrops); err != nil {
+				return nil, err
+			}
+			xs = append(xs, x)
+		}
+		return xs, r.Err()
+	}
+	for i := range out {
+		vid, _ := uuid.Parse(out[i].VPSID)
+		if out[i].Recent, err = load(vid, now.Add(-13*time.Minute), now); err != nil {
+			return nil, err
+		}
+		if out[i].Baseline, err = load(vid, now.Add(-24*time.Hour), now.Add(-13*time.Minute)); err != nil {
+			return nil, err
 		}
 	}
 	return out, nil

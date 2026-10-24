@@ -19,7 +19,7 @@ const (
 	PanelFailures = 3
 )
 
-var Kinds = []string{store.AlertAgentSilent, store.AlertPanelSync, store.AlertProbeDown, store.AlertSecAgent, store.AlertSecTLS, store.AlertSecPort, store.AlertDNSFailed, store.AlertDNSChange, store.AlertUserExpiry, store.AlertUserTraffic, store.AlertBillDue, store.AlertAWGDown, store.AlertAWGToolsOld, store.AlertHostDisk, store.AlertHostCPU, store.AlertHostMem}
+var Kinds = []string{store.AlertAgentSilent, store.AlertPanelSync, store.AlertProbeDown, store.AlertSecAgent, store.AlertSecTLS, store.AlertSecPort, store.AlertDNSFailed, store.AlertDNSChange, store.AlertUserExpiry, store.AlertUserTraffic, store.AlertBillDue, store.AlertAWGDown, store.AlertAWGToolsOld, store.AlertHostDisk, store.AlertHostCPU, store.AlertHostMem, store.AlertHostFlood}
 
 // ProbeFailures is how many probes in a row must fail before a channel counts as down: one lost
 // packet is not an outage.
@@ -128,7 +128,12 @@ func Evaluate(ctx context.Context, st *store.Store, now time.Time) (opened, clos
 		return 0, 0, err
 	}
 	conds := append(Conditions(agents, panels, probes, now), SecurityConditions(sec, now)...)
+	floods, err := st.HostFloodStates(ctx, now)
+	if err != nil {
+		return 0, 0, err
+	}
 	conds = append(conds, HostConditions(hosts)...)
+	conds = append(conds, FloodConditions(floods)...)
 	conds = append(conds, AWGConditions(awgs, now)...)
 	conds = append(conds, DNSConditions(dns, now)...)
 	conds = append(conds, UserConditions(users, now)...)

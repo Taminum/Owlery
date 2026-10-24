@@ -108,31 +108,8 @@ func parseLoad(text string) (l1, l5, l15 float64) {
 // ParseNetDev sums the counters of the real interfaces: not the loopback, not the bridges and virtual pairs
 // that containers and tunnels make, which would count the same traffic twice.
 func ParseNetDev(text string) (rx, tx int64) {
-	for _, line := range strings.Split(text, "\n") {
-		name, rest, ok := strings.Cut(line, ":")
-		if !ok {
-			continue
-		}
-		name = strings.TrimSpace(name)
-		skip := name == "lo"
-		for _, p := range []string{"veth", "docker", "br-", "virbr", "awg", "wg", "tun", "tap"} {
-			skip = skip || strings.HasPrefix(name, p)
-		}
-		if skip {
-			continue
-		}
-		f := strings.Fields(rest)
-		if len(f) < 9 {
-			continue
-		}
-		r, e1 := strconv.ParseInt(f[0], 10, 64)
-		t, e2 := strconv.ParseInt(f[8], 10, 64)
-		if e1 == nil && e2 == nil {
-			rx += r
-			tx += t
-		}
-	}
-	return
+	c := ParseNetCounters(text)
+	return c.RXBytes, c.TXBytes
 }
 
 // realFS are the file systems whose use is worth showing.
@@ -229,7 +206,14 @@ func (h *HostReader) Read(now time.Time) secproto.Host {
 			out.UptimeSec = int64(v)
 		}
 	}
-	out.NetRX, out.NetTX = ParseNetDev(h.read("net/dev"))
+	nc := ParseNetCounters(h.read("net/dev"))
+	out.NetRX, out.NetTX, out.NetRXPkts, out.NetTXPkts = nc.RXBytes, nc.TXBytes, nc.RXPkts, nc.TXPkts
+	e4, s4 := ParseTCPStates(h.readLimited("net/tcp", 24<<20))
+	e6, s6 := ParseTCPStates(h.readLimited("net/tcp6", 24<<20))
+	out.Estab, out.SynRecv = e4+e6, s4+s6
+	ext := ParseTcpExt(h.read("net/netstat"))
+	out.Syncookie, out.ListenDrp = ext["SyncookiesSent"], ext["ListenDrops"]
+	out.Conntrack, out.ConntrMax = h.readInt("sys/net/netfilter/nf_conntrack_count"), h.readInt("sys/net/netfilter/nf_conntrack_max")
 	out.Kernel = clean(h.read("sys/kernel/osrelease"), 80)
 	model, cpus := cpuModel(h.read("cpuinfo"))
 	out.CPUModel, out.CPUs = clean(model, 120), cpus
