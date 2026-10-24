@@ -67,9 +67,9 @@ body {
 .ember-bubble::after { content: ''; position: absolute; bottom: -7px; right: 56px; width: 12px; height: 12px; border-right: 1px solid var(--b-border); border-bottom: 1px solid var(--b-border); background: var(--b-bg); transform: skewY(-15deg) rotate(-35deg); pointer-events: none; }
 .ember-bubble__name { display: block; color: var(--b-accent); font-size: 10px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
 .ember-bubble:focus-visible { outline: 3px solid #f493c5; outline-offset: 3px; }
-.ember-gear { position: absolute; top: 4px; left: 4px; z-index: 4; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 999px; border: 1px solid var(--color-line); background: var(--color-elevated); color: var(--color-fg); opacity: .55; cursor: pointer; font-size: 16px; line-height: 1; }
+.ember-gear { position: absolute; top: 12%; left: 76%; z-index: 4; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 999px; border: 1px solid var(--color-line); background: var(--color-elevated); color: var(--color-fg); opacity: .55; cursor: pointer; font-size: 16px; line-height: 1; }
 .ember-gear:hover, .ember-gear:focus-visible { opacity: 1; }
-.ember-menu { display: flex; flex-direction: column; min-width: 190px; border: 1px solid var(--color-line); border-radius: 12px; background: var(--color-elevated); overflow: hidden; }
+.ember-menu { position: fixed; z-index: 60; max-height: calc(100vh - 16px); overflow-y: auto; display: flex; flex-direction: column; min-width: 190px; box-shadow: 0 8px 24px rgb(0 0 0 / .35); border: 1px solid var(--color-line); border-radius: 12px; background: var(--color-elevated); overflow: hidden; }
 .ember-menu > * { padding: 9px 12px; text-align: left; font-size: 13px; color: var(--color-fg); background: transparent; border: 0; cursor: pointer; text-decoration: none; }
 .ember-menu > *:hover, .ember-menu > *:focus-visible { background: var(--color-surface); }
 .ember-body { touch-action: none; cursor: grab; }
