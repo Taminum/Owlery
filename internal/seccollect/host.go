@@ -24,6 +24,9 @@ type HostReader struct {
 	havePrev            bool
 	prevProc            map[int]procTicks
 	prevAt              time.Time
+	// ContainersFile lists the running containers (id, name, image, tab-separated), written by a small root unit
+	// next to the agent, which has no access to Docker. Empty: container names are not known.
+	ContainersFile string
 }
 
 func NewHostReader() *HostReader { return &HostReader{Proc: "/proc", Etc: "/etc"} }
@@ -241,6 +244,6 @@ func (h *HostReader) Read(now time.Time) secproto.Host {
 			out.Disks = append(out.Disks, secproto.HostDisk{Mount: clean(m.Mount, 120), FS: m.FS, Total: total, Used: used})
 		}
 	}
-	out.Procs = h.readProcs(now)
+	out.Procs, out.Units = h.readProcs(now)
 	return out
 }
