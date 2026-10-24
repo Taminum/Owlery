@@ -194,3 +194,24 @@ func TestHostReaderNamesContainersFromTheListAndAddsUpAUnit(t *testing.T) {
 		}
 	}
 }
+
+func TestNetworkHealthParsers(t *testing.T) {
+	dev := "Inter-|   Receive\n face |bytes packets errs drop fifo frame compressed multicast|bytes packets\n" +
+		"    lo: 999 9 0 0 0 0 0 0 999 9 0 0 0 0 0 0\n  eth0: 5000 50 0 0 0 0 0 0 7000 70 0 0 0 0 0 0\nveth1: 400 4 0 0 0 0 0 0 400 4 0 0 0 0 0 0\n"
+	c := ParseNetCounters(dev)
+	if c.RXBytes != 5000 || c.RXPkts != 50 || c.TXBytes != 7000 || c.TXPkts != 70 {
+		t.Fatalf("%+v", c)
+	}
+	tcp := "  sl  local_address rem_address   st tx_queue\n   0: 0100007F:0035 00000000:0000 0A 00000000:00000000\n   1: 0100007F:1F90 0100007F:D3E2 01 00000000:00000000\n   2: 0100007F:1F90 0A0A0A0A:D3E3 03 00000000:00000000\n   3: 0100007F:1F90 0A0A0A0B:D3E4 03 00000000:00000000\n"
+	if e, s := ParseTCPStates(tcp); e != 1 || s != 2 {
+		t.Fatalf("%d %d", e, s)
+	}
+	ext := "TcpExt: SyncookiesSent SyncookiesRecv ListenOverflows ListenDrops\nTcpExt: 7 0 3 11\nIpExt: A B\nIpExt: 1 2\n"
+	m := ParseTcpExt(ext)
+	if m["SyncookiesSent"] != 7 || m["ListenDrops"] != 11 || m["ListenOverflows"] != 3 {
+		t.Fatalf("%v", m)
+	}
+	if len(ParseTcpExt("garbage")) != 0 {
+		t.Fatal("garbage gave numbers")
+	}
+}

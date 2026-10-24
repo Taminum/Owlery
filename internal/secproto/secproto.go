@@ -273,16 +273,25 @@ type Host struct {
 	CPUs     int    `json:"cpus,omitempty"`
 	MemTotal int64  `json:"mem_total,omitempty"`
 	// What it does now. CPUPct is -1 until the agent has two readings to compare.
-	CPUPct    float64    `json:"cpu"`
-	Load1     float64    `json:"l1"`
-	Load5     float64    `json:"l5"`
-	Load15    float64    `json:"l15"`
-	MemUsed   int64      `json:"mem_used"` // total minus what can be had without swapping
-	SwapTotal int64      `json:"swap_total,omitempty"`
-	SwapUsed  int64      `json:"swap_used,omitempty"`
-	UptimeSec int64      `json:"up"`
-	NetRX     int64      `json:"rx"` // counters over the real interfaces since boot
-	NetTX     int64      `json:"tx"`
+	CPUPct    float64 `json:"cpu"`
+	Load1     float64 `json:"l1"`
+	Load5     float64 `json:"l5"`
+	Load15    float64 `json:"l15"`
+	MemUsed   int64   `json:"mem_used"` // total minus what can be had without swapping
+	SwapTotal int64   `json:"swap_total,omitempty"`
+	SwapUsed  int64   `json:"swap_used,omitempty"`
+	UptimeSec int64   `json:"up"`
+	NetRX     int64   `json:"rx"` // counters over the real interfaces since boot
+	NetTX     int64   `json:"tx"`
+	// What a flood of packets or connections shows first. The counters run since boot; the connection counts are as of now.
+	NetRXPkts int64      `json:"rxp,omitempty"`
+	NetTXPkts int64      `json:"txp,omitempty"`
+	Estab     int        `json:"estab"`             // established TCP connections
+	SynRecv   int        `json:"syn"`               // half-open TCP connections (SYN received, not yet completed)
+	Syncookie int64      `json:"cookies,omitempty"` // SYN cookies sent since boot: the kernel sends them only when its queue overflows
+	ListenDrp int64      `json:"ldrops,omitempty"`  // connections dropped for a full listen queue since boot
+	Conntrack int64      `json:"ct,omitempty"`      // entries in the connection tracking table, 0 when it is not in use
+	ConntrMax int64      `json:"ct_max,omitempty"`
 	Disks     []HostDisk `json:"disks,omitempty"`
 	// Procs are the busiest groups of processes by processor and by memory, at most MaxHostProcs. Only the short
 	// program name and the unit it runs in are sent, never the command line, which may carry a secret.

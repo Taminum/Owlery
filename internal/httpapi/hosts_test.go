@@ -85,3 +85,58 @@ func TestHostResourcesAreListedChartedAndRaiseAlertsForAFullDisk(t *testing.T) {
 		t.Fatalf("a viewer sees an unlinked server: %s", vb)
 	}
 }
+
+func TestAFloodOfTrafficRaisesAnAlertThatNamesTheNumbersAndClosesWhenItEnds(t *testing.T) {
+	w := newWorld(t)
+	ctx := context.Background()
+	vps, err := w.h.st.CreateVPS(ctx, "", "exit-flood", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC().Truncate(time.Minute)
+	var rx, rxp int64
+	send := func(at time.Time, bps, pps float64, syn int) {
+		rx += int64(bps * 60)
+		rxp += int64(pps * 60)
+		h := secproto.Host{Type: "host", At: at, MemTotal: 1 << 30, MemUsed: 1 << 29, NetRX: rx, NetRXPkts: rxp, SynRecv: syn, Estab: 40}
+		if err := w.h.st.SaveHost(ctx, vps.ID, h, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	open := func(at time.Time) bool {
+		if _, _, err := alerts.Evaluate(ctx, w.h.st, at); err != nil {
+			t.Fatal(err)
+		}
+		_, b := w.owner.get("/api/v1/alerts")
+		return strings.Contains(string(b), "host_flood") && strings.Contains(string(b), `"resolved_at":null`)
+	}
+	// An ordinary evening, then twelve minutes of 400 Mbit/s and 120 thousand packets a second.
+	for i := 40; i > 12; i-- {
+		send(now.Add(-time.Duration(i)*time.Minute), 1e6, 1500, 3)
+	}
+	if open(now.Add(-13 * time.Minute)) {
+		t.Fatal("an ordinary evening raised the alarm")
+	}
+	for i := 12; i >= 0; i-- {
+		send(now.Add(-time.Duration(i)*time.Minute), 50e6, 120000, 5)
+	}
+	if !open(now) {
+		t.Fatal("a flood must raise an alert")
+	}
+	_, b := w.owner.get("/api/v1/alerts")
+	if !strings.Contains(string(b), "Похоже на DDoS: exit-flood") || !strings.Contains(string(b), "400 Мбит/с") {
+		t.Fatalf("%s", b)
+	}
+	// The list shows the current rates and connections.
+	_, lb := w.owner.get("/api/v1/hosts")
+	if !strings.Contains(string(lb), `"rx_pps":120000`) || !strings.Contains(string(lb), `"estab":40`) {
+		t.Fatalf("%s", lb)
+	}
+	// After a quiet quarter of an hour it closes.
+	for i := 1; i <= 14; i++ {
+		send(now.Add(time.Duration(i)*time.Minute), 1e6, 1500, 3)
+	}
+	if open(now.Add(14 * time.Minute)) {
+		t.Fatal("the alert did not close")
+	}
+}

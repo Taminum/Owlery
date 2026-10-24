@@ -27,6 +27,7 @@ function renderHosts() {
 const GB = 1024 ** 3
 const host = (over: object) => ({
   id: 'h1', name: 'exit-nl', online: true, has_data: true, updated_at: new Date().toISOString(), os: 'Ubuntu 24.04.3 LTS', kernel: '6.8.0-147-generic', arch: 'amd64',
+  estab: 120, syn_recv: 450, rx_bps: 5e6, tx_bps: 2e6, rx_pps: 4000,
   cpu_model: 'Test CPU', cpus: 2, mem_total: 4 * GB, swap_total: 0, cpu: 12.4, load1: 0.31, load5: 0.2, load15: 0.1, mem_used: 2 * GB, swap_used: 0, uptime: 90000,
   disks: [{ m: '/', fs: 'ext4', t: 100 * GB, u: 93 * GB }], cpu_spark: [10, 12, null, 14], mem_spark: [50, 50, 50, 51],
   units: [{ u: 'docker:0123456789ab', l: 'remnanode', c: 5, cpu: 44.3, rss: 420 * 1024 ** 2 }, { u: 'nginx.service', c: 4, cpu: 3.1, rss: 80 * 1024 ** 2 }],
@@ -45,6 +46,8 @@ describe('Server resources', () => {
     expect(disk).toHaveAttribute('aria-valuenow', '93')
     expect(disk.firstElementChild?.className).toMatch(/bg-red/) // more than 90% is not shown in a calm colour
     expect(screen.getByText('на связи')).toBeInTheDocument()
+    expect(screen.getByText(/полуоткрытых 450/).className).toMatch(/text-red/) // a thousand half-open connections would be shown in the alarm colour
+    expect(screen.getByText(/120 соед\./)).toBeInTheDocument()
   })
 
   it('says there is no data instead of showing zeros for a server whose agent has not reported', async () => {
