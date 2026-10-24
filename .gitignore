@@ -16,4 +16,4 @@ deploy/backup/
 # The mascot artwork is not part of the repository: it is packed from the private asset package at build time.
 /apps/web/public/ember/
 /deploy/prod/ember/
-/ember-for-friend/
+/for-friend/
