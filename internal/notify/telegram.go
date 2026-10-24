@@ -145,3 +145,46 @@ func Hint(chatID string) string {
 	}
 	return fmt.Sprintf("…%s", chatID[len(chatID)-4:])
 }
+
+// Update is one message the bot received.
+type Update struct {
+	ID      int64
+	ChatID  string
+	Date    int64
+	Text    string
+	HasText bool
+}
+
+// Updates asks Telegram for what was written to the bot after offset, waiting up to waitSec seconds for something
+// to arrive. An offset of -1 gives only the newest update. Only text messages are returned.
+func Updates(ctx context.Context, token string, offset int64, waitSec int) ([]Update, int64, error) {
+	r, err := call(ctx, token, "getUpdates", map[string]any{"offset": offset, "timeout": waitSec, "limit": 20, "allowed_updates": []string{"message"}})
+	if err != nil {
+		return nil, 0, err
+	}
+	var raw []struct {
+		ID      int64 `json:"update_id"`
+		Message *struct {
+			Date int64  `json:"date"`
+			Text string `json:"text"`
+			Chat struct {
+				ID int64 `json:"id"`
+			} `json:"chat"`
+		} `json:"message"`
+	}
+	if err := json.Unmarshal(r.Result, &raw); err != nil {
+		return nil, 0, SendError{ErrBadAnswer}
+	}
+	var out []Update
+	var last int64
+	for _, u := range raw {
+		if u.ID > last {
+			last = u.ID
+		}
+		if u.Message == nil {
+			continue
+		}
+		out = append(out, Update{ID: u.ID, ChatID: strconv.FormatInt(u.Message.Chat.ID, 10), Date: u.Message.Date, Text: u.Message.Text, HasText: u.Message.Text != ""})
+	}
+	return out, last, nil
+}

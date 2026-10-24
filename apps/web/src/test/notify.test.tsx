@@ -27,4 +27,26 @@ describe('Telegram notifications', () => {
     // The token field is emptied after saving.
     expect((screen.getByLabelText('Токен бота') as HTMLInputElement).value).toBe('')
   })
+
+  it('opens the fine tuning of a channel and saves what was chosen', async () => {
+    const ch = { id: 'c1', kind: 'telegram', name: 'Me', chat_hint: '…4242', enabled: true, on_alerts: true, digest_hour: 9, digest_tz: 'UTC', last_ok_at: null, last_error: null, prefs: {}, commands: true, muted_until: null }
+    const groups = [{ id: 'dns', kinds: ['dns_change'] }, { id: 'flood', kinds: ['host_flood'] }]
+    const api = mockApi({ me: owner, handler: (r: Req) => {
+      if (r.path === '/api/v1/notify/channels' && r.method === 'GET') return { status: 200, body: { channels: [ch], max: 5, groups, critical: ['host_flood'] } }
+      if (r.path === '/api/v1/notify/channels/c1' && r.method === 'PATCH') return { status: 200, body: ch }
+    } })
+    render(<NotifyTab />)
+    await userEvent.click(await screen.findByRole('button', { name: 'Настроить' }))
+    await userEvent.click(screen.getByLabelText('DNS (изменения и сбои проверки)')) // switch a group off
+    await userEvent.click(screen.getByLabelText('Сообщать, когда проблема закрылась («Закрыто: …»)'))
+    await userEvent.click(screen.getByLabelText('Тихие часы: не беспокоить, кроме срочного'))
+    await userEvent.selectOptions(screen.getByLabelText('Напоминать о том, что всё ещё открыто'), '3')
+    await userEvent.click(screen.getByRole('button', { name: 'Сохранить' }))
+    await vi.waitFor(() => expect(api.find('PATCH', '/api/v1/notify/channels/c1')).toHaveLength(1))
+    const sent = api.find('PATCH', '/api/v1/notify/channels/c1')[0].body as { prefs: Record<string, unknown>; commands: boolean }
+    expect(sent.prefs).toEqual({ off: ['dns'], no_resolved: true, quiet_on: true, quiet_from: '23:00', quiet_to: '08:00', remind_hours: 3 })
+    expect(sent.commands).toBe(true)
+    // The commands of the bot are listed.
+    expect(screen.getByText('/stats')).toBeInTheDocument()
+  })
 })
