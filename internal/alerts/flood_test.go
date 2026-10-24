@@ -93,3 +93,28 @@ func TestFloodIgnoresAReboot(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 }
+
+func TestFloodDoesNotMistakeAnExitServersOrdinaryTrafficOrAFewDroppedConnectionsForAnAttack(t *testing.T) {
+	now := time.Now()
+	start := now.Add(-12 * time.Minute)
+	// 70 Mbit/s and 4 thousand packets a second with no history at all: what exit-2 carries on an ordinary day.
+	steady := store.HostFloodState{VPSID: "v", Name: "exit-2", Online: true, Recent: series(start, 13, 70e6/8, 4000, 5)}
+	if got := FloodConditions([]store.HostFloodState{steady}); len(got) != 0 {
+		t.Fatalf("ordinary exit traffic raised an alarm: %+v", got)
+	}
+	// A few dropped connections every minute are ordinary; hundreds of them are not.
+	queue := func(perMinute int64) store.HostFloodState {
+		xs := series(start, 13, 1e6, 1500, 5)
+		for i := range xs {
+			xs[i].ListenDrops = int64(i) * perMinute
+			xs[i].Cookies = int64(i) * perMinute
+		}
+		return store.HostFloodState{VPSID: "v", Name: "exit-nl", Online: true, Recent: xs}
+	}
+	if got := FloodConditions([]store.HostFloodState{queue(7)}); len(got) != 0 {
+		t.Fatalf("a few drops raised an alarm: %+v", got)
+	}
+	if got := FloodConditions([]store.HostFloodState{queue(400)}); len(got) != 1 || !strings.Contains(got[0].Detail, "SYN") {
+		t.Fatalf("hundreds of drops a minute must: %+v", got)
+	}
+}

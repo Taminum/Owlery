@@ -10,15 +10,19 @@ import (
 
 const (
 	// FloodMinBps and FloodMinPps are the floors: below them traffic is never called a flood, however far it is
-	// above what was usual. 30 Mbit/s and 25 thousand packets a second.
-	FloodMinBps = 30e6 / 8
-	FloodMinPps = 25000
+	// above what was usual. 200 Mbit/s and 60 thousand packets a second: an exit server carries tens of Mbit/s of
+	// its users' traffic every day.
+	FloodMinBps = 200e6 / 8
+	FloodMinPps = 60000
+	// FloodQueueDrops is how many SYN cookies or dropped connections in one minute count as a queue that overflows;
+	// a handful now and then is ordinary.
+	FloodQueueDrops = 100
 	// FloodTimes is how far above the usual (its 95th percentile over the day before) counts as a flood.
 	FloodTimes = 4.0
 	// FloodSynRecv is how many half-open TCP connections at one moment point to a SYN flood.
 	FloodSynRecv = 300
 	// FloodSamples is how many of the last twelve minutes must look like it. Alerts close when fewer do.
-	FloodSamples = 3
+	FloodSamples = 5
 	// minBaseline is how many one-minute rates (three hours) are needed to call something "usual".
 	minBaseline = 180
 )
@@ -26,7 +30,7 @@ const (
 type rate struct {
 	bps, pps      float64
 	syn           int
-	cookies, drop bool
+	cookies, drop int64
 }
 
 func rates(xs []store.FloodSample) []rate {
@@ -39,7 +43,7 @@ func rates(xs []store.FloodSample) []rate {
 		}
 		out = append(out, rate{
 			bps: float64(b.RX-a.RX) / dt, pps: float64(b.RXPkts-a.RXPkts) / dt, syn: b.SynRecv,
-			cookies: b.Cookies > a.Cookies, drop: b.ListenDrops > a.ListenDrops,
+			cookies: b.Cookies - a.Cookies, drop: b.ListenDrops - a.ListenDrops,
 		})
 	}
 	return out
@@ -98,10 +102,10 @@ func FloodConditions(states []store.HostFloodState) []store.Condition {
 			if r.syn >= FloodSynRecv {
 				conns++
 			}
-			if r.cookies {
+			if r.cookies >= FloodQueueDrops {
 				cookies++
 			}
-			if r.drop {
+			if r.drop >= FloodQueueDrops {
 				drops++
 			}
 			peakBps, peakPps = max(peakBps, r.bps), max(peakPps, r.pps)
