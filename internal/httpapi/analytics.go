@@ -63,6 +63,13 @@ func (s *Server) resolveScope(w http.ResponseWriter, r *http.Request, a auth.Act
 			s.writeErr(w, r, http.StatusBadRequest, "invalid_range", "unknown range preset")
 			return sc, false
 		}
+		// The end of a preset range is rounded down (a minute, or five for a day and more) so that the same view asked
+		// again within that time is the same query: its cached answer is used instead of a recount.
+		step := time.Minute
+		if d >= 24*time.Hour {
+			step = 5 * time.Minute
+		}
+		now = now.Truncate(step)
 		sc.to, sc.from = now, now.Add(-d)
 	} else {
 		var e1, e2 error

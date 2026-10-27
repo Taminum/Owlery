@@ -11,9 +11,11 @@ import (
 
 // visits counts a connection as the start of a new visit when the same person (or device) had
 // not touched the same site for SessionGap before it.
+// c carries only the columns the summaries read: the window sort below runs over every event of the range, and
+// the full rows (hundreds of bytes each) made it spill to disk.
 func visitsCTE() string {
 	return `, c AS (
-  SELECT ev.*, lag(ev.ts) OVER (PARTITION BY ev.ukey, ev.site ORDER BY ev.ts) AS prev
+  SELECT ev.site, ev.w, ev.src, ev.ukey, ev.dev, ev.host, ev.ip, ev.bytes, ev.rtr, ev.ts, lag(ev.ts) OVER (PARTITION BY ev.ukey, ev.site ORDER BY ev.ts) AS prev
   FROM ev WHERE ev.site IS NOT NULL AND ev.site !~ '^[0-9]+(\.[0-9]+){3}$' AND position(':' IN ev.site) = 0
 ), sites AS (SELECT DISTINCT site AS name FROM c),
 cls AS (SELECT s.name, r.service, r.confidence, r.category, r.source, r.score FROM sites s ` + ruleMatch("s.name") + `)`
@@ -47,6 +49,51 @@ const ruZone = `~ '\.(ru|su|xn--p1ai)$'`
 // Sites summarises traffic per site (registrable domain). Connections without a domain have no
 // site and are not part of this view.
 func (s *Store) Sites(ctx context.Context, q AnalyticsQuery) (rows []SiteRow, groups, total int, err error) {
+	if q.Limit <= 0 || q.Limit > 200 {
+		q.Limit = 50
+	}
+	key := fmt.Sprint(append(q.args7(), escapedLike(q.Search), q.Limit, q.Offset, q.Category, q.Zone, q.NewOnly)...)
+	sitesCache.Lock()
+	if e, ok := sitesCache.m[key]; ok && time.Since(e.at) < catCacheTTL {
+		sitesCache.Unlock()
+		return e.rows, e.groups, e.total, nil
+	}
+	sitesCache.Unlock()
+	rows, groups, total, err = s.sites(ctx, q)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	sitesCache.Lock()
+	if len(sitesCache.m) > 64 {
+		sitesCache.m = map[string]sitesEntry{}
+	}
+	sitesCache.m[key] = sitesEntry{rows: rows, groups: groups, total: total, at: time.Now()}
+	sitesCache.Unlock()
+	return rows, groups, total, nil
+}
+
+// dropAnalyticsCache forgets the cached Sites and category summaries; they depend on the rules, so any rule change calls it.
+func dropAnalyticsCache() {
+	sitesCache.Lock()
+	sitesCache.m = map[string]sitesEntry{}
+	sitesCache.Unlock()
+	catCache.Lock()
+	catCache.m = map[string]catEntry{}
+	catCache.Unlock()
+}
+
+type sitesEntry struct {
+	rows          []SiteRow
+	groups, total int
+	at            time.Time
+}
+
+var sitesCache = struct {
+	sync.Mutex
+	m map[string]sitesEntry
+}{m: map[string]sitesEntry{}}
+
+func (s *Store) sites(ctx context.Context, q AnalyticsQuery) (rows []SiteRow, groups, total int, err error) {
 	if q.Limit <= 0 || q.Limit > 200 {
 		q.Limit = 50
 	}
@@ -138,7 +185,8 @@ func (s *Store) Categories(ctx context.Context, q AnalyticsQuery) ([]CategoryRow
 	return rows, nil
 }
 
-const catCacheTTL = 45 * time.Second
+// A few minutes old is fine for a summary of days of traffic, and it is what makes paging and filtering instant.
+var catCacheTTL = 5 * time.Minute
 
 type catEntry struct {
 	rows []CategoryRow
