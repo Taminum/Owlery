@@ -3,7 +3,7 @@ package httpapi
 import (
 	"testing"
 
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 type vpsResp struct {

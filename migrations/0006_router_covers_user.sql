@@ -1,4 +1,4 @@
--- RemnaScope 0006: which panel user a router agent stands for.
+-- Owlery 0006: which panel user a router agent stands for.
 --
 -- Everything behind a router reaches the exit nodes as one panel user (for example id 4). The
 -- router agent sees the same connections with the domain and the device. When it is set, the

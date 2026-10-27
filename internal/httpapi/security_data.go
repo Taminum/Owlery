@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/auth"
-	"github.com/Taminum/RemnaScope/internal/secchecks"
-	"github.com/Taminum/RemnaScope/internal/secfw"
-	"github.com/Taminum/RemnaScope/internal/secproto"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/auth"
+	"github.com/Taminum/Owlery/internal/secchecks"
+	"github.com/Taminum/Owlery/internal/secfw"
+	"github.com/Taminum/Owlery/internal/secproto"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 // visibleVPS loads the server for the actor or writes "not found".

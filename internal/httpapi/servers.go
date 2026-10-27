@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/auth"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/auth"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 // serverOut is one machine of the fleet as a whole: what a person said about it, what its agent measures, which

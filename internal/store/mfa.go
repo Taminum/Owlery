@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/Taminum/RemnaScope/internal/secrets"
+	"github.com/Taminum/Owlery/internal/secrets"
 )
 
 // TOTP is an account's stored second factor. The secret is sealed; Enabled is false while it is

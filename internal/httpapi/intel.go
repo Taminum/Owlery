@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/auth"
-	"github.com/Taminum/RemnaScope/internal/netintel"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/auth"
+	"github.com/Taminum/Owlery/internal/netintel"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 // intelGate lets the owner (the only person who may point the server at the outside world) in, and

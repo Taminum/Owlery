@@ -1,7 +1,7 @@
 package seccollect
 
 import (
-	"github.com/Taminum/RemnaScope/internal/secproto"
+	"github.com/Taminum/Owlery/internal/secproto"
 	"os"
 	"path/filepath"
 	"strconv"

@@ -1,7 +1,7 @@
-// Package netintel is the "network intelligence" part of RemnaScope: looking up what a domain or an
+// Package netintel is the "network intelligence" part of Owlery: looking up what a domain or an
 // address is on the public internet (DNS, owner, subdomains) and, on request, whether it answers.
 //
-// Everything here describes the view from the server RemnaScope runs on, never from the user's home
+// Everything here describes the view from the server Owlery runs on, never from the user's home
 // or from another country, and every result carries where it came from and when. Observations of
 // real traffic live elsewhere; nothing here is mixed into them.
 //
@@ -19,7 +19,7 @@ import (
 
 	"golang.org/x/net/idna"
 
-	"github.com/Taminum/RemnaScope/internal/safehttp"
+	"github.com/Taminum/Owlery/internal/safehttp"
 )
 
 type Kind string

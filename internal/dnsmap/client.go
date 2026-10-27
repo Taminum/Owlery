@@ -25,7 +25,7 @@ import (
 
 	"golang.org/x/net/dns/dnsmessage"
 
-	"github.com/Taminum/RemnaScope/internal/safehttp"
+	"github.com/Taminum/Owlery/internal/safehttp"
 )
 
 // Record types this package asks for. The values are the numbers on the wire.

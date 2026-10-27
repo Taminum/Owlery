@@ -1,9 +1,9 @@
-# RemnaScope agent for the AmneziaWG containers. Read-only: it runs one fixed helper (through one exact
+# Owlery agent for the AmneziaWG containers. Read-only: it runs one fixed helper (through one exact
 # sudoers rule) and reports public facts: names, public keys, tunnel addresses, counters, handshakes.
 # It is a second copy of the agent beside the log agent, with its own credential and state.
 # See docs/AWG_COLLECTOR.md for the reviewed installation procedure.
 [Unit]
-Description=RemnaScope AmneziaWG agent (read-only)
+Description=Owlery AmneziaWG agent (read-only)
 After=network-online.target docker.service
 Wants=network-online.target
 

@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/alerts"
-	"github.com/Taminum/RemnaScope/internal/secproto"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/alerts"
+	"github.com/Taminum/Owlery/internal/secproto"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 func TestHostResourcesAreListedChartedAndRaiseAlertsForAFullDisk(t *testing.T) {

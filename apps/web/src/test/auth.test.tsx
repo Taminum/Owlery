@@ -8,7 +8,7 @@ describe('signing in', () => {
   it('shows only the sign-in form, and requests no data, without a session', async () => {
     const api = mockApi({ me: null })
     renderApp('/')
-    expect(await screen.findByRole('heading', { name: 'Вход в RemnaScope' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Вход в Owlery' })).toBeInTheDocument()
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
     expect(screen.queryByText('Обзор')).not.toBeInTheDocument()
     const paths = api.calls.map((c) => c.path)
@@ -78,7 +78,7 @@ describe('an established session', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Выйти' }))
     await waitFor(() => expect(api.find('POST', '/api/v1/auth/logout')).toHaveLength(1))
     expect(api.find('POST', '/api/v1/auth/logout')[0].headers['X-CSRF-Token']).toBe('csrf-owner')
-    expect(await screen.findByRole('heading', { name: 'Вход в RemnaScope' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Вход в Owlery' })).toBeInTheDocument()
   })
 
   it('falls back to the sign-in form, with a notice, when the session dies mid-use', async () => {
@@ -93,7 +93,7 @@ describe('an established session', () => {
     dead = true
     await userEvent.click(refresh)
     expect(await screen.findByText('Сеанс завершён. Войдите снова.')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Вход в RemnaScope' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Вход в Owlery' })).toBeInTheDocument()
   })
 
   it('does not offer owner-only areas to a member', async () => {

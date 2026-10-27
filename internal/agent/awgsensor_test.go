@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/ingestproto"
+	"github.com/Taminum/Owlery/internal/ingestproto"
 )
 
 const sensorStream = "W\tc1\t1000\t1060\t3\t2\n" +

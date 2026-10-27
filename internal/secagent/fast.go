@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/Taminum/RemnaScope/internal/seccollect"
+	"github.com/Taminum/Owlery/internal/seccollect"
 )
 
 // banWatch notices that the set of banned addresses changed between two full reads, so a ban is named within

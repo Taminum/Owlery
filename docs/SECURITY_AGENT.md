@@ -1,6 +1,6 @@
 # Security agent (`secagent`)
 
-The security agent reports a VPS's security state to RemnaScope: **Fail2ban**, **listening sockets** and
+The security agent reports a VPS's security state to Owlery: **Fail2ban**, **listening sockets** and
 **firewall rules**. It also carries out a **ban or unban of one address** when the owner asks for it. It is
 separate from the Xray log agent: its own binary, its own credential, its own channel (`/ingest/security/v1`).
 
@@ -40,7 +40,7 @@ firewall comparison (they are the Fail2ban events), so a ban does not look like 
 The agent needs no root. Fail2ban is handled by a second, equally small service, the **helper**, which is the
 only process that touches Fail2ban's socket.
 
-1. In RemnaScope open **Безопасность → your server → Создать агента**. The secret is shown once, and the window
+1. In Owlery open **Безопасность → your server → Создать агента**. The secret is shown once, and the window
    lists these steps with it filled in.
 2. On the VPS:
    ```bash
@@ -142,4 +142,4 @@ connection; see [SECURITY_CHECKS.md](SECURITY_CHECKS.md) for how the server uses
   The screen reads them into tables, chains and policies, and compares two stored readings line by line;
   it does not interpret what a rule allows. Whether a port is really open is for the external check to say.
 - Listening sockets are the host's own. Containers with their own network namespace may not appear.
-- Ban and unban act on Fail2ban's jails only. Nothing in RemnaScope changes the firewall.
+- Ban and unban act on Fail2ban's jails only. Nothing in Owlery changes the firewall.

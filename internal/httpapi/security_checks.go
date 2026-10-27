@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/auth"
-	"github.com/Taminum/RemnaScope/internal/netintel"
-	"github.com/Taminum/RemnaScope/internal/secchecks"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/auth"
+	"github.com/Taminum/Owlery/internal/netintel"
+	"github.com/Taminum/Owlery/internal/secchecks"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 // Nudger wakes the external checker after a manual request.

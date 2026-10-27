@@ -2,7 +2,7 @@
 // up. It does nothing the owner could not do by hand: it sends the same "revoke" command the Revoke button
 // sends, to the agent that owns the device, and writes the outcome to the operations log and the audit log.
 //
-// A device is revoked only on a server the host lets RemnaScope manage, and only when its agent is connected;
+// A device is revoked only on a server the host lets Owlery manage, and only when its agent is connected;
 // an offline agent is simply tried again on the next round. Nothing is queued on the host.
 package awglimits
 
@@ -12,9 +12,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/awgops"
-	"github.com/Taminum/RemnaScope/internal/ingestproto"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/awgops"
+	"github.com/Taminum/Owlery/internal/ingestproto"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 const (
@@ -89,7 +89,7 @@ func (w *Worker) Round(ctx context.Context) int {
 			continue
 		}
 		_ = w.Store.RecordAWGOperation(ctx, d.InstanceID, "revoke", d.Key, d.Label, "ok", "auto_"+d.Reason, "")
-		_ = w.Store.WriteAudit(ctx, store.AuditEntry{ActorName: "RemnaScope (device limit)", Action: "awg.auto_revoke", ObjectType: "awg_peer", ObjectID: d.PeerID,
+		_ = w.Store.WriteAudit(ctx, store.AuditEntry{ActorName: "Owlery (device limit)", Action: "awg.auto_revoke", ObjectType: "awg_peer", ObjectID: d.PeerID,
 			Metadata: map[string]any{"reason": d.Reason, "container": d.Container, "name": d.Label}})
 		w.Log.Info("awg limits: device revoked", "container", d.Container, "reason", d.Reason)
 		n++

@@ -7,8 +7,8 @@ import (
 
 	"golang.org/x/time/rate"
 
-	"github.com/Taminum/RemnaScope/internal/remnawave"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/remnawave"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 // NodeSpeed is one node's current speed. Kept in memory only: a speed that is a minute old is not a speed.

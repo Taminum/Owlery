@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/ingestproto"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/ingestproto"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 func flowEnv(t *testing.T) (*agentEnv, store.Agent) {

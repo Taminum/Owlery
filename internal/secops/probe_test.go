@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/secproto"
+	"github.com/Taminum/Owlery/internal/secproto"
 )
 
 func TestProbeIsAnsweredOnlyByTheAgentItWasSentTo(t *testing.T) {

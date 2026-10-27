@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 // WarmAnalytics keeps the Sites view of the long ranges ready: counting days of traffic takes seconds, so the first

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/secevents"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/secevents"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 // TLSWarnDays is how close to expiry a certificate must be before it is an alert of its own. The journal
@@ -68,7 +68,7 @@ func SecurityConditions(st store.SecAlertStates, now time.Time) []store.Conditio
 		switch {
 		case !p.Expected && p.Result == secevents.PortReachable && p.UnexpectedSince != nil:
 			out = append(out, store.Condition{PanelID: p.PanelID, Kind: store.AlertSecPort, Subject: p.EndpointID, Label: label,
-				Detail: "стал отвечать снаружи с " + p.UnexpectedSince.UTC().Format("02.01 15:04") + " UTC, а ожидаемым не отмечен (проверка с сервера RemnaScope)"})
+				Detail: "стал отвечать снаружи с " + p.UnexpectedSince.UTC().Format("02.01 15:04") + " UTC, а ожидаемым не отмечен (проверка с сервера Owlery)"})
 		case p.Expected && p.Result != secevents.PortReachable && p.Result != secevents.PortError:
 			detail := "ожидаемый порт не отвечает"
 			if p.Result == secevents.PortRefused {

@@ -1,6 +1,6 @@
 #!/bin/sh
 # remnascope-awg-snapshot: prints PUBLIC facts about the AmneziaWG interfaces on this host, one fact
-# per line, tab-separated. The RemnaScope agent runs it through one exact sudoers rule.
+# per line, tab-separated. The Owlery agent runs it through one exact sudoers rule.
 #
 #   I <container> <interface> <port> <parameter names, comma separated> <container start, unix seconds>
 #   P <container> <public key> <latest handshake unix> <rx bytes> <tx bytes> <allowed ips, comma separated>
@@ -26,7 +26,7 @@ CONTAINERS="${CONTAINERS:-${CFG_CONTAINERS:-amnezia-awg2 amnezia-awg3}}"
 MANAGED=$(sed -n 's/^MANAGED="\(.*\)"$/\1/p' "$MANAGE_CONF" 2>/dev/null | head -1)
 
 # A host that has the container helper installed says so, even with no container yet: that is how an empty
-# server is set up from RemnaScope.
+# server is set up from Owlery.
 [ -x /usr/local/sbin/remnascope-awg-container ] && printf 'X\tcontainer_admin\n'
 
 for c in $CONTAINERS; do

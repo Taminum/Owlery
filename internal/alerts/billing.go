@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 // BillWarnDays is how many days before the due date a payment starts to show as an alert.

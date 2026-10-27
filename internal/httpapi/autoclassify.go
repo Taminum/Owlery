@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/auth"
-	"github.com/Taminum/RemnaScope/internal/autoclassify"
-	"github.com/Taminum/RemnaScope/internal/gemini"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/auth"
+	"github.com/Taminum/Owlery/internal/autoclassify"
+	"github.com/Taminum/Owlery/internal/gemini"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 var modelNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,99}$`)

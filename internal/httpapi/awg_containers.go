@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/auth"
-	"github.com/Taminum/RemnaScope/internal/ingestproto"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/auth"
+	"github.com/Taminum/Owlery/internal/ingestproto"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 var (
@@ -23,7 +23,7 @@ type awgHostOut struct {
 	ContainerAdmin bool `json:"container_admin"`
 }
 
-// awgHosts lists the AmneziaWG hosts and whether each lets RemnaScope create and remove containers. Only the
+// awgHosts lists the AmneziaWG hosts and whether each lets Owlery create and remove containers. Only the
 // owner sees this: it is the entry point of the one operation that creates containers.
 func (s *Server) awgHosts(w http.ResponseWriter, r *http.Request, a auth.Actor, _ store.Session) {
 	if !a.IsOwner {

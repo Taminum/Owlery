@@ -1,4 +1,4 @@
--- RemnaScope 0004: destination classification rules and traffic counter samples.
+-- Owlery 0004: destination classification rules and traffic counter samples.
 
 -- Authoritative counters from the panel have no up/down split for users: record the total.
 ALTER TABLE traffic_samples DROP CONSTRAINT IF EXISTS traffic_samples_direction_check;

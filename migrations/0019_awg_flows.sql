@@ -1,4 +1,4 @@
--- RemnaScope 0019: where the devices of an AmneziaWG server connect to, summed per hour.
+-- Owlery 0019: where the devices of an AmneziaWG server connect to, summed per hour.
 --
 -- The sensor on the host sees packet headers and reports, per minute, one line per flow: the device's address in
 -- the tunnel, the destination address and port, bytes each way, and a name when the packets said one in the

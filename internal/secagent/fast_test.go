@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/Taminum/RemnaScope/internal/seccollect"
+	"github.com/Taminum/Owlery/internal/seccollect"
 )
 
 type listing struct{ out, err string }

@@ -58,7 +58,7 @@ describe('two-factor settings', () => {
       me: owner,
       handler: (r) => {
         calls.push(r)
-        if (r.path === '/api/v1/account/mfa/setup') return { status: 200, body: { secret: 'JBSWY3DPEHPK3PXP', uri: 'otpauth://totp/RemnaScope:owner?secret=JBSWY3DPEHPK3PXP&issuer=RemnaScope' } }
+        if (r.path === '/api/v1/account/mfa/setup') return { status: 200, body: { secret: 'JBSWY3DPEHPK3PXP', uri: 'otpauth://totp/Owlery:owner?secret=JBSWY3DPEHPK3PXP&issuer=Owlery' } }
         if (r.path === '/api/v1/account/mfa/enable') return { status: 200, body: { recovery_codes: ['AAAAA-BBBBB', 'CCCCC-DDDDD'] } }
         return undefined
       },

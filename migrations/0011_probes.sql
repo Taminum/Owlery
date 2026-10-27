@@ -1,4 +1,4 @@
--- RemnaScope 0011: channel probes.
+-- Owlery 0011: channel probes.
 --
 -- The server connects to a target from the outside (TCP, optionally a TLS handshake) every minute
 -- and records how long it took and whether it worked. It sends no data and logs in nowhere: it

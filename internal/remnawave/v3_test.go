@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/safehttp"
+	"github.com/Taminum/Owlery/internal/safehttp"
 )
 
 const token = "test-token-DO-NOT-LEAK"

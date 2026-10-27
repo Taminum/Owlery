@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/ingestproto"
+	"github.com/Taminum/Owlery/internal/ingestproto"
 )
 
 func TestHubKeepsAWindowAndMarksSilenceHonestly(t *testing.T) {

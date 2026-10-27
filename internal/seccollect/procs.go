@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/secproto"
+	"github.com/Taminum/Owlery/internal/secproto"
 )
 
 const clockTicks = 100 // USER_HZ: what /proc counts CPU time in on every Linux the agent runs on

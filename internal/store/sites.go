@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/netip"
 
-	"github.com/Taminum/RemnaScope/internal/geoip"
-	"github.com/Taminum/RemnaScope/internal/site"
+	"github.com/Taminum/Owlery/internal/geoip"
+	"github.com/Taminum/Owlery/internal/site"
 )
 
 // BackfillSites fills the site column on rows stored before it existed (or by an older

@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/auth"
-	"github.com/Taminum/RemnaScope/internal/secfw"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/auth"
+	"github.com/Taminum/Owlery/internal/secfw"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 // fwHistory lists a server's stored firewall readings, newest first. A reading is stored only when the

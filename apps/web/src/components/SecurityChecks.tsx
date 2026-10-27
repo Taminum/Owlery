@@ -11,7 +11,7 @@ import { Field, GhostButton, PrimaryButton, inputCls } from './Modal'
 type Tone = 'muted' | 'amber' | 'green' | 'red' | 'cyan'
 
 /** The checker's point of view, always on screen: a result without it would read as more than it is. */
-/** Says where the checks were made from. A result from the RemnaScope server is not an independent point of
+/** Says where the checks were made from. A result from the Owlery server is not an independent point of
  *  view, and a result from a checker on another machine is: each endpoint carries its own. */
 function VantageNote({ items }: { items: { vantage: Vantage | null; last_checked_at: string | null }[] }) {
   const checked = items.filter((i) => i.last_checked_at)

@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/geoip"
-	"github.com/Taminum/RemnaScope/internal/ingestproto"
-	"github.com/Taminum/RemnaScope/internal/site"
+	"github.com/Taminum/Owlery/internal/geoip"
+	"github.com/Taminum/Owlery/internal/ingestproto"
+	"github.com/Taminum/Owlery/internal/site"
 )
 
 var flowNameRe = regexp.MustCompile(`^[a-z0-9_]([a-z0-9._-]{0,251}[a-z0-9_])?$`)

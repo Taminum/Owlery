@@ -1,4 +1,4 @@
--- RemnaScope 0012: automatic classification of unknown sites (stage A: settings and dry runs).
+-- Owlery 0012: automatic classification of unknown sites (stage A: settings and dry runs).
 --
 -- A dry run sends a sample of unknown registrable domains (names only) to the model and keeps the
 -- answers HERE, apart from the real rules, so the quality can be judged before anything is applied.

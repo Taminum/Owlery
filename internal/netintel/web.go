@@ -256,7 +256,7 @@ func (t *Tool) httpFrom(ctx context.Context, tg Target, next string) Envelope {
 			lastErr = "invalid_target"
 			break
 		}
-		req.Header.Set("User-Agent", "RemnaScope-Inspector/1")
+		req.Header.Set("User-Agent", "Owlery-Inspector/1")
 		req.Header.Set("Accept", "*/*")
 		start := time.Now()
 		resp, err := client.Do(req)

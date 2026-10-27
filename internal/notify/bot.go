@@ -9,12 +9,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/secrets"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/secrets"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 // Bot answers commands written to a channel's bot, from the channel's own chat and from no other. It only
-// reads RemnaScope and replies; the one thing it changes is how long notifications are muted.
+// reads Owlery and replies; the one thing it changes is how long notifications are muted.
 type Bot struct {
 	Store *store.Store
 	Ring  *secrets.Keyring

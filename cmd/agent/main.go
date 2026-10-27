@@ -1,4 +1,4 @@
-// remnascope-agent reads an Xray access log and ships it to RemnaScope over WSS.
+// remnascope-agent reads an Xray access log and ships it to Owlery over WSS.
 //
 // It only reads. Typical use on a Remnawave node (the log lives inside the container):
 //
@@ -17,14 +17,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/agent"
+	"github.com/Taminum/Owlery/internal/agent"
 )
 
 var version = "0.1.0"
 
 func main() {
 	var (
-		server    = flag.String("server", "", "wss:// URL of the RemnaScope ingest endpoint")
+		server    = flag.String("server", "", "wss:// URL of the Owlery ingest endpoint")
 		tokenFile = flag.String("token-file", "", "file holding the agent credential (<agent id>.<secret>)")
 		caFile    = flag.String("ca-file", "", "optional PEM bundle to trust in addition to the system roots")
 		insecure  = flag.Bool("insecure-ws", false, "allow ws:// (local testing only)")

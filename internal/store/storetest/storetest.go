@@ -14,8 +14,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/Taminum/RemnaScope/internal/store"
-	"github.com/Taminum/RemnaScope/migrations"
+	"github.com/Taminum/Owlery/internal/store"
+	"github.com/Taminum/Owlery/migrations"
 )
 
 func New(t *testing.T) *store.Store {

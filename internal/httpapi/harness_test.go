@@ -15,17 +15,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/auth"
-	"github.com/Taminum/RemnaScope/internal/demo"
-	"github.com/Taminum/RemnaScope/internal/ingest"
-	"github.com/Taminum/RemnaScope/internal/remnawave"
-	"github.com/Taminum/RemnaScope/internal/safehttp"
-	"github.com/Taminum/RemnaScope/internal/secingest"
-	"github.com/Taminum/RemnaScope/internal/secops"
-	"github.com/Taminum/RemnaScope/internal/secrets"
-	"github.com/Taminum/RemnaScope/internal/store"
-	"github.com/Taminum/RemnaScope/internal/store/storetest"
-	"github.com/Taminum/RemnaScope/internal/syncer"
+	"github.com/Taminum/Owlery/internal/auth"
+	"github.com/Taminum/Owlery/internal/demo"
+	"github.com/Taminum/Owlery/internal/ingest"
+	"github.com/Taminum/Owlery/internal/remnawave"
+	"github.com/Taminum/Owlery/internal/safehttp"
+	"github.com/Taminum/Owlery/internal/secingest"
+	"github.com/Taminum/Owlery/internal/secops"
+	"github.com/Taminum/Owlery/internal/secrets"
+	"github.com/Taminum/Owlery/internal/store"
+	"github.com/Taminum/Owlery/internal/store/storetest"
+	"github.com/Taminum/Owlery/internal/syncer"
 )
 
 var ctx = context.Background()

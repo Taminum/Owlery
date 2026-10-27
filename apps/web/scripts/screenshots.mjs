@@ -36,7 +36,7 @@ async function shot(page, errors, name, size) {
 for (const s of [SIZES[0], SIZES[3]]) {
   const { ctx, page, errors } = await newPage(browser, s)
   await page.goto(base, { waitUntil: 'networkidle' })
-  await page.getByRole('heading', { name: 'Вход в RemnaScope' }).waitFor()
+  await page.getByRole('heading', { name: 'Вход в Owlery' }).waitFor()
   await shot(page, errors, 'login', s.name)
   await ctx.close()
 }

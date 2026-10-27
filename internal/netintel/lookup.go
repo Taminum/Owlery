@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/asn"
-	"github.com/Taminum/RemnaScope/internal/geoip"
-	"github.com/Taminum/RemnaScope/internal/safehttp"
+	"github.com/Taminum/Owlery/internal/asn"
+	"github.com/Taminum/Owlery/internal/geoip"
+	"github.com/Taminum/Owlery/internal/safehttp"
 )
 
 // Source says where a piece of a result came from, and whether it could be had.
@@ -32,7 +32,7 @@ type Envelope struct {
 	FetchedAt time.Time `json:"fetched_at"`
 	ExpiresAt time.Time `json:"expires_at"`
 	Cached    bool      `json:"cached"`
-	Vantage   string    `json:"vantage"` // always "server": the view from the machine RemnaScope runs on
+	Vantage   string    `json:"vantage"` // always "server": the view from the machine Owlery runs on
 	Sources   []Source  `json:"sources"`
 	Data      any       `json:"data"`
 }

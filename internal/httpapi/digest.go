@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/auth"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/auth"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 // maxNewDeviceWindow keeps "new device" honest: device history is kept for a limited time, and a window longer

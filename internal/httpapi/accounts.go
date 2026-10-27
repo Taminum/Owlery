@@ -6,8 +6,8 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/auth"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/auth"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 var usernameRe = regexp.MustCompile(`^[A-Za-z0-9._-]{3,64}$`)

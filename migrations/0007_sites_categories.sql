@@ -1,4 +1,4 @@
--- RemnaScope 0007: sites and categories.
+-- Owlery 0007: sites and categories.
 --
 -- site = the registrable domain of a destination host (computed by the application with the
 -- public suffix list and stored, so aggregation does not need it). Categories hang on the same

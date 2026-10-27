@@ -1,4 +1,4 @@
-# Installing RemnaScope
+# Installing Owlery
 
 Production stack: Caddy (80/443, Let's Encrypt) → nginx (UI, `/api`, `/ingest/`) → API → PostgreSQL.
 Only Caddy publishes ports. Memory limits: postgres 512M, api 256M, web 64M, caddy 128M, so a 1 GB VPS is enough.
@@ -11,7 +11,7 @@ Only Caddy publishes ports. Memory limits: postgres 512M, api 256M, web 64M, cad
 
 ## 1. Get the files and create secrets
 ```bash
-git clone https://github.com/Taminum/RemnaScope.git && cd RemnaScope/deploy/prod
+git clone https://github.com/Taminum/Owlery.git && cd Owlery/deploy/prod
 sudo ./init-secrets.sh scope.example.com latest
 ```
 The arguments are your host name and the release tag (see the [releases](../../../releases) page: `latest` follows the newest release, a tag such as `v0.3.2` stays on that version).
@@ -35,7 +35,7 @@ sudo docker compose -f compose.prod.yml logs caddy | tail -5    # certificate ob
 Open `https://scope.example.com`, sign in as `owner` (`sudo cat secrets/owner_password`) and change the password in
 Settings. Turn on two-factor authentication there as well.
 
-Images are pulled from `ghcr.io/taminum/remnascope-api` and `-web`. `RELEASE` in `.env` is `latest` by default; pin a
+Images are pulled from `ghcr.io/taminum/owlery-api` and `-web`. `RELEASE` in `.env` is `latest` by default; pin a
 tag such as `v0.3.2` to stay on one version (see Updating). If the packages are private (a `403 Forbidden` on pull), run
 `docker login ghcr.io` with a token that has `read:packages`, or build your own (below). The owner of the packages makes
 them public under *Package settings → Change visibility*.
@@ -44,7 +44,7 @@ them public under *Package settings → Change visibility*.
 The mascot's pictures are not part of the project or of the images: they are a separate pack that its owner gives you.
 With the pack file (for example `ember-pack.tar.gz`):
 ```bash
-cd RemnaScope/deploy/prod
+cd Owlery/deploy/prod
 ./install-ember.sh ember-pack.tar.gz      # unpacks into ./ember, which the web container reads
 ```
 Nothing is rebuilt or restarted: turn on *Settings → Appearance → Kawaii Mode* and she is there. `./install-ember.sh
@@ -62,7 +62,7 @@ Optional parts: a router agent (`deploy/router`) for devices behind a shared acc
 
 ## Updating
 ```bash
-cd RemnaScope/deploy/prod && git pull
+cd Owlery/deploy/prod && git pull
 sudo sed -i 's/^RELEASE=.*/RELEASE=v0.3.2/' .env      # the new tag (with RELEASE=latest, just pull)
 sudo docker compose -f compose.prod.yml pull && sudo docker compose -f compose.prod.yml up -d
 ```

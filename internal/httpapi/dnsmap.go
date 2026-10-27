@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/auth"
-	"github.com/Taminum/RemnaScope/internal/dnsmap"
-	"github.com/Taminum/RemnaScope/internal/netintel"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/auth"
+	"github.com/Taminum/Owlery/internal/dnsmap"
+	"github.com/Taminum/Owlery/internal/netintel"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 // DNS Map belongs to Network Intel, which is the owner's: it makes the server send DNS queries into the

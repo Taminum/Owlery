@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 // The tests change data between two identical questions, so the analytics answers are not kept.

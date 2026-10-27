@@ -22,7 +22,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/awgsensor"
+	"github.com/Taminum/Owlery/internal/awgsensor"
 )
 
 const maxReported = 4000 // flows per window; the busiest come first, the rest are counted as left out

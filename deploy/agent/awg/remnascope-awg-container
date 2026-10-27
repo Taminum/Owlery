@@ -1,7 +1,7 @@
 #!/bin/sh
 # remnascope-awg-container: creates or removes ONE AmneziaWG container in the layout the official Amnezia client
 # uses (container amnezia-awg*, config /opt/amnezia/awg/awg0.conf, network amnezia-dns-net), so that the Amnezia
-# apps keep working with the server and every other RemnaScope helper (snapshot, manage, sensor) works on it.
+# apps keep working with the server and every other Owlery helper (snapshot, manage, sensor) works on it.
 #
 #   remnascope-awg-container install <container> <port> <subnet, a /24 like 10.8.1.0/24>
 #   remnascope-awg-container remove  <container> yes-delete-all-devices
@@ -12,11 +12,11 @@
 # device's public key and preshared key, so the output is secret and is never kept on this host. restore
 # validates the configuration against a whitelist of keys first: awg-quick would run a PostUp line as a command.
 #
-# The server scripts are Amnezia's (GPL-3.0). They are NOT copied into RemnaScope: they are fetched from the
+# The server scripts are Amnezia's (GPL-3.0). They are NOT copied into Owlery: they are fetched from the
 # upstream repository at one pinned commit, and each file is checked against the SHA-256 recorded below before
 # it is used. Nothing else is downloaded or run from the network.
 #
-# This is the one RemnaScope helper that creates containers, so it is the most restricted:
+# This is the one Owlery helper that creates containers, so it is the most restricted:
 #   * only names amnezia-awg or amnezia-awg<digits>, only a numeric port, only a /24 in 10.0.0.0/8;
 #   * it refuses a container that already exists and a port that is already published or listening;
 #   * it never touches a container it did not create in this call, except `remove` of a name that is listed
@@ -151,7 +151,7 @@ printf '%s' "$subnet" | grep -Eq '^10\.([0-9]{1,3})\.([0-9]{1,3})\.0/24$' || fai
 for o in $(printf '%s' "${subnet%/*}" | tr '.' ' '); do [ "$o" -le 255 ] || fail bad_subnet; done
 subnet_ip="${subnet%/*}"; cidr="${subnet#*/}"
 
-# Without being able to record the container the helper would create one that RemnaScope never learns about.
+# Without being able to record the container the helper would create one that Owlery never learns about.
 probe=$(mktemp "${MANAGE_CONF}.XXXXXX" 2>/dev/null) || fail conf_not_writable
 rm -f "$probe"
 "$DOCKER" inspect "$name" >/dev/null 2>&1 && fail container_exists

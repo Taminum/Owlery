@@ -1,4 +1,4 @@
--- RemnaScope 0013: two more categories, found missing by the first automatic-classification dry run
+-- Owlery 0013: two more categories, found missing by the first automatic-classification dry run
 -- (DNS resolvers and VPN providers had no fitting home and fell into "Поиск и сервисы").
 -- Built-in rules only; custom rules and the owner's own domains are not touched.
 

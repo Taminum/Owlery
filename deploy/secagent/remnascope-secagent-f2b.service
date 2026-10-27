@@ -1,9 +1,9 @@
-# RemnaScope Fail2ban helper. The only process that touches Fail2ban's control socket on behalf of the
+# Owlery Fail2ban helper. The only process that touches Fail2ban's control socket on behalf of the
 # security agent. It offers four operations over a Unix socket (status, jail status, ban one address, unban one
 # address), checks every field, and runs fail2ban-client with a fixed argument list and no shell.
 # See docs/SECURITY_AGENT.md.
 [Unit]
-Description=RemnaScope Fail2ban helper
+Description=Owlery Fail2ban helper
 After=fail2ban.service
 Wants=fail2ban.service
 Before=remnascope-secagent.service

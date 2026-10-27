@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/ingestproto"
+	"github.com/Taminum/Owlery/internal/ingestproto"
 )
 
 type SourceKind string

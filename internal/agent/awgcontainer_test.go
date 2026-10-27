@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Taminum/RemnaScope/internal/ingestproto"
+	"github.com/Taminum/Owlery/internal/ingestproto"
 )
 
 func TestContainerCommandsAreRefusedUnlessTheHostOptedInAndAreCheckedAgain(t *testing.T) {

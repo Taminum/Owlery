@@ -9,13 +9,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/secevents"
-	"github.com/Taminum/RemnaScope/internal/secprobe"
-	"github.com/Taminum/RemnaScope/internal/secproto"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/secevents"
+	"github.com/Taminum/Owlery/internal/secprobe"
+	"github.com/Taminum/Owlery/internal/secproto"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
-// The server's own point of view. It is never called independent: RemnaScope cannot tell whether the machine
+// The server's own point of view. It is never called independent: Owlery cannot tell whether the machine
 // it runs on is the one being checked, and a result that cannot say so is labelled as such.
 const (
 	VantageID   = "api_server"

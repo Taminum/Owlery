@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 // series makes minute samples whose traffic is bps bytes a second and pps packets a second at every step.

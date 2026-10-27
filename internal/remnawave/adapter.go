@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/safehttp"
+	"github.com/Taminum/Owlery/internal/safehttp"
 )
 
 // Getter is the HTTP surface the adapter needs. *safehttp.Client satisfies it in

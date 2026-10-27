@@ -1,5 +1,5 @@
 #!/bin/sh /etc/rc.common
-# RemnaScope router agent: reads the sing-box Clash API and reports traffic per LAN device.
+# Owlery router agent: reads the sing-box Clash API and reports traffic per LAN device.
 # Read-only. State and spool live in /tmp (RAM), so nothing is written to flash.
 START=99
 STOP=10

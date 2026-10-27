@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 type replyFn = func(call int, domains []string) (int, map[string]string, string)

@@ -6,15 +6,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/auth"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/auth"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 const (
 	mfaChallengeTTL = 5 * time.Minute
 	mfaMaxAttempts  = 5
 	recoveryCount   = 10
-	totpIssuer      = "RemnaScope"
+	totpIssuer      = "Owlery"
 )
 
 // startMFAChallenge answers a correct password with "now send a code". It reveals nothing a

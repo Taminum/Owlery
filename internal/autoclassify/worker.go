@@ -6,9 +6,9 @@ import (
 	"math/rand/v2"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/classify"
-	"github.com/Taminum/RemnaScope/internal/gemini"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/classify"
+	"github.com/Taminum/Owlery/internal/gemini"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 const (

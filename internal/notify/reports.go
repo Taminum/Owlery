@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 var weekdays = []string{"воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"}
@@ -144,7 +144,7 @@ func openAlerts(ctx context.Context, st *store.Store) ([]store.Alert, error) {
 
 // BuildStats is the summary of the whole cluster, on request.
 func BuildStats(ctx context.Context, st *store.Store, now time.Time, loc *time.Location) (string, error) {
-	return buildStats(ctx, st, now, loc, "СВОДКА RemnaScope")
+	return buildStats(ctx, st, now, loc, "СВОДКА Owlery")
 }
 
 func buildStats(ctx context.Context, st *store.Store, now time.Time, loc *time.Location, title string) (string, error) {
@@ -558,7 +558,7 @@ func BuildUsers(ctx context.Context, st *store.Store, now time.Time) (string, er
 	return "👥 Подписки, на которые стоит посмотреть\n\n" + strings.Join(lines, "\n"), nil
 }
 
-const helpText = `RemnaScope: команды
+const helpText = `Owlery: команды
 
 /stats — сводка по всему кластеру
 /servers — серверы: процессор, память, диск, сеть

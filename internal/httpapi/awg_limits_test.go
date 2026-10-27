@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/awglimits"
+	"github.com/Taminum/Owlery/internal/awglimits"
 	"io"
 	"log/slog"
 )

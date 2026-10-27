@@ -13,8 +13,8 @@ import { startText } from './ru.start'
 import { serversText } from './ru.servers'
 // All UI text lives here so a second locale can be added without touching components.
 const base = {
-  'app.name': 'RemnaScope',
-  'app.tagline': 'Аналитика трафика',
+  'app.name': 'Owlery',
+  'app.tagline': 'Следит за вашими серверами, пока вы спите',
 
   'nav.overview': 'Обзор',
   'nav.traffic': 'Аналитика трафика',

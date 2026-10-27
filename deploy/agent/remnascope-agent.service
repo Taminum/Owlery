@@ -1,7 +1,7 @@
-# RemnaScope agent for a Remnawave node. Read-only: it follows the Xray access log and ships it.
+# Owlery agent for a Remnawave node. Read-only: it follows the Xray access log and ships it.
 # See docs/AGENT.md for the full, reviewed procedure. Nothing here changes Docker or Remnawave.
 [Unit]
-Description=RemnaScope log agent (read-only)
+Description=Owlery log agent (read-only)
 After=network-online.target docker.service
 Wants=network-online.target
 

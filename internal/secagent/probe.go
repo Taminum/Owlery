@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/secprobe"
-	"github.com/Taminum/RemnaScope/internal/secproto"
+	"github.com/Taminum/Owlery/internal/secprobe"
+	"github.com/Taminum/Owlery/internal/secproto"
 )
 
 const maxProbes = 4 // at once; further requests are refused rather than queued

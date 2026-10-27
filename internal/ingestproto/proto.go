@@ -134,7 +134,7 @@ type AWGInstance struct {
 	Fields    []string  `json:"f,omitempty"`   // names of the parameters found in the config (no values)
 	Started   int64     `json:"st,omitempty"`  // when the container started (unix seconds): the counters count from about then
 	LegacyAt  int64     `json:"lat,omitempty"` // when the Amnezia panel last wrote its client table
-	Managed   bool      `json:"m,omitempty"`   // the host lets RemnaScope add and revoke devices here
+	Managed   bool      `json:"m,omitempty"`   // the host lets Owlery add and revoke devices here
 	Peers     []AWGPeer `json:"peers"`
 }
 
@@ -144,7 +144,7 @@ type AWG struct {
 	Type      string        `json:"type"` // "awg"
 	Instances []AWGInstance `json:"instances"`
 	// ContainerAdmin says that the host has the helper that creates and removes containers installed. A host
-	// with no container yet reports it too, which is how an empty server can be set up from RemnaScope.
+	// with no container yet reports it too, which is how an empty server can be set up from Owlery.
 	ContainerAdmin bool `json:"ca,omitempty"`
 	// Containers is what each running container says about itself, whether or not it has an interface.
 	Containers []AWGContainer `json:"cs,omitempty"`

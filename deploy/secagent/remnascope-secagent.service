@@ -1,8 +1,8 @@
-# RemnaScope security agent. It reads Fail2ban (through the helper), listening sockets and firewall rules
+# Owlery security agent. It reads Fail2ban (through the helper), listening sockets and firewall rules
 # and reports them; on an owner's request it asks the helper to ban or unban one address. It listens on
 # nothing and runs no command the server sends. See docs/SECURITY_AGENT.md.
 [Unit]
-Description=RemnaScope security agent
+Description=Owlery security agent
 After=network-online.target remnascope-secagent-f2b.service
 Wants=network-online.target remnascope-secagent-f2b.service
 

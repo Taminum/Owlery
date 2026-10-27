@@ -1,6 +1,6 @@
 # External checks: public ports and TLS certificates
 
-RemnaScope checks a VPS from the outside: whether known TCP ports answer, and what certificate a TLS endpoint
+Owlery checks a VPS from the outside: whether known TCP ports answer, and what certificate a TLS endpoint
 presents. This is separate from the security agent, which reads the host from the inside.
 
 ## Where the check runs from
@@ -13,7 +13,7 @@ server:
   its answer. The vantage is `agent:<server id>` with the checker's name. It is independent only when the
   checker is not the checked server and the address it actually connected to is not one of the checker's own.
   A server is never checked by an agent that lives on it.
-- **The RemnaScope server itself** (vantage `api_server`), when no checker qualifies, is connected, or answers
+- **The Owlery server itself** (vantage `api_server`), when no checker qualifies, is connected, or answers
   in time. This is **not an independent point of view**: if the API runs on the VPS being checked, a result
   says the port answers *from that machine*, not that it is reachable from the internet. The UI says so.
 

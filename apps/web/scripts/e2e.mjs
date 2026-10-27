@@ -121,7 +121,7 @@ try {
   // 7. The viewer's view: one panel, no actions, no owner areas.
   await page.getByRole('button', { name: 'Аккаунт' }).click()
   await page.getByRole('button', { name: 'Выйти' }).click()
-  await page.getByRole('heading', { name: 'Вход в RemnaScope' }).waitFor()
+  await page.getByRole('heading', { name: 'Вход в Owlery' }).waitFor()
   const v = await newPage(browser)
   await login(v.page, base, viewerName, viewerPassword)
   await v.page.getByRole('link', { name: 'Панели' }).click()

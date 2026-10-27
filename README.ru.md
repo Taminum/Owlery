@@ -1,8 +1,14 @@
-# RemnaScope
+# Owlery
 
-Самостоятельно размещаемый мониторинг для [Remnawave](https://github.com/remnawave) / Xray: аналитика трафика по
-нескольким независимым панелям и их узлам, состояние серверов, управление AmneziaWG, безопасность и уведомления в
-Telegram. Показывает только то, что действительно измерено, и подписывает источник каждой цифры.
+*Следит за вашими серверами, пока вы спите.*
+
+Самостоятельно размещаемый мониторинг парка серверов: что за машина и как она себя чувствует, ресурсы, безопасность,
+тревоги и уведомления в Telegram. VPN — модули поверх этого: аналитика трафика по нескольким панелям
+[Remnawave](https://github.com/remnawave) / Xray и их узлам, управление AmneziaWG. Показывает только то, что
+действительно измерено, и подписывает источник каждой цифры.
+
+> До октября 2026 года Owlery назывался **RemnaScope**. Старые ссылки на репозиторий ведут сюда; агенты на машинах
+> сохраняют имена `remnascope-*`, переустанавливать ничего не нужно.
 
 ## Что умеет
 
@@ -57,7 +63,7 @@ Telegram. Показывает только то, что действитель�
 ## Быстрый старт
 Нужны сервер с Docker, доменное имя, свободные порты 80 и 443.
 ```bash
-git clone https://github.com/Taminum/RemnaScope.git && cd RemnaScope/deploy/prod
+git clone https://github.com/Taminum/Owlery.git && cd Owlery/deploy/prod
 sudo ./init-secrets.sh scope.example.com latest     # имя хоста и версия: latest или, например, v0.3.2
 sudo docker compose -f compose.prod.yml up -d
 sudo cat secrets/owner_password        # вход: https://scope.example.com, логин owner

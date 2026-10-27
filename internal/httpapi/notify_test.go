@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/notify"
+	"github.com/Taminum/Owlery/internal/notify"
 )
 
 const tgToken = "123456789:AAEhBP0av28wFoZxqlx-ab_cdEfGhIjKlMnOp"

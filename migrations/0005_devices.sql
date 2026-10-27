@@ -1,4 +1,4 @@
--- RemnaScope 0005: devices behind a router.
+-- Owlery 0005: devices behind a router.
 --
 -- A router agent reads the sing-box Clash API on the router and reports connections per LAN
 -- device, with the domain sing-box sniffed and the bytes it counted. Those records describe the

@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/Taminum/RemnaScope/internal/secrets"
+	"github.com/Taminum/Owlery/internal/secrets"
 )
 
 type SyncOptions struct {

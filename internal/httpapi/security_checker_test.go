@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/secagent"
-	"github.com/Taminum/RemnaScope/internal/seccollect"
-	"github.com/Taminum/RemnaScope/internal/secprobe"
-	"github.com/Taminum/RemnaScope/internal/secproto"
+	"github.com/Taminum/Owlery/internal/secagent"
+	"github.com/Taminum/Owlery/internal/seccollect"
+	"github.com/Taminum/Owlery/internal/secprobe"
+	"github.com/Taminum/Owlery/internal/secproto"
 )
 
 func TestAnAgentSetUpAsACheckerAnswersProbesOverItsConnection(t *testing.T) {

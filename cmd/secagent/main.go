@@ -1,5 +1,5 @@
 // Command secagent reports a VPS's security state (Fail2ban, listening sockets, firewall rules) to
-// RemnaScope, and, when the host sets it up, carries out a ban or unban of one address that an owner
+// Owlery, and, when the host sets it up, carries out a ban or unban of one address that an owner
 // asked for. It listens on nothing and runs no other command the server sends.
 //
 //	secagent -server wss://scope.example.com -token-file /etc/remnascope/secagent.token
@@ -16,9 +16,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/f2bhelper"
-	"github.com/Taminum/RemnaScope/internal/secagent"
-	"github.com/Taminum/RemnaScope/internal/seccollect"
+	"github.com/Taminum/Owlery/internal/f2bhelper"
+	"github.com/Taminum/Owlery/internal/secagent"
+	"github.com/Taminum/Owlery/internal/seccollect"
 )
 
 var version = "dev"
@@ -29,7 +29,7 @@ func main() {
 		return
 	}
 	var (
-		server    = flag.String("server", "", "wss:// URL of RemnaScope")
+		server    = flag.String("server", "", "wss:// URL of Owlery")
 		tokenFile = flag.String("token-file", "", "file holding the agent credential (<agent id>.<secret>)")
 		caFile    = flag.String("ca-file", "", "optional PEM bundle to trust in addition to the system roots")
 		insecure  = flag.Bool("insecure-ws", false, "allow ws:// (local testing only)")

@@ -1,5 +1,5 @@
 [Unit]
-Description=RemnaScope: list running containers for the security agent
+Description=Owlery: list running containers for the security agent
 ConditionPathExists=/usr/bin/docker
 ConditionPathIsDirectory=/run/remnascope-sec
 After=docker.service

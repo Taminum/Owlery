@@ -1,4 +1,4 @@
-# Production stack for RemnaScope. No demo data, no mock panels, nothing published but 80/443.
+# Production stack for Owlery. No demo data, no mock panels, nothing published but 80/443.
 # Images come from ghcr.io (or API_IMAGE / WEB_IMAGE in .env, e.g. images you built yourself). See docs/INSTALL.md.
 name: remnascope
 
@@ -44,7 +44,7 @@ services:
     restart: unless-stopped
 
   api:
-    image: ${API_IMAGE:-ghcr.io/taminum/remnascope-api}:${RELEASE:-latest}
+    image: ${API_IMAGE:-ghcr.io/taminum/owlery-api}:${RELEASE:-latest}
     environment:
       LISTEN_ADDR: ":8080"
       DATABASE_URL: postgres://remnascope:${POSTGRES_PASSWORD}@postgres:5432/remnascope?sslmode=disable
@@ -63,7 +63,7 @@ services:
     restart: unless-stopped
 
   web:
-    image: ${WEB_IMAGE:-ghcr.io/taminum/remnascope-web}:${RELEASE:-latest}
+    image: ${WEB_IMAGE:-ghcr.io/taminum/owlery-web}:${RELEASE:-latest}
     depends_on: [api]
     read_only: true
     tmpfs: [/tmp]

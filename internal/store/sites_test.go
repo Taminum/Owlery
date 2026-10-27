@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/routerlog"
-	"github.com/Taminum/RemnaScope/internal/store"
-	"github.com/Taminum/RemnaScope/internal/xraylog"
+	"github.com/Taminum/Owlery/internal/routerlog"
+	"github.com/Taminum/Owlery/internal/store"
+	"github.com/Taminum/Owlery/internal/xraylog"
 )
 
 func siteBy(rows []store.SiteRow) map[string]store.SiteRow {

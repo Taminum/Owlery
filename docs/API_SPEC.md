@@ -1,4 +1,4 @@
-# RemnaScope REST API v1 (proposed)
+# Owlery REST API v1 (proposed)
 
 All routes `/api/v1`, authenticated except login and health; JSON errors `{code,message,details?,request_id}`.
 All list endpoints paginate with `cursor` and `limit` and enforce panel RBAC.

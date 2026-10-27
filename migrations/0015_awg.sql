@@ -1,4 +1,4 @@
--- RemnaScope 0015: AmneziaWG, read-only inventory and counters (stage 1).
+-- Owlery 0015: AmneziaWG, read-only inventory and counters (stage 1).
 --
 -- Nothing here holds a secret: no private keys, no preshared keys, no client endpoints. A peer is its
 -- public key, a name, a tunnel address, and counters read from the running interface.

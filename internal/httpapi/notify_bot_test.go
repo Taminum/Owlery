@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/notify"
-	"github.com/Taminum/RemnaScope/internal/secproto"
+	"github.com/Taminum/Owlery/internal/notify"
+	"github.com/Taminum/Owlery/internal/secproto"
 )
 
 // botTelegram is a bot that has a queue of messages written to it.
@@ -134,7 +134,7 @@ func TestTheBotAnswersCommandsOnlyFromItsOwnChatAndIgnoresOldMessages(t *testing
 	fake.push(11, 424242, "/stats")
 	waitFor(t, "the summary", func() bool { return len(fake.replies()) > before })
 	reply := fake.replies()[before]
-	for _, want := range []string{"СВОДКА RemnaScope", "Всего серверов: 1", "exit-bot", "ЦП: 12%", "RAM: 25%", "exit-bot VPS", "Ближайшие оплаты"} {
+	for _, want := range []string{"СВОДКА Owlery", "Всего серверов: 1", "exit-bot", "ЦП: 12%", "RAM: 25%", "exit-bot VPS", "Ближайшие оплаты"} {
 		if !strings.Contains(reply, want) {
 			t.Errorf("%q is missing from the summary:\n%s", want, reply)
 		}

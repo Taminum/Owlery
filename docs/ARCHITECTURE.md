@@ -21,7 +21,7 @@ Panel B nodes (discovered) ─ agents ────────────┘
 - `postgres`: single instance; tenant-aware schema and indexed time-series tables.
 
 ## Identity and isolation
-`panel_id` is RemnaScope-generated UUID and primary security boundary.
+`panel_id` is Owlery-generated UUID and primary security boundary.
 `node_id` is internal UUID; `(panel_id, remote_node_uuid)` unique.
 `user_id` is internal UUID; `(panel_id, remote_user_uuid)` unique.
 `agent_id` belongs to exactly one panel/node; separate revocable credential per agent.
