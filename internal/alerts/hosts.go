@@ -2,6 +2,7 @@ package alerts
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/Taminum/Owlery/internal/store"
 )
@@ -14,6 +15,15 @@ const (
 	HostMemPercent = 95
 )
 
+// watchedDisk says whether a full disk is worth an alert. On Windows only the system drive is: the other drives of
+// a workstation are usually archives kept full on purpose. Per-machine and per-disk settings come later.
+func watchedDisk(mount string) bool {
+	if len(mount) == 2 && mount[1] == ':' {
+		return strings.EqualFold(mount, "C:")
+	}
+	return true
+}
+
 func gb(b int64) string { return fmt.Sprintf("%.1f ГБ", float64(b)/(1<<30)) }
 
 // HostConditions lists the monitored servers that are running out of disk, processor or memory. A server that
@@ -25,7 +35,7 @@ func HostConditions(states []store.HostAlertState) []store.Condition {
 			continue
 		}
 		for _, d := range h.Disks {
-			if d.Total <= 0 || d.Used*100 < d.Total*HostDiskPercent {
+			if d.Total <= 0 || d.Used*100 < d.Total*HostDiskPercent || !watchedDisk(d.Mount) {
 				continue
 			}
 			pct := int(d.Used * 100 / d.Total)
