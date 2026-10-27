@@ -63,6 +63,18 @@ type DestRow struct {
 // mapped to a service. Counts are connection_count (log lines and router records), bytes only
 // exist for router records.
 func (s *Store) Destinations(ctx context.Context, q AnalyticsQuery) (rows []DestRow, groups, total int, err error) {
+	type res struct {
+		rows          []DestRow
+		groups, total int
+	}
+	r, err := memoized("destinations", q, nil, func() (res, error) {
+		rows, groups, total, err := s.destinations(ctx, q)
+		return res{rows, groups, total}, err
+	})
+	return r.rows, r.groups, r.total, err
+}
+
+func (s *Store) destinations(ctx context.Context, q AnalyticsQuery) (rows []DestRow, groups, total int, err error) {
 	if q.Limit <= 0 || q.Limit > 200 {
 		q.Limit = 50
 	}
@@ -95,10 +107,10 @@ func (s *Store) Destinations(ctx context.Context, q AnalyticsQuery) (rows []Dest
 		shown = `st`
 	}
 	sql := `
-WITH ` + eventsCTE + `, hosts AS (SELECT DISTINCT host AS name FROM ev WHERE host IS NOT NULL),
-hcls AS (SELECT n.name, r.service, r.confidence, r.category, r.source, r.score FROM hosts n ` + ruleMatch("n.name") + `),
-sites AS (SELECT DISTINCT site AS name FROM ev WHERE site IS NOT NULL),
-scls AS (SELECT n.name, r.service, r.confidence, r.category, r.source, r.score FROM sites n ` + ruleMatch("n.name") + `), agg AS (
+WITH ` + eventsCTE + `, hosts AS MATERIALIZED (SELECT DISTINCT host AS name FROM ev WHERE host IS NOT NULL),
+hcls AS MATERIALIZED (SELECT n.name, r.service, r.confidence, r.category, r.source, r.score FROM hosts n ` + ruleMatch("n.name") + `),
+sites AS MATERIALIZED (SELECT DISTINCT site AS name FROM ev WHERE site IS NOT NULL),
+scls AS MATERIALIZED (SELECT n.name, r.service, r.confidence, r.category, r.source, r.score FROM sites n ` + ruleMatch("n.name") + `), agg AS (
   SELECT ` + keyExpr + ` AS key, ` + kind + ` AS kind, max(` + shown + `.service) AS service, min(` + shown + `.confidence) AS confidence, max(` + shown + `.category) AS category, max(` + shown + `.source) AS source, min(` + shown + `.score) AS score,
          sum(ev.w)::bigint AS conns, count(DISTINCT ev.ukey) AS users, count(DISTINCT ev.node_id) AS nodes, max(ev.ts) AS last_seen,
          array_agg(DISTINCT ev.port) AS ports, COALESCE(sum(ev.bytes), 0) AS bytes, count(*) FILTER (WHERE ev.rtr) AS rconns, array_agg(DISTINCT ev.src) AS srcs
@@ -157,6 +169,18 @@ type UserRow struct {
 }
 
 func (s *Store) UsersAnalytics(ctx context.Context, q AnalyticsQuery) ([]UserRow, int, error) {
+	type res struct {
+		rows []UserRow
+		n    int
+	}
+	r, err := memoized("users", q, nil, func() (res, error) {
+		rows, n, err := s.usersAnalytics(ctx, q)
+		return res{rows, n}, err
+	})
+	return r.rows, r.n, err
+}
+
+func (s *Store) usersAnalytics(ctx context.Context, q AnalyticsQuery) ([]UserRow, int, error) {
 	rs, err := s.pool.Query(ctx, `SELECT e.panel_id, e.user_id, COALESCE(e.xray_email,''), e.internal, COALESCE(u.display_name,''),
 			count(*), count(DISTINCT COALESCE(e.destination_host, host(e.destination_ip))), count(DISTINCT e.node_id),
 			count(*) FILTER (WHERE e.protocol='udp'), min(e.ts), max(e.ts), sum(count(*)) OVER ()
