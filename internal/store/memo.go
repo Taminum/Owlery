@@ -40,3 +40,11 @@ func memoized[T any](name string, q AnalyticsQuery, extra any, compute func() (T
 	memo.Unlock()
 	return v, nil
 }
+
+// SetAnalyticsCacheTTL changes how long analytics answers are kept and returns the previous value; tests turn it off
+// (0) because they change data between two identical questions.
+func SetAnalyticsCacheTTL(d time.Duration) time.Duration {
+	old := catCacheTTL
+	catCacheTTL = d
+	return old
+}

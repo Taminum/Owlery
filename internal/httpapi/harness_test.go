@@ -126,6 +126,8 @@ func newHarness(t *testing.T, opts ...harnessOpt) *harness {
 	oldGrace := store.AlertGrace
 	store.AlertGrace = 0
 	t.Cleanup(func() { store.AlertGrace = oldGrace })
+	oldTTL := store.SetAnalyticsCacheTTL(0)
+	t.Cleanup(func() { store.SetAnalyticsCacheTTL(oldTTL) })
 	st := storetest.New(t)
 	ring, _ := secrets.NewKeyring(map[int][]byte{1: bytes32(1)}, 1)
 	h := &harness{t: t, st: st, ring: ring, logs: &bytes.Buffer{}, remote: map[string]*fakePanel{}, now: time.Now()}
