@@ -72,6 +72,16 @@ func (s *Store) Sites(ctx context.Context, q AnalyticsQuery) (rows []SiteRow, gr
 	return rows, groups, total, nil
 }
 
+// dropAnalyticsCache forgets the cached Sites and category summaries; they depend on the rules, so any rule change calls it.
+func dropAnalyticsCache() {
+	sitesCache.Lock()
+	sitesCache.m = map[string]sitesEntry{}
+	sitesCache.Unlock()
+	catCache.Lock()
+	catCache.m = map[string]catEntry{}
+	catCache.Unlock()
+}
+
 type sitesEntry struct {
 	rows          []SiteRow
 	groups, total int

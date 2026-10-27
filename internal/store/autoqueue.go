@@ -162,6 +162,7 @@ func (s *Store) ApplyAutoRule(ctx context.Context, r AutoRule) (bool, error) {
 	if service == "" {
 		service = r.Domain
 	}
+	defer dropAnalyticsCache()
 	_, err = s.pool.Exec(ctx, `INSERT INTO service_rules (rule_version, pattern, service, confidence, category, source, score, model, reason, classified_at)
 		VALUES ($1,$2,$3,$4,$5,'auto',$6,$7,NULLIF($8,''),now())
 		ON CONFLICT (rule_version, pattern) DO UPDATE SET service=EXCLUDED.service, confidence=EXCLUDED.confidence, category=EXCLUDED.category,

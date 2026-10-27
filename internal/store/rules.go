@@ -67,6 +67,7 @@ func (s *Store) UpsertCustomRule(ctx context.Context, pattern, service, category
 	if id, err := uuid.Parse(createdBy); err == nil {
 		by = id
 	}
+	defer dropAnalyticsCache()
 	var r Rule
 	var id uuid.UUID
 	err := s.pool.QueryRow(ctx, `INSERT INTO service_rules (rule_version, pattern, service, confidence, category, source, created_at, created_by)
@@ -84,6 +85,7 @@ func (s *Store) DeleteCustomRule(ctx context.Context, id string) (string, error)
 	if err != nil {
 		return "", ErrNotFound
 	}
+	defer dropAnalyticsCache()
 	var pattern string
 	err = s.pool.QueryRow(ctx, `DELETE FROM service_rules WHERE id=$1 AND source='custom' RETURNING pattern`, u).Scan(&pattern)
 	if errors.Is(err, pgx.ErrNoRows) {
