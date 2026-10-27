@@ -7,10 +7,12 @@ COPY internal ./internal
 COPY migrations ./migrations
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/api ./cmd/api \
  && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/mockpanel ./cmd/mockpanel \
- && mkdir /certs /state
+ && mkdir -p /certs /state /records/owlery
 
 FROM gcr.io/distroless/static-debian12:nonroot AS api
 COPY --from=build /out/api /api
+# Terminal recordings go to a volume mounted here; it takes this owner when it is first created.
+COPY --from=build --chown=65532:65532 /records/owlery /var/lib/owlery/records
 USER nonroot:nonroot
 EXPOSE 8080
 ENTRYPOINT ["/api"]

@@ -11,15 +11,18 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/Taminum/Owlery/internal/f2bhelper"
 	"github.com/Taminum/Owlery/internal/secagent"
 	"github.com/Taminum/Owlery/internal/seccollect"
+	"github.com/Taminum/Owlery/internal/secshell"
 )
 
 var version = "dev"
@@ -27,6 +30,10 @@ var version = "dev"
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "helper" {
 		runHelper(os.Args[2:])
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "shell-helper" {
+		runShellHelper(os.Args[2:])
 		return
 	}
 	if len(os.Args) > 1 && platformCommand(os.Args[1], os.Args[2:]) {
@@ -47,6 +54,8 @@ func main() {
 		contFile  = flag.String("containers-file", "/run/remnascope-sec/containers.tsv", "the list of running containers written by remnascope-containers-list (optional)")
 		probe     = flag.Bool("probe", false, "act as a checker: let the server ask this host to connect to a public TCP port or read a TLS certificate")
 		showVer   = flag.Bool("version", false, "print the version and exit")
+		allowSh   = flag.Bool("allow-shell", false, "let Owlery open a terminal here with the agent's own rights (Windows; on Linux install the shell helper instead)")
+		shellSock = flag.String("shell-socket", defaultShellSocket(), "Unix socket of the terminal helper; a terminal is offered only when it is there")
 		logFile   = flag.String("log-file", "", "write the log to this file instead of the standard error (a Windows service has no console)")
 	)
 	flag.Parse()
@@ -69,7 +78,7 @@ func main() {
 		*noF2B, *noSock, *noFW = true, true, true
 	}
 	cfg := secagent.Config{ServerURL: *server, TokenFile: *tokenFile, CAFile: *caFile, AllowInsecure: *insecure,
-		Interval: *interval, Version: version, Log: log, HelperSocket: *helper, StateDir: *stateDir, NoFail2ban: *noF2B, NoSockets: *noSock, NoFirewall: *noFW, NoHost: *noHost, ContainersFile: *contFile, Probe: *probe}
+		Interval: *interval, Version: version, Log: log, HelperSocket: *helper, StateDir: *stateDir, NoFail2ban: *noF2B, NoSockets: *noSock, NoFirewall: *noFW, NoHost: *noHost, ContainersFile: *contFile, Probe: *probe, AllowShell: *allowSh, ShellSocket: *shellSock}
 	run := func(ctx context.Context) error { return secagent.Run(ctx, cfg) }
 	if handled, err := runAsService(run); handled {
 		if err != nil {
@@ -120,4 +129,46 @@ func openLog(path string) (*os.File, error) {
 		flags = os.O_CREATE | os.O_WRONLY | os.O_TRUNC
 	}
 	return os.OpenFile(path, flags, 0o600)
+}
+
+func defaultShellSocket() string {
+	if runtime.GOOS == "linux" {
+		return "/run/remnascope-shell/shell.sock"
+	}
+	return ""
+}
+
+// runShellHelper serves the terminal helper: a root service the agent hands terminal sessions to. It connects back to
+// Owlery itself with the agent's credential, so terminal bytes never pass through the agent.
+func runShellHelper(args []string) {
+	fs := flag.NewFlagSet("shell-helper", flag.ExitOnError)
+	server := fs.String("server", "", "wss:// URL of Owlery")
+	tokenFile := fs.String("token-file", "", "file holding the agent credential")
+	socket := fs.String("socket", "", "Unix socket to listen on (its directory should be a systemd RuntimeDirectory)")
+	_ = fs.Parse(args)
+	if *server == "" || *tokenFile == "" || *socket == "" {
+		fmt.Fprintln(os.Stderr, "secagent shell-helper: -server, -token-file and -socket are required")
+		os.Exit(2)
+	}
+	if !strings.HasPrefix(*server, "wss://") {
+		fmt.Fprintln(os.Stderr, "secagent shell-helper: the server URL must be wss://")
+		os.Exit(2)
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	l, err := f2bhelper.Listen(*socket, 0o660)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "secagent shell-helper:", err)
+		os.Exit(1)
+	}
+	token := func() (string, error) {
+		b, err := os.ReadFile(*tokenFile)
+		return strings.TrimSpace(string(b)), err
+	}
+	r := &secshell.Runner{Log: log, Dial: secshell.Dialer{BaseURL: strings.TrimRight(*server, "/"), Token: token, Client: &http.Client{}}.Dial}
+	if err := secshell.ServeHelper(ctx, l, r); err != nil {
+		fmt.Fprintln(os.Stderr, "secagent shell-helper:", err)
+		os.Exit(1)
+	}
 }

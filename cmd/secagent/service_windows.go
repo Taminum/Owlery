@@ -26,12 +26,13 @@ func platformCommand(cmd string, args []string) bool {
 		server := fs.String("server", "", "wss:// URL of Owlery")
 		tokenFile := fs.String("token-file", "", "file holding the agent credential")
 		probe := fs.Bool("probe", false, "act as a checker for the other servers")
+		shell := fs.Bool("allow-shell", false, "let Owlery open a terminal on this machine")
 		_ = fs.Parse(args)
 		if *server == "" || *tokenFile == "" {
 			fmt.Fprintln(os.Stderr, "secagent install: -server and -token-file are required")
 			os.Exit(2)
 		}
-		if err := install(*server, *tokenFile, *probe); err != nil {
+		if err := install(*server, *tokenFile, *probe, *shell); err != nil {
 			fmt.Fprintln(os.Stderr, "secagent install:", err)
 			os.Exit(1)
 		}
@@ -48,7 +49,7 @@ func platformCommand(cmd string, args []string) bool {
 	return true
 }
 
-func install(server, tokenFile string, probe bool) error {
+func install(server, tokenFile string, probe, shell bool) error {
 	exe, err := os.Executable()
 	if err != nil {
 		return err
@@ -75,6 +76,9 @@ func install(server, tokenFile string, probe bool) error {
 	args := []string{"-server", server, "-token-file", tokenFile, "-log-file", filepath.Join(filepath.Dir(tokenFile), "secagent.log")}
 	if probe {
 		args = append(args, "-probe")
+	}
+	if shell {
+		args = append(args, "-allow-shell")
 	}
 	s, err := m.CreateService(serviceName, exe, mgr.Config{
 		DisplayName: "Owlery security agent",

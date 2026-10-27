@@ -143,3 +143,21 @@ connection; see [SECURITY_CHECKS.md](SECURITY_CHECKS.md) for how the server uses
   it does not interpret what a rule allows. Whether a port is really open is for the external check to say.
 - Listening sockets are the host's own. Containers with their own network namespace may not appear.
 - Ban and unban act on Fail2ban's jails only. Nothing in Owlery changes the firewall.
+
+## Terminal (optional)
+
+A machine can allow Owlery to open its console from the server card (tab "Терминал"). It is the machine's decision,
+made when the agent is installed:
+
+- **Linux.** The agent is not root, so it cannot give a useful shell. A separate helper,
+  `remnascope-shell.service`, runs as root and opens the shells; the agent only hands it a session id over the
+  socket `/run/remnascope-shell/shell.sock` (group `remnascope-sec`). The agent offers a terminal only while that
+  socket exists. Without the helper the machine cannot be given a terminal from Owlery at all, even by someone who
+  took over Owlery itself. Remove the helper (`systemctl disable --now remnascope-shell`) to take the permission back.
+- **Windows.** The service runs as the system; `secagent.exe install ... -allow-shell` allows the terminal
+  (PowerShell). Reinstall without the flag to take it back.
+
+For each session the machine connects back to `/ingest/security/v1/shell` with its own credential, so terminal
+bytes never share a connection with the reports. Owlery writes what the machine prints to a recording as it arrives
+(`RECORDS_DIR`, one file per session, at most 50 MB each) and puts opening and closing, with the duration, into the
+audit log. Only the owner and administrators of a linked panel can open a terminal.

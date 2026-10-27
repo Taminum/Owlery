@@ -8,6 +8,7 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/coder/websocket"
 	"github.com/google/uuid"
 
 	"github.com/Taminum/Owlery/internal/secproto"
@@ -20,6 +21,7 @@ type Hub struct {
 	conns  map[string]*link
 	next   uint64
 	probes map[string]*probeWait
+	shells map[string]*shellWait
 }
 
 type probeWait struct {
@@ -113,4 +115,66 @@ func (h *Hub) Deliver(agentID string, r secproto.ProbeResult) bool {
 	default:
 		return false
 	}
+}
+
+// ErrNoShell means the agent was asked for a terminal and did not connect back in time: its machine does not allow
+// one, or it could not reach Owlery.
+var ErrNoShell = errors.New("secops: the terminal did not connect back")
+
+type shellWait struct {
+	agent string
+	ch    chan *websocket.Conn
+	done  chan struct{}
+}
+
+// OpenShell asks an agent for a terminal and waits for its connection back. Call release when the session is over:
+// it lets the agent's side of the connection end.
+func (h *Hub) OpenShell(ctx context.Context, agentID string, cols, rows int) (c *websocket.Conn, release func(), err error) {
+	id := uuid.NewString()
+	w := &shellWait{agent: agentID, ch: make(chan *websocket.Conn, 1), done: make(chan struct{})}
+	h.mu.Lock()
+	if h.shells == nil {
+		h.shells = map[string]*shellWait{}
+	}
+	h.shells[id] = w
+	h.mu.Unlock()
+	drop := func() {
+		h.mu.Lock()
+		delete(h.shells, id)
+		h.mu.Unlock()
+	}
+	if err := h.Send(ctx, agentID, secproto.ShellOpen{Type: "shell_open", ID: id, Cols: cols, Rows: rows}); err != nil {
+		drop()
+		return nil, nil, err
+	}
+	select {
+	case c := <-w.ch:
+		drop()
+		var once sync.Once
+		return c, func() { once.Do(func() { close(w.done) }) }, nil
+	case <-ctx.Done():
+		drop()
+		close(w.done)
+		return nil, nil, ErrNoShell
+	}
+}
+
+// AttachShell hands an agent's terminal connection to the session that asked for it and returns when that session is
+// over. A connection nobody asked for, or from another agent, is refused (false).
+func (h *Hub) AttachShell(agentID, id string, c *websocket.Conn) bool {
+	h.mu.Lock()
+	w := h.shells[id]
+	if w == nil || w.agent != agentID {
+		h.mu.Unlock()
+		return false
+	}
+	delete(h.shells, id)
+	h.mu.Unlock()
+	select {
+	case w.ch <- c:
+	default:
+		return false
+	}
+	<-w.done
+	return true
 }

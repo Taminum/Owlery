@@ -1,0 +1,25 @@
+# The terminal helper: opens a root shell when Owlery asks this machine's agent for a terminal, and connects it back
+# to Owlery itself. Install it only if you want terminals from Owlery on this machine; without it they cannot be had.
+#   sed 's#wss://SCOPE_HOST#wss://scope.example.com#' remnascope-shell.service > /etc/systemd/system/remnascope-shell.service
+#   systemctl daemon-reload && systemctl enable --now remnascope-shell && systemctl restart remnascope-secagent
+[Unit]
+Description=Owlery terminal helper
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/remnascope-secagent shell-helper \
+  -server wss://SCOPE_HOST \
+  -token-file /etc/remnascope/secagent.token \
+  -socket /run/remnascope-shell/shell.sock
+User=root
+# The socket belongs to the agent's group, so the agent (and only it) can hand sessions over.
+Group=remnascope-sec
+RuntimeDirectory=remnascope-shell
+RuntimeDirectoryMode=0750
+Environment=HOME=/root SHELL=/bin/bash
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

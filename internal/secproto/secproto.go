@@ -322,3 +322,26 @@ type HostProc struct {
 	CPU   float64 `json:"cpu"`         // percent of one core, so more than 100 is possible on several cores
 	RSS   int64   `json:"rss"`         // resident memory in bytes
 }
+
+// CapShell is announced by an agent whose machine allows a terminal: on Linux a root helper is installed next to the
+// agent (the agent itself is not root), on Windows the agent was installed with -allow-shell.
+const CapShell = "shell"
+
+// ShellPath is where an agent connects back for one terminal session, with its own credential and ?id=<session>.
+// The session's bytes go over that connection alone, so a busy terminal never holds up the agent's reports.
+const ShellPath = Path + "/shell"
+
+// ShellOpen asks the agent to start a terminal session and connect back to ShellPath with its ID.
+type ShellOpen struct {
+	Type string `json:"type"` // "shell_open"
+	ID   string `json:"id"`
+	Cols int    `json:"cols"`
+	Rows int    `json:"rows"`
+}
+
+// ShellResize travels as a text frame on a terminal connection; everything else on it is binary terminal data.
+type ShellResize struct {
+	Type string `json:"type"` // "resize"
+	Cols int    `json:"cols"`
+	Rows int    `json:"rows"`
+}

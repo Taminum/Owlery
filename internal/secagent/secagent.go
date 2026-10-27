@@ -29,6 +29,7 @@ import (
 	"github.com/Taminum/Owlery/internal/f2bhelper"
 	"github.com/Taminum/Owlery/internal/seccollect"
 	"github.com/Taminum/Owlery/internal/secproto"
+	"github.com/Taminum/Owlery/internal/secshell"
 )
 
 type Config struct {
@@ -63,6 +64,11 @@ type Config struct {
 	// FastInterval is how often the set of banned addresses is compared between full reads, so that a ban is
 	// named within seconds. Zero means 5 seconds; negative turns it off.
 	FastInterval time.Duration
+	// AllowShell lets Owlery open a terminal on this machine with the agent's own rights (Windows, where the agent
+	// runs as the system). ShellSocket is the root helper that opens terminals on Linux; the agent offers a terminal
+	// only when that socket is there, so a machine without the helper cannot be given one.
+	AllowShell  bool
+	ShellSocket string
 }
 
 func (c *Config) defaults() {
@@ -129,7 +135,8 @@ func Run(ctx context.Context, cfg Config) error {
 	if err != nil {
 		return err
 	}
-	a := &agent{cfg: cfg, url: url, hc: hc, epoch: newEpoch(), probes: make(chan struct{}, maxProbes), socks: seccollect.NewSocketWatch(10 * time.Minute), host: newHostReader(cfg)}
+	a := &agent{cfg: cfg, url: url, hc: hc, epoch: newEpoch(), probes: make(chan struct{}, maxProbes), socks: seccollect.NewSocketWatch(10 * time.Minute), host: newHostReader(cfg), runCtx: ctx}
+	a.shells = &secshell.Runner{Log: cfg.Log, Dial: secshell.Dialer{BaseURL: strings.TrimRight(cfg.ServerURL, "/"), Token: a.token, Client: hc}.Dial}
 	if cfg.HelperSocket != "" {
 		a.helper = f2bhelper.Client{Path: cfg.HelperSocket}
 		// Fail2ban is read through the helper, and the agent never runs fail2ban-client itself.
@@ -176,6 +183,36 @@ type agent struct {
 	probes chan struct{}
 	socks  *seccollect.SocketWatch
 	host   *seccollect.HostReader
+	runCtx context.Context // lives as long as the agent: a terminal outlives a reconnect of the reports
+	shells *secshell.Runner
+}
+
+// shellReady says whether this machine allows a terminal right now.
+func (a *agent) shellReady() bool {
+	if a.cfg.AllowShell {
+		return true
+	}
+	if a.cfg.ShellSocket == "" {
+		return false
+	}
+	st, err := os.Stat(a.cfg.ShellSocket)
+	return err == nil && st.Mode()&os.ModeSocket != 0
+}
+
+// openShell starts a terminal: through the helper when there is one, else by the agent itself if it may.
+func (a *agent) openShell(req secproto.ShellOpen) {
+	switch {
+	case a.cfg.AllowShell:
+		a.shells.Open(a.runCtx, req)
+	case a.shellReady():
+		ctx, cancel := context.WithTimeout(a.runCtx, 10*time.Second)
+		defer cancel()
+		if err := secshell.Ask(ctx, a.cfg.ShellSocket, req); err != nil {
+			a.cfg.Log.Warn("terminal helper", "err", err)
+		}
+	default:
+		a.cfg.Log.Warn("terminal asked for, but this machine does not allow one", "id", req.ID)
+	}
 }
 
 func (a *agent) token() (string, error) {
@@ -208,6 +245,9 @@ func (a *agent) capabilities(ban bool) []string {
 	}
 	if a.cfg.Probe {
 		caps = append(caps, secproto.CapProbe)
+	}
+	if a.shellReady() {
+		caps = append(caps, secproto.CapShell)
 	}
 	return caps
 }
@@ -367,6 +407,13 @@ func (a *agent) reader(ctx context.Context, c *websocket.Conn, ban bool, acks ch
 					a.cfg.Log.Warn("could not report a probe result", "err", err)
 				}
 			}()
+		case "shell_open":
+			var req secproto.ShellOpen
+			if json.Unmarshal(b, &req) != nil || req.ID == "" || len(req.ID) > 64 {
+				fail(errors.New("secagent: a bad terminal request"))
+				return
+			}
+			go a.openShell(req)
 		case "error":
 			fail(fmt.Errorf("secagent: the server refused: %s", head.Code))
 			return

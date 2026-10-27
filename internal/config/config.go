@@ -26,6 +26,7 @@ type Config struct {
 	BootstrapOwner    string
 	BootstrapPassFile string
 	GeminiKeyFile     string // optional: the file holding the Gemini API key (a secret, never a variable)
+	RecordsDir        string // optional: where terminal sessions are recorded; empty = not recorded
 	SyncEnabled       bool
 	SessionTTL        time.Duration
 	IdleTTL           time.Duration
@@ -43,6 +44,7 @@ func Load(get func(string) string) (Config, error) {
 		BootstrapOwner:    get("BOOTSTRAP_OWNER"),
 		BootstrapPassFile: get("BOOTSTRAP_PASSWORD_FILE"),
 		GeminiKeyFile:     get("GEMINI_API_KEY_FILE"),
+		RecordsDir:        get("RECORDS_DIR"),
 		SyncEnabled:       true,
 		SessionTTL:        12 * time.Hour,
 		IdleTTL:           2 * time.Hour,
