@@ -161,6 +161,29 @@ function ScanCard({ v, canEdit, onChanged }: { v: VPS; canEdit: boolean; onChang
   )
 }
 
+/** The security collectors of one server, as tabs: used on the security page of a server and on its card. */
+export function SecurityTabs({ v }: { v: VPS }) {
+  const [params] = useSearchParams()
+  const wanted = params.get('tab') as Tab | null
+  const [tab, setTab] = useState<Tab>(wanted && TABS.includes(wanted) ? wanted : 'overview')
+  return (
+    <>
+        <div role="tablist" aria-label={t('sec.collectors')} className="flex flex-wrap gap-2">
+          {TABS.map((x) => (
+            <button key={x} role="tab" type="button" aria-selected={tab === x} onClick={() => setTab(x)}
+              className={`h-8 rounded-control border px-3 text-[13px] ${tab === x ? 'border-cyan bg-elevated text-fg' : 'border-line text-muted hover:text-fg'}`}>{t(TAB_LABEL[x])}</button>
+          ))}
+        </div>
+        {tab === 'overview' && <OverviewTab vpsId={v.id} />}
+        {tab === 'fail2ban' && <Fail2banTab vpsId={v.id} />}
+        {tab === 'ports' && <><PortsTab vpsId={v.id} /><PublicPorts vpsId={v.id} canEdit={v.can_edit} /></>}
+        {tab === 'tls' && <TLSTab vpsId={v.id} canEdit={v.can_edit} />}
+        {tab === 'firewall' && <FirewallTab vpsId={v.id} />}
+        {tab === 'events' && <EventsTab vpsId={v.id} />}
+    </>
+  )
+}
+
 export function SecurityDetail() {
   const { id = '' } = useParams()
   const nav = useNavigate()
@@ -173,9 +196,6 @@ export function SecurityDetail() {
   const [panel, setPanel] = useState('')
   const [node, setNode] = useState('')
   const [confirm, setConfirm] = useState(false)
-  const [params] = useSearchParams()
-  const wanted = params.get('tab') as Tab | null
-  const [tab, setTab] = useState<Tab>(wanted && TABS.includes(wanted) ? wanted : 'overview')
 
   const linkable = me ? panels.filter((p) => !p.demo && can(me, p.id, 'admin')) : []
   const panelId = panel || linkable[0]?.id || ''
@@ -244,18 +264,7 @@ export function SecurityDetail() {
       <AgentCard vpsId={v.id} canEdit={v.can_edit} />
       <ScanCard v={v} canEdit={v.can_edit} onChanged={reload} />
 
-      <div role="tablist" aria-label={t('sec.collectors')} className="flex flex-wrap gap-2">
-        {TABS.map((x) => (
-          <button key={x} role="tab" type="button" aria-selected={tab === x} onClick={() => setTab(x)}
-            className={`h-8 rounded-control border px-3 text-[13px] ${tab === x ? 'border-cyan bg-elevated text-fg' : 'border-line text-muted hover:text-fg'}`}>{t(TAB_LABEL[x])}</button>
-        ))}
-      </div>
-      {tab === 'overview' && <OverviewTab vpsId={v.id} />}
-      {tab === 'fail2ban' && <Fail2banTab vpsId={v.id} />}
-      {tab === 'ports' && <><PortsTab vpsId={v.id} /><PublicPorts vpsId={v.id} canEdit={v.can_edit} /></>}
-      {tab === 'tls' && <TLSTab vpsId={v.id} canEdit={v.can_edit} />}
-      {tab === 'firewall' && <FirewallTab vpsId={v.id} />}
-      {tab === 'events' && <EventsTab vpsId={v.id} />}
+      <SecurityTabs v={v} />
 
       {me?.account.is_owner && (
         <div>

@@ -251,7 +251,14 @@ export interface VPS {
   created_at: string; updated_at: string; addresses: VPSAddress[]; links: VPSLink[]; can_edit: boolean
   discovery_scan?: boolean; discovery_scan_at?: string | null
   summary?: VPSSummary
+  // What a person says about the machine (empty until filled in).
+  roles?: ServerRole[]; os?: string; provider?: string; country?: string; city?: string; group?: string; tags?: string[]; purchased_on?: string | null
 }
+
+export type ServerRole = 'entry' | 'exit' | 'panel' | 'service' | 'workstation' | 'home' | 'hypervisor' | 'router'
+
+export interface ServerNode { panel_id: string; panel_name: string; node_id: string; name: string; xray: string; users_online: number; online: boolean }
+export interface ServerAlert { id: string; kind: string; subject: string; label: string; detail: string; opened_at: string; last_seen_at: string; resolved_at: string | null }
 export interface VPSSummary {
   agent: 'none' | 'waiting' | 'online' | 'offline'
   fail2ban: { state: string; banned: number; total_banned: number; jails: number; observed_at: string | null }

@@ -213,7 +213,8 @@ func (s *Server) patchVPS(w http.ResponseWriter, r *http.Request, a auth.Actor, 
 		Enabled   *bool     `json:"enabled"`
 		Addresses *[]string `json:"addresses"`
 		// DiscoveryScan turns on the daily scan of common ports on this server's own IP addresses.
-		DiscoveryScan *bool `json:"discovery_scan"`
+		DiscoveryScan *bool        `json:"discovery_scan"`
+		Inventory     *inventoryIn `json:"inventory"`
 	}
 	if !s.decode(w, r, &in) {
 		return
@@ -221,6 +222,14 @@ func (s *Server) patchVPS(w http.ResponseWriter, r *http.Request, a auth.Actor, 
 	var p store.VPSPatch
 	p.Enabled = in.Enabled
 	p.DiscoveryScan = in.DiscoveryScan
+	if in.Inventory != nil {
+		inv, bad := in.Inventory.parse()
+		if bad != "" {
+			s.writeErr(w, r, http.StatusUnprocessableEntity, "invalid_inventory", bad)
+			return
+		}
+		p.Inventory = &inv
+	}
 	if in.Name != nil {
 		n, ok := validName(*in.Name)
 		if !ok {
