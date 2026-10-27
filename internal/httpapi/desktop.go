@@ -162,6 +162,21 @@ func (s *Server) desktop(w http.ResponseWriter, r *http.Request, a auth.Actor, _
 		b.Close(websocket.StatusNormalClosure, "")
 	}
 
+	// The browser library gives up after 15 seconds without a message; opening a desktop can take longer.
+	waiting, stopWaiting := context.WithCancel(ctx)
+	go func() {
+		tick := time.NewTicker(3 * time.Second)
+		defer tick.Stop()
+		for {
+			select {
+			case <-waiting.Done():
+				return
+			case <-tick.C:
+				_ = b.Write(waiting, websocket.MessageText, []byte(guac.New("nop").String()))
+			}
+		}
+	}()
+	defer stopWaiting()
 	port := 3389
 	if t.protocol == "vnc" {
 		port = 5900
@@ -170,16 +185,23 @@ func (s *Server) desktop(w http.ResponseWriter, r *http.Request, a auth.Actor, _
 	m, release, err := s.SecOps.OpenTunnel(octx, agent.ID, port)
 	cancel()
 	if err != nil {
-		fail("The machine did not open its desktop port. Is " + map[string]string{"rdp": "Remote Desktop", "vnc": "the VNC server"}[t.protocol] + " turned on there?")
+		fail("Машина не ответила: агент не открыл туннель к рабочему столу.")
 		return
 	}
 	defer release()
 	defer m.CloseNow()
+	fctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	typ, first, err := m.Read(fctx)
+	cancel()
+	if err != nil || typ != websocket.MessageText || string(first) != secproto.TunnelReady {
+		fail(map[string]string{"rdp": "На машине не включён удалённый рабочий стол: на порту 3389 никто не отвечает.", "vnc": "На машине не отвечает VNC-сервер (порт 5900)."}[t.protocol])
+		return
+	}
 
 	// A port on Owlery for guacd to dial, that leads into the tunnel. Only guacd's own address is let in, once.
 	l, err := net.Listen("tcp", ":0")
 	if err != nil {
-		fail("Owlery could not open a port for the desktop.")
+		fail("Owlery не смог открыть порт для рабочего стола.")
 		return
 	}
 	defer l.Close()
@@ -211,11 +233,12 @@ func (s *Server) desktop(w http.ResponseWriter, r *http.Request, a auth.Actor, _
 	cancel()
 	if err != nil {
 		s.Log.Warn("desktop did not open", "server", v.Name, "err", err)
-		fail("The desktop did not open: " + err.Error())
+		fail("Рабочий стол не открылся: " + err.Error())
 		return
 	}
 	defer gc.Close()
 
+	stopWaiting()
 	started := s.Now().UTC()
 	s.audit(r, a, "", "desktop.open", "server", v.ID, map[string]any{"name": v.Name, "protocol": t.protocol, "user": t.username})
 	// The first message, with an empty opcode, is how the browser library learns the tunnel is open.
