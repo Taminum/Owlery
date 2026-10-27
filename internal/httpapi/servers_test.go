@@ -60,7 +60,7 @@ func TestServerInventoryAndCard(t *testing.T) {
 		`INSERT INTO alerts (kind, subject, label, opened_at) VALUES ('host_disk', $1 || ':/', 'Диск', now())`,
 		`INSERT INTO alerts (kind, subject, label, opened_at) VALUES ('host_flood', $1, 'DDoS', now())`,
 		`INSERT INTO alerts (kind, subject, label, opened_at, resolved_at) VALUES ('host_cpu', $1, 'CPU', now() - interval '2 days', now() - interval '1 day')`,
-		`INSERT INTO alerts (kind, subject, label, opened_at) VALUES ('host_cpu', 'someone-else', 'CPU', now())`,
+		`INSERT INTO alerts (kind, subject, label, opened_at) VALUES ('host_cpu', 'someone-else-' || $1, 'CPU', now())`,
 	} {
 		if _, err := w.h.st.Pool().Exec(ctx, q, v.ID); err != nil {
 			t.Fatal(err)
