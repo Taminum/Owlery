@@ -13,6 +13,7 @@ import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
 import { FailureState, OverviewSkeleton } from './States'
 import { Mascot } from '../ember/Mascot'
+import { BusyBar } from './BusyBar'
 
 /** Nothing of the app is rendered, and no data is requested, until there is a session. */
 export function Layout() {
@@ -54,6 +55,7 @@ function Shell() {
           {ctx ? <Outlet context={ctx} /> : panelsFailure ? <FailureState failure={panelsFailure} onRetry={retry} onReset={retry} /> : <OverviewSkeleton />}
         </main>
       </div>
+      <BusyBar />
       <Mascot />
     </div>
   )

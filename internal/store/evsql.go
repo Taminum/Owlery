@@ -56,9 +56,9 @@ const SessionGap = 30 * time.Minute
 // planner re-runs its aggregate over every router record for every node event (minutes on real data).
 const eventsCTE = `
 rt AS MATERIALIZED (
-  SELECT a.panel_id, a.covers_user, min(d.started_at) AS since
-  FROM agents a JOIN device_connections d ON d.agent_id = a.id
-  WHERE a.kind = 'router' AND a.covers_user IS NOT NULL AND a.panel_id = ANY($1::uuid[]) GROUP BY 1, 2
+  SELECT a.panel_id, a.covers_user, min(m.since) AS since
+  FROM agents a CROSS JOIN LATERAL (SELECT min(d.started_at) AS since FROM device_connections d WHERE d.agent_id = a.id) m
+  WHERE a.kind = 'router' AND a.covers_user IS NOT NULL AND a.panel_id = ANY($1::uuid[]) AND m.since IS NOT NULL GROUP BY 1, 2
 ), ev AS (
   SELECT e.panel_id, e.destination_host AS host, host(e.destination_ip) AS ip, e.destination_port AS port, e.node_id,
          COALESCE(e.user_id::text, 'raw:' || COALESCE(e.xray_email, '-')) AS ukey, e.user_id AS uid, e.xray_email AS email,
