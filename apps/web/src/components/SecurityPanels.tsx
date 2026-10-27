@@ -403,6 +403,7 @@ export function EventsTab({ vpsId }: { vpsId: string }) {
 export function AgentCard({ vpsId, canEdit }: { vpsId: string; canEdit: boolean }) {
   const { data, error, reload } = useLoad((s) => api.get<{ agent: SecAgent | null }>(`/api/v1/security/vps/${vpsId}/agent`, s), [vpsId], 15_000)
   const [token, setToken] = useState('')
+  const [os, setOS] = useState<'linux' | 'windows'>('linux')
   const [err, setErr] = useState('')
   const [confirm, setConfirm] = useState(false)
   const agent = data?.agent ?? null
@@ -448,6 +449,32 @@ export function AgentCard({ vpsId, canEdit }: { vpsId: string; canEdit: boolean 
       {token && (
         <Modal title={t('sec.onb.title')} onClose={() => setToken('')} wide>
           <div className="space-y-3 text-[13px]">
+            <div role="tablist" aria-label={t('sec.onb.os')} className="flex gap-2">
+              {(['linux', 'windows'] as const).map((x) => (
+                <button key={x} role="tab" type="button" aria-selected={os === x} onClick={() => setOS(x)}
+                  className={`h-8 rounded-control border px-3 text-[13px] ${os === x ? 'border-cyan bg-elevated text-fg' : 'border-line text-muted hover:text-fg'}`}>{x === 'linux' ? 'Linux' : 'Windows'}</button>
+              ))}
+            </div>
+            {os === 'windows' ? (
+              <>
+                <p className="text-muted">{t('sec.onb.win.intro')}</p>
+                <p>{t('sec.onb.win.s1')}</p>
+                <Code>{`$ErrorActionPreference = 'Stop'
+$d = "$env:ProgramData\\Owlery"
+New-Item -ItemType Directory -Force $d | Out-Null
+if (Get-Service OwlerySecAgent -ErrorAction SilentlyContinue) { & "$d\\secagent.exe" uninstall | Out-Null }
+Set-Content -Path "$d\\secagent.token" -Value '${token}' -NoNewline -Encoding ascii
+icacls "$d\\secagent.token" /inheritance:r /grant:r "*S-1-5-18:R" "*S-1-5-32-544:F" | Out-Null
+$a = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'amd64' }
+[Net.ServicePointManager]::SecurityProtocol = 'Tls12'
+Invoke-WebRequest "https://github.com/Taminum/Owlery/releases/latest/download/remnascope-secagent-windows-$a.exe" -OutFile "$d\\secagent.exe" -UseBasicParsing
+& "$d\\secagent.exe" install -server "wss://${window.location.host}" -token-file "$d\\secagent.token"`}</Code>
+                <p>{t('sec.onb.win.s2')}</p>
+                <Code>{`Get-Service OwlerySecAgent
+Get-Content "$env:ProgramData\\Owlery\\secagent.log" -Tail 5`}</Code>
+                <p className="text-muted">{t('sec.onb.win.done')}</p>
+              </>
+            ) : (<>
             <p className="text-muted">{t('sec.onb.intro')}</p>
             <p>{t('sec.onb.s1')}</p>
             <Code>{'useradd --system --no-create-home --shell /usr/sbin/nologin remnascope-sec\nuseradd --system --no-create-home --shell /usr/sbin/nologin remnascope-f2b'}</Code>
@@ -480,6 +507,7 @@ systemctl daemon-reload && systemctl enable --now remnascope-containers-list.tim
             <Code>{`systemctl is-active remnascope-secagent
 journalctl -u remnascope-secagent -n 5 --no-pager`}</Code>
             <p className="text-muted">{t('sec.onb.done')}</p>
+            </>)}
           </div>
           <div className="mt-4 flex justify-end"><PrimaryButton onClick={() => setToken('')}>{t('sec.agent.tokenSaved')}</PrimaryButton></div>
         </Modal>

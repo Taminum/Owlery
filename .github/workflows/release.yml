@@ -60,6 +60,10 @@ jobs:
               CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath -ldflags="-s -w -X main.version=${GITHUB_REF_NAME}" -o "dist/$name-linux-$arch" "./cmd/$cmd"
             done
           done
+          # The security agent also runs on Windows, as a service: it reports the machine's resources there.
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOOS=windows GOARCH=$arch go build -trimpath -ldflags="-s -w -X main.version=${GITHUB_REF_NAME}" -o "dist/remnascope-secagent-windows-$arch.exe" ./cmd/secagent
+          done
           tar -czf dist/remnascope-deploy-files.tar.gz deploy/agent deploy/router deploy/secagent
           (cd dist && sha256sum * > SHA256SUMS)
       - uses: softprops/action-gh-release@v2

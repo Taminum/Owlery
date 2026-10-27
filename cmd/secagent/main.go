@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -26,6 +27,9 @@ var version = "dev"
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "helper" {
 		runHelper(os.Args[2:])
+		return
+	}
+	if len(os.Args) > 1 && platformCommand(os.Args[1], os.Args[2:]) {
 		return
 	}
 	var (
@@ -43,6 +47,7 @@ func main() {
 		contFile  = flag.String("containers-file", "/run/remnascope-sec/containers.tsv", "the list of running containers written by remnascope-containers-list (optional)")
 		probe     = flag.Bool("probe", false, "act as a checker: let the server ask this host to connect to a public TCP port or read a TLS certificate")
 		showVer   = flag.Bool("version", false, "print the version and exit")
+		logFile   = flag.String("log-file", "", "write the log to this file instead of the standard error (a Windows service has no console)")
 	)
 	flag.Parse()
 	if *showVer {
@@ -53,12 +58,29 @@ func main() {
 		fmt.Fprintln(os.Stderr, "secagent: -server and -token-file are required")
 		os.Exit(2)
 	}
+	logOut, err := openLog(*logFile)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "secagent:", err)
+		os.Exit(1)
+	}
+	log := slog.New(slog.NewTextHandler(logOut, nil))
+	// Fail2ban, ss and the Linux firewall do not exist on Windows; the agent reports resources there.
+	if runtime.GOOS == "windows" {
+		*noF2B, *noSock, *noFW = true, true, true
+	}
+	cfg := secagent.Config{ServerURL: *server, TokenFile: *tokenFile, CAFile: *caFile, AllowInsecure: *insecure,
+		Interval: *interval, Version: version, Log: log, HelperSocket: *helper, StateDir: *stateDir, NoFail2ban: *noF2B, NoSockets: *noSock, NoFirewall: *noFW, NoHost: *noHost, ContainersFile: *contFile, Probe: *probe}
+	run := func(ctx context.Context) error { return secagent.Run(ctx, cfg) }
+	if handled, err := runAsService(run); handled {
+		if err != nil {
+			log.Error("service", "err", err)
+			os.Exit(1)
+		}
+		return
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	err := secagent.Run(ctx, secagent.Config{ServerURL: *server, TokenFile: *tokenFile, CAFile: *caFile, AllowInsecure: *insecure,
-		Interval: *interval, Version: version, Log: log, HelperSocket: *helper, StateDir: *stateDir, NoFail2ban: *noF2B, NoSockets: *noSock, NoFirewall: *noFW, NoHost: *noHost, ContainersFile: *contFile, Probe: *probe})
-	if err != nil {
+	if err := run(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, "secagent:", err)
 		os.Exit(1)
 	}
@@ -86,4 +108,16 @@ func runHelper(args []string) {
 		fmt.Fprintln(os.Stderr, "secagent helper:", err)
 		os.Exit(1)
 	}
+}
+
+// openLog opens the log file for appending, starting it afresh when it has grown past 10 MB. Empty: standard error.
+func openLog(path string) (*os.File, error) {
+	if path == "" {
+		return os.Stderr, nil
+	}
+	flags := os.O_CREATE | os.O_WRONLY | os.O_APPEND
+	if st, err := os.Stat(path); err == nil && st.Size() > 10<<20 {
+		flags = os.O_CREATE | os.O_WRONLY | os.O_TRUNC
+	}
+	return os.OpenFile(path, flags, 0o600)
 }

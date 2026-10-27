@@ -147,6 +147,23 @@ func (h *HostReader) readProcs(now time.Time) ([]secproto.HostProc, []secproto.H
 		}
 		all = append(all, p)
 	}
+	var us []secproto.HostUnit
+	for _, u := range units {
+		x := secproto.HostUnit{Unit: u.unit, Label: names[u.unit], Count: u.count, RSS: u.rss}
+		if hadPrev && elapsed > 0 {
+			x.CPU = float64(u.ticks) * 100 / (clockTicks * elapsed)
+		}
+		us = append(us, x)
+	}
+	out, outUnits := topProcs(all, us)
+	for i := range out {
+		out[i].Label = names[out[i].Unit]
+	}
+	return out, outUnits
+}
+
+// topProcs keeps what is worth showing: the busiest groups by processor and by memory, and the same for units.
+func topProcs(all []secproto.HostProc, us []secproto.HostUnit) ([]secproto.HostProc, []secproto.HostUnit) {
 	pick := func(less func(a, b secproto.HostProc) bool, n int) []secproto.HostProc {
 		s := append([]secproto.HostProc(nil), all...)
 		sort.Slice(s, func(i, j int) bool { return less(s[i], s[j]) })
@@ -166,14 +183,6 @@ func (h *HostReader) readProcs(now time.Time) ([]secproto.HostProc, []secproto.H
 			out = append(out, p)
 		}
 	}
-	var us []secproto.HostUnit
-	for _, u := range units {
-		x := secproto.HostUnit{Unit: u.unit, Label: names[u.unit], Count: u.count, RSS: u.rss}
-		if hadPrev && elapsed > 0 {
-			x.CPU = float64(u.ticks) * 100 / (clockTicks * elapsed)
-		}
-		us = append(us, x)
-	}
 	topUnits := func(less func(a, b secproto.HostUnit) bool, n int) []secproto.HostUnit {
 		s := append([]secproto.HostUnit(nil), us...)
 		sort.Slice(s, func(i, j int) bool { return less(s[i], s[j]) })
@@ -189,9 +198,6 @@ func (h *HostReader) readProcs(now time.Time) ([]secproto.HostProc, []secproto.H
 			seenU[u.Unit] = true
 			outUnits = append(outUnits, u)
 		}
-	}
-	for i := range out {
-		out[i].Label = names[out[i].Unit]
 	}
 	return out, outUnits
 }

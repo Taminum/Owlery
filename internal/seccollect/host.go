@@ -177,8 +177,11 @@ func clean(s string, n int) string {
 	return s
 }
 
-// Read takes one reading of the host.
-func (h *HostReader) Read(now time.Time) secproto.Host {
+// Read takes one reading of the host: from /proc on Linux, through the system's own interfaces on Windows.
+func (h *HostReader) Read(now time.Time) secproto.Host { return h.readOS(now) }
+
+// readProcfs reads a Linux host from /proc and statfs.
+func (h *HostReader) readProcfs(now time.Time) secproto.Host {
 	out := secproto.Host{Type: "host", At: now.UTC(), CPUPct: -1, Arch: runtime.GOARCH}
 	if busy, total, ok := ParseCPUStat(h.read("stat")); ok {
 		h.mu.Lock()
