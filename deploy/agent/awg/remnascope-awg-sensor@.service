@@ -1,4 +1,4 @@
-# RemnaScope traffic sensor for one AmneziaWG container (template: remnascope-awg-sensor@<container>.service).
+# Owlery traffic sensor for one AmneziaWG container (template: remnascope-awg-sensor@<container>.service).
 # It watches packet HEADERS on the container's awg0 interface and reports, once a minute, per flow: which device,
 # where to, how many bytes each way, and a name when the traffic says one in the open (TLS server name, HTTP Host,
 # DNS answer). It keeps no packet and writes nothing to disk. See docs/AWG_COLLECTOR.md.
@@ -6,7 +6,7 @@
 # It starts as root only to open a packet socket inside the container's network namespace; the sensor then gives
 # root up for good (user nobody, no new privileges) and talks to the agent over a Unix socket.
 [Unit]
-Description=RemnaScope AmneziaWG traffic sensor for %i (read-only)
+Description=Owlery AmneziaWG traffic sensor for %i (read-only)
 After=docker.service remnascope-awg.service
 Wants=remnascope-awg.service
 

@@ -17,10 +17,10 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/Taminum/RemnaScope/internal/auth"
-	"github.com/Taminum/RemnaScope/internal/secops"
-	"github.com/Taminum/RemnaScope/internal/secproto"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/auth"
+	"github.com/Taminum/Owlery/internal/secops"
+	"github.com/Taminum/Owlery/internal/secproto"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 type Server struct {

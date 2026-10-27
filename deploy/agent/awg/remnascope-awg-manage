@@ -1,6 +1,6 @@
 #!/bin/sh
 # remnascope-awg-manage: add or revoke one AmneziaWG device in a container that is listed as managed.
-# The RemnaScope agent runs it through one sudoers rule; it is the ONLY thing that can change an
+# The Owlery agent runs it through one sudoers rule; it is the ONLY thing that can change an
 # AmneziaWG server on this host, and it accepts exactly these calls:
 #
 #   remnascope-awg-manage add    <container> <device name>

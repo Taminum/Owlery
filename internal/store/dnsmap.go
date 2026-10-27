@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/Taminum/RemnaScope/internal/dnsmap"
+	"github.com/Taminum/Owlery/internal/dnsmap"
 )
 
 const (

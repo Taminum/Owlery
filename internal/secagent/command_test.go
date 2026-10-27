@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/f2bhelper"
-	"github.com/Taminum/RemnaScope/internal/seccollect"
-	"github.com/Taminum/RemnaScope/internal/secproto"
+	"github.com/Taminum/Owlery/internal/f2bhelper"
+	"github.com/Taminum/Owlery/internal/seccollect"
+	"github.com/Taminum/Owlery/internal/secproto"
 )
 
 // tinyF2B is a fail2ban-client with one jail, enough to carry out a ban and read it back.

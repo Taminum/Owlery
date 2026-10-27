@@ -1,4 +1,4 @@
--- RemnaScope 0008: two-factor sign-in (TOTP) with one-time recovery codes.
+-- Owlery 0008: two-factor sign-in (TOTP) with one-time recovery codes.
 --
 -- The TOTP secret is stored encrypted with the same keyring as panel tokens (AES-256-GCM, the
 -- account id bound in as associated data). totp_enabled_at stays NULL while a secret is only

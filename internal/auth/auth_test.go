@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 var fast = Argon2Params{MemoryKiB: 8, Time: 1, Threads: 1, KeyLen: 32, SaltLen: 16}

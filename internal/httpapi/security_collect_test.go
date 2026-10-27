@@ -13,9 +13,9 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/Taminum/RemnaScope/internal/secagent"
-	"github.com/Taminum/RemnaScope/internal/seccollect"
-	"github.com/Taminum/RemnaScope/internal/secproto"
+	"github.com/Taminum/Owlery/internal/secagent"
+	"github.com/Taminum/Owlery/internal/seccollect"
+	"github.com/Taminum/Owlery/internal/secproto"
 )
 
 // secFakeHost is a machine whose command output the test controls.

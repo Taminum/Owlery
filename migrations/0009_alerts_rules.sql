@@ -1,4 +1,4 @@
--- RemnaScope 0009: alerts, and custom classification rules.
+-- Owlery 0009: alerts, and custom classification rules.
 
 -- An alert is open while its condition holds and is closed by the evaluator when it stops holding.
 -- There is at most one open alert per (kind, subject).

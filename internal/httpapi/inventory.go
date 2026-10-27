@@ -8,7 +8,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 // inventoryIn is the inventory of a server as the page sends it. Every field is replaced: what is left out is cleared.

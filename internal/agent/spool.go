@@ -1,4 +1,4 @@
-// Package agent reads an Xray access log and ships it to RemnaScope.
+// Package agent reads an Xray access log and ships it to Owlery.
 //
 // It never touches the Xray config or the Docker engine beyond the single read-only command
 // it is told to run, keeps unsent lines in a bounded on-disk spool, and counts and reports

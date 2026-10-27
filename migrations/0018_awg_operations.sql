@@ -1,4 +1,4 @@
--- RemnaScope 0018: a record of every change RemnaScope asked an AmneziaWG host to make. It holds who asked,
+-- Owlery 0018: a record of every change Owlery asked an AmneziaWG host to make. It holds who asked,
 -- what, and how it ended. Never a key other than the device's PUBLIC key, never a configuration.
 CREATE TABLE awg_operations (
     id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -10,10 +10,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/Taminum/RemnaScope/internal/asn"
-	"github.com/Taminum/RemnaScope/internal/auth"
-	"github.com/Taminum/RemnaScope/internal/geoip"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/asn"
+	"github.com/Taminum/Owlery/internal/auth"
+	"github.com/Taminum/Owlery/internal/geoip"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 // subjectFrom reads ?subject=user:<panel>|<id> | raw:<panel>|<email> | device:<panel>|<ip>.

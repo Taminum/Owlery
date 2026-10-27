@@ -11,10 +11,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/Taminum/RemnaScope/internal/geoip"
-	"github.com/Taminum/RemnaScope/internal/routerlog"
-	"github.com/Taminum/RemnaScope/internal/site"
-	"github.com/Taminum/RemnaScope/internal/xraylog"
+	"github.com/Taminum/Owlery/internal/geoip"
+	"github.com/Taminum/Owlery/internal/routerlog"
+	"github.com/Taminum/Owlery/internal/site"
+	"github.com/Taminum/Owlery/internal/xraylog"
 )
 
 type Agent struct {

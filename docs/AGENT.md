@@ -4,7 +4,7 @@ Applying it is a change on a production server, so do it node by node, starting 
 
 ## What it does and does not do
 - Follows `/var/log/xray/current` inside the `remnanode` container with `tail -n 0 -F` and ships
-  the lines to RemnaScope over `wss://`. It only reads.
+  the lines to Owlery over `wss://`. It only reads.
 - Does **not** change the container, its mounts, its config, or Docker. No restart, no recreate.
 - Keeps unsent lines in a bounded spool (default 256 MiB). If that fills up, it drops new lines
   and **reports the exact number** to the server; loss is never silent.
@@ -27,7 +27,7 @@ The alternative, a read-only bind mount of the log directory, would need `remnan
 recreated and is not used.
 
 ## Steps (per node)
-1. In RemnaScope: Panels, the panel, **Агенты**, **Создать агента** for the node. Copy the token
+1. In Owlery: Panels, the panel, **Агенты**, **Создать агента** for the node. Copy the token
    (shown once).
 2. On the node, as root:
 ```
@@ -51,10 +51,10 @@ systemctl disable --now remnascope-agent
 rm -f /etc/systemd/system/remnascope-agent.service /etc/sudoers.d/remnascope-agent /usr/local/bin/remnascope-agent
 rm -rf /etc/remnascope /var/lib/remnascope-agent && userdel remnascope && systemctl daemon-reload
 ```
-Then revoke the agent in RemnaScope. The VPN is untouched by any of this.
+Then revoke the agent in Owlery. The VPN is untouched by any of this.
 
 ## Before the first real node
-- RemnaScope must be reachable from the node over HTTPS with a valid certificate, and the reverse
+- Owlery must be reachable from the node over HTTPS with a valid certificate, and the reverse
   proxy must pass WebSocket upgrades on `/ingest/` (the bundled nginx config does).
 - Start with the least busy node. Watch CPU of the `docker exec` process: `tail -F` on a ~10 MiB
   rotating file is cheap, but the first hour is the time to find out.

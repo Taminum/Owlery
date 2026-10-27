@@ -1,4 +1,4 @@
--- RemnaScope 0003: agents and event ingestion bookkeeping.
+-- Owlery 0003: agents and event ingestion bookkeeping.
 
 ALTER TABLE agents
     ADD COLUMN name           text,

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/secrets"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/secrets"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 const (
@@ -219,7 +219,7 @@ func (w *Worker) alerts(ctx context.Context, chans []store.NotifyChannel) {
 		var texts []string
 		if len(list) > maxPerRound {
 			var b strings.Builder
-			fmt.Fprintf(&b, "RemnaScope: оповещений за раз: %d\n", len(list))
+			fmt.Fprintf(&b, "Owlery: оповещений за раз: %d\n", len(list))
 			for i, n := range list {
 				if i >= 10 {
 					b.WriteString("…\n")
@@ -413,7 +413,7 @@ func eventWord(t string) string {
 
 // BuildDigest is the daily message: the summary of the whole cluster, then what happened in the last day.
 func BuildDigest(ctx context.Context, st *store.Store, now time.Time, loc *time.Location) (string, error) {
-	head, err := buildStats(ctx, st, now, loc, "ЕЖЕДНЕВНАЯ СВОДКА RemnaScope")
+	head, err := buildStats(ctx, st, now, loc, "ЕЖЕДНЕВНАЯ СВОДКА Owlery")
 	if err != nil {
 		return "", err
 	}

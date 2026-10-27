@@ -1,5 +1,5 @@
 [Unit]
-Description=Match the RemnaScope AmneziaWG traffic sensors to the configured containers
+Description=Match the Owlery AmneziaWG traffic sensors to the configured containers
 
 [Service]
 Type=oneshot

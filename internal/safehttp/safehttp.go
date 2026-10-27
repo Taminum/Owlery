@@ -1,4 +1,4 @@
-// Package safehttp is the only way RemnaScope talks to an operator-supplied URL.
+// Package safehttp is the only way Owlery talks to an operator-supplied URL.
 //
 // Every connection (not just the first one) resolves the host, validates ALL
 // returned addresses against a deny list, and dials the validated IP directly, so
@@ -386,7 +386,7 @@ func (c *Client) Get(ctx context.Context, rawURL string, header http.Header) (*R
 	}
 	req.Header.Set("Accept", "application/json")
 	if req.Header.Get("User-Agent") == "" {
-		req.Header.Set("User-Agent", "RemnaScope")
+		req.Header.Set("User-Agent", "Owlery")
 	}
 
 	resp, err := c.http.Do(req)

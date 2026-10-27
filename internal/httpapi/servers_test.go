@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 type serverResp struct {

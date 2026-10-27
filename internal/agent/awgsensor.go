@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/ingestproto"
+	"github.com/Taminum/Owlery/internal/ingestproto"
 )
 
 // AWGSensorSource receives the traffic sensor's reports. The sensor is a separate, root-started service with a

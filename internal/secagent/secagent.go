@@ -26,9 +26,9 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/Taminum/RemnaScope/internal/f2bhelper"
-	"github.com/Taminum/RemnaScope/internal/seccollect"
-	"github.com/Taminum/RemnaScope/internal/secproto"
+	"github.com/Taminum/Owlery/internal/f2bhelper"
+	"github.com/Taminum/Owlery/internal/seccollect"
+	"github.com/Taminum/Owlery/internal/secproto"
 )
 
 type Config struct {

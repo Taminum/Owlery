@@ -1,6 +1,6 @@
--- RemnaScope 0023: external checks of a VPS's public TCP ports and TLS certificates.
+-- Owlery 0023: external checks of a VPS's public TCP ports and TLS certificates.
 --
--- The checker runs on the RemnaScope server (vantage "api_server"), which is not independent of the
+-- The checker runs on the Owlery server (vantage "api_server"), which is not independent of the
 -- servers it checks when the API lives on one of them. Every result carries that vantage, and the UI says so.
 -- A target must be an address or domain registered on the VPS: there is no "check any host".
 

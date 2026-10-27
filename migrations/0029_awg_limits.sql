@@ -1,6 +1,6 @@
--- RemnaScope 0029: an expiry date and a traffic limit for an AmneziaWG device.
+-- Owlery 0029: an expiry date and a traffic limit for an AmneziaWG device.
 --
--- RemnaScope enforces them by revoking the device on the host when its time or its allowance is over; a
+-- Owlery enforces them by revoking the device on the host when its time or its allowance is over; a
 -- revoked device cannot be switched back on (its keys are gone with it), so it has to be created again. The
 -- traffic is counted from limit_from (the moment the limit was set) with the same reset-aware arithmetic the
 -- rest of the AmneziaWG screens use.

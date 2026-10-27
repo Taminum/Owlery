@@ -1,7 +1,7 @@
 # Threat model: Security module and DNS Map
 
 This covers the server-security module (agent, helper, external checks, journal, alerts) and the DNS Map. The
-general model for the rest of RemnaScope is in [SECURITY.md](SECURITY.md). What follows is what was built, what
+general model for the rest of Owlery is in [SECURITY.md](SECURITY.md). What follows is what was built, what
 it defends against, and what it does not.
 
 ## Assets
@@ -10,7 +10,7 @@ it defends against, and what it does not.
   attacker back in.
 - The agent credential of each server (`<agent id>.<secret>`): whoever holds it speaks as that agent.
 - The picture the module gives the owner. A false "all is well" is worse than no picture.
-- The RemnaScope server's network position: it dials out to public addresses for checks and DNS.
+- The Owlery server's network position: it dials out to public addresses for checks and DNS.
 
 ## Actors and their reach
 
@@ -20,8 +20,8 @@ it defends against, and what it does not.
 | Admin of a linked panel | see and edit a server linked to that panel, issue/revoke its agent, add endpoints, toggle the scan | ban/unban (owner only in this version), see servers not linked to their panels |
 | Viewer/operator of a linked panel | read | change anything |
 | A security agent | report snapshots for its own server, answer commands and probes sent to it | read another server's data, ask the server for anything, have its commands run for another server |
-| The RemnaScope server | send ban/unban to an agent that announced `fail2ban_ban`, send probes to one that announced `probe` | run anything else on an agent: there is no other message that does something |
-| A compromised agent host | lie about its own server; answer probes with chosen results | affect another server, run commands on RemnaScope, make RemnaScope dial a private address (checks run on the server's own dialer, probes only reach agents that chose to be checkers) |
+| The Owlery server | send ban/unban to an agent that announced `fail2ban_ban`, send probes to one that announced `probe` | run anything else on an agent: there is no other message that does something |
+| A compromised agent host | lie about its own server; answer probes with chosen results | affect another server, run commands on Owlery, make Owlery dial a private address (checks run on the server's own dialer, probes only reach agents that chose to be checkers) |
 
 ## Boundaries and what holds them
 
@@ -71,7 +71,7 @@ outcome are in the audit log. Nothing in the module changes a firewall.
 
 ## What a result means (and does not)
 
-- "Reachable" is *from the vantage that was recorded*. A result from the RemnaScope server itself is marked not
+- "Reachable" is *from the vantage that was recorded*. A result from the Owlery server itself is marked not
   independent, because the server cannot know that it is not the machine being checked. A result from a checker
   is independent only when the checker is not the target's server and the address it connected to is not its own.
 - A timeout or a filtered port is "no answer", not "closed". Only a refusal from the asked address says closed.
@@ -90,10 +90,10 @@ outcome are in the audit log. Nothing in the module changes a firewall.
 | Threat | Mitigation | Residual |
 |---|---|---|
 | Stolen agent token | revoke at once from the UI; secret shown once; file readable by root and the agent's group only | the holder can send false snapshots until revoked, and answer for its own server |
-| Compromised RemnaScope server | agent accepts only ban/unban and probes, never runs a shell; helper validates again | an attacker with the server can ban chosen addresses on hosts whose agents have `fail2ban_ban`, and can have `-probe` hosts connect to public addresses |
+| Compromised Owlery server | agent accepts only ban/unban and probes, never runs a shell; helper validates again | an attacker with the server can ban chosen addresses on hosts whose agents have `fail2ban_ban`, and can have `-probe` hosts connect to public addresses |
 | Forged or replayed command | one-time ID persisted before execution, TTL, only the addressed agent can answer | none known |
 | Command to a wrong host | commands are keyed by the agent's VPS; the answer must come from that agent | none known |
-| SSRF through checks | registered targets only, public addresses only, dial-time address check, bounded concurrency | a registered domain whose records an attacker controls can make RemnaScope connect to *its* public addresses |
+| SSRF through checks | registered targets only, public addresses only, dial-time address check, bounded concurrency | a registered domain whose records an attacker controls can make Owlery connect to *its* public addresses |
 | Probe as a scanner from an agent | opt-in per host, public addresses only, no payload, four at once | an owner who enables `-probe` accepts that |
 | Alert flood | state-based alerts keyed on `(kind, subject)`; journal events from state differences with a silent baseline; one notice per expiry threshold | none known |
 | False green | stale data is called stale, no agent is "no agent", a failed read is its own state, overview has an explicit unknown | a host whose agent is up but whose Fail2ban was replaced by something lying is read as it reports |

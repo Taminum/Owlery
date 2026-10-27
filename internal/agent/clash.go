@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/ingestproto"
-	"github.com/Taminum/RemnaScope/internal/routerlog"
+	"github.com/Taminum/Owlery/internal/ingestproto"
+	"github.com/Taminum/Owlery/internal/routerlog"
 )
 
 // ClashSource polls the Clash API of sing-box (GET /connections) on a router and emits one

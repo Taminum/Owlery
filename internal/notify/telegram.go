@@ -1,4 +1,4 @@
-// Package notify sends what RemnaScope wants the owner to know to Telegram: alerts as they open and close,
+// Package notify sends what Owlery wants the owner to know to Telegram: alerts as they open and close,
 // and a short daily digest. It is outbound only, to one fixed host, and it never puts a token in a log, an
 // error or a response.
 package notify

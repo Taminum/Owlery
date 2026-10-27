@@ -15,10 +15,10 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/Taminum/RemnaScope/internal/auth"
-	"github.com/Taminum/RemnaScope/internal/ingestproto"
-	"github.com/Taminum/RemnaScope/internal/store"
-	"github.com/Taminum/RemnaScope/internal/store/storetest"
+	"github.com/Taminum/Owlery/internal/auth"
+	"github.com/Taminum/Owlery/internal/ingestproto"
+	"github.com/Taminum/Owlery/internal/store"
+	"github.com/Taminum/Owlery/internal/store/storetest"
 )
 
 var ctx = context.Background()

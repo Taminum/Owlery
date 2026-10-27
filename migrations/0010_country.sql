@@ -1,4 +1,4 @@
--- RemnaScope 0010: country of the destination address.
+-- Owlery 0010: country of the destination address.
 --
 -- Set by the application from the destination IP with the embedded DB-IP table. NULL means the
 -- connection has no IP in the log (a domain-only line) or the address is private/unknown. "ZZ"

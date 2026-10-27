@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/Taminum/RemnaScope/internal/ingestproto"
+	"github.com/Taminum/Owlery/internal/ingestproto"
 )
 
 // Alert kinds about the AmneziaWG containers themselves. They belong to the panel of the node.

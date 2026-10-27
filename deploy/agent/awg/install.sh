@@ -1,5 +1,5 @@
 #!/bin/sh
-# remnascope-awg-install: puts the RemnaScope AmneziaWG agent on a host that already runs Amnezia containers.
+# remnascope-awg-install: puts the Owlery AmneziaWG agent on a host that already runs Amnezia containers.
 #
 #   sudo sh install.sh --server wss://scope.example.com/ingest/v1 --token-file /path/to/token \
 #        --endpoint-host 203.0.113.10 --managed "amnezia-awg2 amnezia-awg3"
@@ -11,13 +11,13 @@
 #   * installs the read-only snapshot helper, the management helper and the traffic sensor under
 #     /usr/local/sbin, each behind one exact sudoers rule;
 #   * installs and starts the agent service and one sensor service per container.
-# It does not touch Docker, the containers, their configs or any existing RemnaScope log agent.
+# It does not touch Docker, the containers, their configs or any existing Owlery log agent.
 #
 # Options
-#   --server URL         the ingest address of RemnaScope (wss://.../ingest/v1)            [required]
+#   --server URL         the ingest address of Owlery (wss://.../ingest/v1)            [required]
 #   --token TOKEN | --token-file FILE | env REMNASCOPE_TOKEN                              [required once]
 #   --endpoint-host H    the address clients connect to (goes into client configs)         [required]
-#   --managed "a b"      containers whose devices RemnaScope may add and revoke            [default: none]
+#   --managed "a b"      containers whose devices Owlery may add and revoke            [default: none]
 #   --sense "a b"        containers whose traffic the sensor watches                       [default: --managed]
 #   --dns "1.1.1.1, ..." DNS written into new client configs                               [default 1.1.1.1, 1.0.0.1]
 #   --container-admin    also install the helper that can CREATE and REMOVE AmneziaWG containers
@@ -32,7 +32,7 @@ PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
 SERVER="" TOKEN="${REMNASCOPE_TOKEN:-}" TOKEN_FILE="" ENDPOINT="" MANAGED="" SENSE="" DNS="1.1.1.1, 1.0.0.1"
 VERSION="latest" FROM="" STAGE="" UNINSTALL=0 DRY=0 CONTAINER_ADMIN=0
-BASE_URL="${REMNASCOPE_RELEASE_URL:-https://github.com/Taminum/RemnaScope/releases}"
+BASE_URL="${REMNASCOPE_RELEASE_URL:-https://github.com/Taminum/Owlery/releases}"
 
 die() { echo "install: $*" >&2; exit 1; }
 say() { echo "install: $*"; }
@@ -102,7 +102,7 @@ if [ "$UNINSTALL" -eq 1 ]; then
     "$SBIN/remnascope-awg-snapshot" "$SBIN/remnascope-awg-manage" "$SBIN/remnascope-awg-sensor" "$SBIN/remnascope-awg-sensor-run" \
     "$ETC/awg.token" "$CONF" "$R/var/lib/remnascope-awg"
   sysctl_run systemctl daemon-reload
-  say "removed. Devices added through RemnaScope remain on the server until revoked; revoke the agent in RemnaScope too."
+  say "removed. Devices added through Owlery remain on the server until revoked; revoke the agent in Owlery too."
   exit 0
 fi
 

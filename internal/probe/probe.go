@@ -18,8 +18,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/safehttp"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/safehttp"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 const (

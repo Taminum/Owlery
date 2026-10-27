@@ -17,7 +17,7 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/Taminum/RemnaScope/internal/ingestproto"
+	"github.com/Taminum/Owlery/internal/ingestproto"
 )
 
 // Counters accumulates what the agent could not deliver until the server has acknowledged

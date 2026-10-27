@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/secevents"
+	"github.com/Taminum/Owlery/internal/secevents"
 )
 
 // allowLoopback lets the checker dial the test servers, then puts the real rule back.

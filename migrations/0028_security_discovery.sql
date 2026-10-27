@@ -1,4 +1,4 @@
--- RemnaScope 0028: finding endpoints nobody listed.
+-- Owlery 0028: finding endpoints nobody listed.
 --
 --  * A TLS endpoint can come from the checker itself (source 'auto'): a registered domain on 443, or a known
 --    listener on a well-known TLS port, where a TLS handshake presented a certificate. It is never a port

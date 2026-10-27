@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/Taminum/RemnaScope/internal/secevents"
+	"github.com/Taminum/Owlery/internal/secevents"
 )
 
 // TLSDiscoveryPorts are the ports on which a known listener is tried for TLS. Nothing outside this list is

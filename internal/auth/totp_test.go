@@ -74,8 +74,8 @@ func TestRecoveryCodesAreDistinctAndNormalise(t *testing.T) {
 }
 
 func TestTOTPURI(t *testing.T) {
-	u := TOTPURI("RemnaScope", "owner", []byte("12345678901234567890"))
-	for _, want := range []string{"otpauth://totp/RemnaScope:owner?", "secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", "issuer=RemnaScope", "digits=6", "period=30"} {
+	u := TOTPURI("Owlery", "owner", []byte("12345678901234567890"))
+	for _, want := range []string{"otpauth://totp/Owlery:owner?", "secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", "issuer=Owlery", "digits=6", "period=30"} {
 		if !strings.Contains(u, want) {
 			t.Errorf("%q missing from %s", want, u)
 		}

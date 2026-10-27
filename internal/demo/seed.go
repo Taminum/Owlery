@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 // Seed makes the demo panels real rows (flagged demo, no credential, never synced),

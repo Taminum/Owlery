@@ -1,4 +1,4 @@
--- RemnaScope 0030: notifications outside the page (Telegram).
+-- Owlery 0030: notifications outside the page (Telegram).
 --
 -- A channel keeps its secret (the bot token and chat id) sealed with the master key like a panel's API token.
 -- The page never gets it back: only a short hint of the chat id and the last result of sending.

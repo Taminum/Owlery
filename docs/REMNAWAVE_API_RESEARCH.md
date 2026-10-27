@@ -1,7 +1,7 @@
 # Remnawave API: что ещё можно читать (16.10.2026)
 
 Источник: контракт `remnawave/backend`, `libs/contract/api/controllers/*.ts` (ветка main). Пути даны после `/api/`.
-Сейчас RemnaScope читает только `nodes`, `users/` (страницами), `system/stats`, `system/metadata`, `bandwidth-stats/nodes`.
+Сейчас Owlery читает только `nodes`, `users/` (страницами), `system/stats`, `system/metadata`, `bandwidth-stats/nodes`.
 Поля ответов нужно сверять на живой панели (v3.4 в тестовых данных урезаны), поэтому всё ниже «кандидат», а не обещание.
 
 ## Только чтение, безопасно

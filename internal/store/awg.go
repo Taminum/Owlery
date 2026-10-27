@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/ingestproto"
+	"github.com/Taminum/Owlery/internal/ingestproto"
 )
 
 var awgKeyRe = regexp.MustCompile(`^[A-Za-z0-9+/]{43}=$`)
@@ -166,10 +166,10 @@ type AWGPeerRow struct {
 	SampleAt    *time.Time
 	PeriodRX    int64 // traffic in the asked period, resets accounted for
 	PeriodTX    int64
-	TrackedRX   int64 // everything RemnaScope has seen since its first sample of this peer, resets accounted for
+	TrackedRX   int64 // everything Owlery has seen since its first sample of this peer, resets accounted for
 	TrackedTX   int64
 	TrackedFrom *time.Time // when that first sample was taken
-	EverHS      *time.Time // the latest handshake RemnaScope has ever recorded for the peer
+	EverHS      *time.Time // the latest handshake Owlery has ever recorded for the peer
 	LegacyDown  *int64     // what the Amnezia panel had recorded (a snapshot as of the instance's LegacyAt)
 	LegacyUp    *int64
 	LegacyHS    *time.Time
@@ -395,7 +395,7 @@ func (s *Store) MarkAWGGone(ctx context.Context, peerID string) error {
 	return err
 }
 
-// RenameAWGPeer changes the name RemnaScope shows for a device. Nothing is changed on the host.
+// RenameAWGPeer changes the name Owlery shows for a device. Nothing is changed on the host.
 func (s *Store) RenameAWGPeer(ctx context.Context, sc Scope, peerID, label string) error {
 	id, err := ParseID(peerID)
 	if err != nil {
@@ -431,7 +431,7 @@ func (s *Store) RecordAWGOperation(ctx context.Context, instanceID, kind, key, l
 }
 
 // AWGHost is an AmneziaWG agent: one host. It exists before it has any container, which is what lets an empty
-// server be set up from RemnaScope.
+// server be set up from Owlery.
 type AWGHost struct {
 	AgentID    string     `json:"id"`
 	PanelID    string     `json:"panel_id"`

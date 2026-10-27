@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/secproto"
+	"github.com/Taminum/Owlery/internal/secproto"
 )
 
 const f2bStatus = `Status

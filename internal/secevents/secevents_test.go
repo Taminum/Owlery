@@ -3,7 +3,7 @@ package secevents
 import (
 	"testing"
 
-	"github.com/Taminum/RemnaScope/internal/secproto"
+	"github.com/Taminum/Owlery/internal/secproto"
 )
 
 func f2b(status string, jails ...secproto.Jail) Snap {

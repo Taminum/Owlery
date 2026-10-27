@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Taminum/RemnaScope/internal/ingestproto"
+	"github.com/Taminum/Owlery/internal/ingestproto"
 )
 
 // State is what an agent must remember across restarts. It is small and rewritten atomically.

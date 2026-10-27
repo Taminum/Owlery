@@ -74,7 +74,7 @@ WHERE p.gone_at IS NULL AND i.mode = 'managed'
 	return out, rows.Err()
 }
 
-// MarkAWGAutoRevoked records that RemnaScope revoked the device because its time or allowance was over.
+// MarkAWGAutoRevoked records that Owlery revoked the device because its time or allowance was over.
 func (s *Store) MarkAWGAutoRevoked(ctx context.Context, peerID, reason string) error {
 	id, err := ParseID(peerID)
 	if err != nil {

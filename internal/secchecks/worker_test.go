@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/store"
-	"github.com/Taminum/RemnaScope/internal/store/storetest"
+	"github.com/Taminum/Owlery/internal/store"
+	"github.com/Taminum/Owlery/internal/store/storetest"
 )
 
 func eventTypes(t *testing.T, st *store.Store, vps string) map[string][]store.SecEvent {

@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/secproto"
+	"github.com/Taminum/Owlery/internal/secproto"
 )
 
 // HostReader reads how loaded the host is from /proc and statfs. It runs no command. CPU use is the share of

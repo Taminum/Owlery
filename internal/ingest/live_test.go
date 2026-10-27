@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/ingestproto"
-	"github.com/Taminum/RemnaScope/internal/live"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/ingestproto"
+	"github.com/Taminum/Owlery/internal/live"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 func waitFor(t *testing.T, what string, ok func() bool) {

@@ -2,7 +2,7 @@
 // TLS endpoint presents. It dials only public addresses, checks the address actually connected to, sends
 // no data on a TCP probe, and never turns certificate verification off for its verdict.
 //
-// The same code runs in two places: on the RemnaScope server, and on a security agent that was set up as a
+// The same code runs in two places: on the Owlery server, and on a security agent that was set up as a
 // checker, so that a target can be seen from a machine that is not the target.
 package secprobe
 
@@ -19,9 +19,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/netintel"
-	"github.com/Taminum/RemnaScope/internal/safehttp"
-	"github.com/Taminum/RemnaScope/internal/secevents"
+	"github.com/Taminum/Owlery/internal/netintel"
+	"github.com/Taminum/Owlery/internal/safehttp"
+	"github.com/Taminum/Owlery/internal/secevents"
 )
 
 const (

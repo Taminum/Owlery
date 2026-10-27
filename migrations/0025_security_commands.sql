@@ -1,4 +1,4 @@
--- RemnaScope 0025: manual Fail2ban ban and unban, as commands with a recorded outcome.
+-- Owlery 0025: manual Fail2ban ban and unban, as commands with a recorded outcome.
 --
 -- A command is sent to the server's agent over its live connection or not at all; nothing waits in a queue
 -- for the agent to come back. 'pending' means sent and not yet answered. A command that is not answered in

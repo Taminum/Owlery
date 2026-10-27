@@ -1,4 +1,4 @@
--- RemnaScope 0002: accounts, RBAC, sessions, panel connection state, sync bookkeeping.
+-- Owlery 0002: accounts, RBAC, sessions, panel connection state, sync bookkeeping.
 
 CREATE TABLE accounts (
     id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),

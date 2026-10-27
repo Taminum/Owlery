@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/ingestproto"
+	"github.com/Taminum/Owlery/internal/ingestproto"
 )
 
 func TestParseAWGSnapshotReadsFactsAndIgnoresJunk(t *testing.T) {

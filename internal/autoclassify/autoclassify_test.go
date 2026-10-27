@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/gemini"
-	"github.com/Taminum/RemnaScope/internal/store"
-	"github.com/Taminum/RemnaScope/internal/store/storetest"
+	"github.com/Taminum/Owlery/internal/gemini"
+	"github.com/Taminum/Owlery/internal/store"
+	"github.com/Taminum/Owlery/internal/store/storetest"
 )
 
 var ctx = context.Background()

@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/auth"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/auth"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 // A report older than this means the collector on the AWG host is not reporting: nothing about the
@@ -33,12 +33,12 @@ type awgPeerOut struct {
 	DownloadRange int64      `json:"download_range"` // the same, over the asked period, restarts accounted for
 	UploadRange   int64      `json:"upload_range"`
 	SampleAt      *time.Time `json:"sample_at"`
-	// What RemnaScope itself has added up since it first saw the peer, restarts of the server included.
+	// What Owlery itself has added up since it first saw the peer, restarts of the server included.
 	TrackedDownload int64      `json:"tracked_download"`
 	TrackedUpload   int64      `json:"tracked_upload"`
 	TrackedFrom     *time.Time `json:"tracked_from"`
 	// When the device was last seen: the interface's own latest handshake if it has one, else the
-	// latest RemnaScope recorded, else what the Amnezia panel had recorded. The source says which.
+	// latest Owlery recorded, else what the Amnezia panel had recorded. The source says which.
 	LastSeenAt     *time.Time `json:"last_seen_at"`
 	LastSeenSource string     `json:"last_seen_source,omitempty"` // live | recorded | panel
 	// Expiry and allowance, when the owner set them. UsedBytes counts from LimitFrom.
@@ -46,10 +46,10 @@ type awgPeerOut struct {
 	TrafficLimitBytes *int64     `json:"traffic_limit_bytes"`
 	LimitFrom         *time.Time `json:"limit_from"`
 	UsedBytes         int64      `json:"used_bytes"`
-	AutoRevoked       string     `json:"auto_revoked,omitempty"` // expired | traffic_limit: RemnaScope revoked it
+	AutoRevoked       string     `json:"auto_revoked,omitempty"` // expired | traffic_limit: Owlery revoked it
 	// What the Amnezia panel had recorded (a snapshot as of the instance's legacy_at).
-	// The running total: what the old table recorded for the device, plus what RemnaScope has seen
-	// since (which includes what the server's counters held when RemnaScope first looked).
+	// The running total: what the old table recorded for the device, plus what Owlery has seen
+	// since (which includes what the server's counters held when Owlery first looked).
 	TotalDownload int64      `json:"total_download"`
 	TotalUpload   int64      `json:"total_upload"`
 	TotalSince    *time.Time `json:"total_since"`

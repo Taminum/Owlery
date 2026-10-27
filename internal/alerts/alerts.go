@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 const (

@@ -3,9 +3,9 @@ package httpapi
 import (
 	"net/http"
 
-	"github.com/Taminum/RemnaScope/internal/auth"
-	"github.com/Taminum/RemnaScope/internal/live"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/auth"
+	"github.com/Taminum/Owlery/internal/live"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 type liveAgentOut struct {

@@ -1,4 +1,4 @@
--- RemnaScope 0022: security agents, snapshots and the security journal.
+-- Owlery 0022: security agents, snapshots and the security journal.
 --
 -- A security agent belongs to one VPS and has its own credential, separate from the Xray/router/AWG
 -- agents. It only reports; nothing is sent to it. Snapshots are state, so a missed one costs a gap in

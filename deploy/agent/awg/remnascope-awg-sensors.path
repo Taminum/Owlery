@@ -1,7 +1,7 @@
-# Starts remnascope-awg-sensors.service when the RemnaScope configuration directory changes, so that the traffic
+# Starts remnascope-awg-sensors.service when the Owlery configuration directory changes, so that the traffic
 # sensors follow the list of containers the container helper writes there.
 [Unit]
-Description=Watch the RemnaScope AmneziaWG configuration
+Description=Watch the Owlery AmneziaWG configuration
 
 [Path]
 PathChanged=/etc/remnascope

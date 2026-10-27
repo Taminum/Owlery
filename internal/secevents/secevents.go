@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/Taminum/RemnaScope/internal/secproto"
+	"github.com/Taminum/Owlery/internal/secproto"
 )
 
 const (

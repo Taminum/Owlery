@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/auth"
-	"github.com/Taminum/RemnaScope/internal/notify"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/auth"
+	"github.com/Taminum/Owlery/internal/notify"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 var (
@@ -130,7 +130,7 @@ func (s *Server) notifyCreate(w http.ResponseWriter, r *http.Request, a auth.Act
 	// It is only stored if a message actually reaches the chat.
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	if err := notify.Send(ctx, in.Token, in.ChatID, "RemnaScope: уведомления подключены. Сюда будут приходить оповещения и сводка."); err != nil {
+	if err := notify.Send(ctx, in.Token, in.ChatID, "Owlery: уведомления подключены. Сюда будут приходить оповещения и сводка."); err != nil {
 		s.notifyFailure(w, r, err)
 		return
 	}
@@ -263,7 +263,7 @@ func (s *Server) notifyTest(w http.ResponseWriter, r *http.Request, a auth.Actor
 	wk := &notify.Worker{Store: s.Store, Ring: s.Ring, Log: s.Log}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	if err := wk.SendTo(ctx, *ch, "RemnaScope: проверка уведомлений. Если вы это видите, всё работает."); err != nil {
+	if err := wk.SendTo(ctx, *ch, "Owlery: проверка уведомлений. Если вы это видите, всё работает."); err != nil {
 		s.notifyFailure(w, r, err)
 		return
 	}

@@ -1,4 +1,4 @@
-module github.com/Taminum/RemnaScope
+module github.com/Taminum/Owlery
 
 go 1.26.0
 

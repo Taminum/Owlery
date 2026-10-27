@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"net/netip"
 
-	"github.com/Taminum/RemnaScope/internal/auth"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/auth"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 // vpsByAddress tells which of the given IP addresses belong to a registered server the caller can see. It is

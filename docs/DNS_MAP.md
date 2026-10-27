@@ -6,7 +6,7 @@ of Network Intel: it makes the server send DNS queries into the world.
 
 ## What it is, and what it is not
 
-**It is not the zone.** Ordinary DNS queries cannot list every name in a zone, and RemnaScope does not try to
+**It is not the zone.** Ordinary DNS queries cannot list every name in a zone, and Owlery does not try to
 (no zone transfer, no guessing of subdomains). A map holds the *records it was able to observe*, for a set of
 names it knows about, and every screen says so ("известные имена, а не вся зона"). A name that is not in the map
 is not looked at, which is different from not existing.

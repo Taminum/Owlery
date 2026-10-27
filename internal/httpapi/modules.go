@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"slices"
 
-	"github.com/Taminum/RemnaScope/internal/auth"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/auth"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 // moduleList says which optional parts are on; every signed-in person needs it to draw the menu.

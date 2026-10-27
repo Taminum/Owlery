@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/secproto"
+	"github.com/Taminum/Owlery/internal/secproto"
 )
 
 // Result is what a command produced. Err is set when it could not be started at all.

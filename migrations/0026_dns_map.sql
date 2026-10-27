@@ -1,4 +1,4 @@
--- RemnaScope 0026: DNS Map, the publicly observable DNS records of a domain and how they change.
+-- Owlery 0026: DNS Map, the publicly observable DNS records of a domain and how they change.
 --
 -- A map holds what was observed for a domain and the names that were looked at; it is never the whole zone.
 -- A record set keeps the last complete and settled observation of it (values, result) next to the last

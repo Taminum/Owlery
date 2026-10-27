@@ -79,7 +79,7 @@ describe('network intelligence', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Запустить' }))
     expect(await screen.findByText('192.168.1.1')).toBeInTheDocument()
     expect(screen.getByText('нет ответа')).toBeInTheDocument()
-    expect(screen.getByText(/Это маршрут от сервера RemnaScope/)).toBeInTheDocument()
+    expect(screen.getByText(/Это маршрут от сервера Owlery/)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('tab', { name: 'TLS' }))
     await userEvent.click(screen.getByRole('button', { name: 'Запустить' }))
     expect(await screen.findByText(/Сертификат не прошёл проверку: выдан неизвестным центром/)).toBeInTheDocument()

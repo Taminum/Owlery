@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/awgops"
-	"github.com/Taminum/RemnaScope/internal/ingestproto"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/awgops"
+	"github.com/Taminum/Owlery/internal/ingestproto"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 const newKey = "NEWK111111111111111111111111111111111111111="

@@ -17,10 +17,10 @@ import (
 
 	"golang.org/x/time/rate"
 
-	"github.com/Taminum/RemnaScope/internal/remnawave"
-	"github.com/Taminum/RemnaScope/internal/safehttp"
-	"github.com/Taminum/RemnaScope/internal/secrets"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/remnawave"
+	"github.com/Taminum/Owlery/internal/safehttp"
+	"github.com/Taminum/Owlery/internal/secrets"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 // AdapterFactory builds the adapter for one panel. token is the decrypted API token;

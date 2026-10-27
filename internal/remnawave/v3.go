@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/safehttp"
+	"github.com/Taminum/Owlery/internal/safehttp"
 )
 
 // Paths from @remnawave/backend-contract 3.4.x.

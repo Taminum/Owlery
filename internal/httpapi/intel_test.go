@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/Taminum/RemnaScope/internal/netintel"
+	"github.com/Taminum/Owlery/internal/netintel"
 )
 
 type noDNS struct{}

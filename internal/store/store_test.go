@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/secrets"
-	"github.com/Taminum/RemnaScope/internal/store"
-	"github.com/Taminum/RemnaScope/internal/store/storetest"
-	"github.com/Taminum/RemnaScope/migrations"
+	"github.com/Taminum/Owlery/internal/secrets"
+	"github.com/Taminum/Owlery/internal/store"
+	"github.com/Taminum/Owlery/internal/store/storetest"
+	"github.com/Taminum/Owlery/migrations"
 )
 
 var ctx = context.Background()

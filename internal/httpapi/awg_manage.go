@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/auth"
-	"github.com/Taminum/RemnaScope/internal/awgops"
-	"github.com/Taminum/RemnaScope/internal/ingestproto"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/auth"
+	"github.com/Taminum/Owlery/internal/awgops"
+	"github.com/Taminum/Owlery/internal/ingestproto"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 var (
@@ -152,7 +152,7 @@ func (s *Server) awgRevoke(w http.ResponseWriter, r *http.Request, a auth.Actor,
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// awgRename changes only the name RemnaScope shows.
+// awgRename changes only the name Owlery shows.
 func (s *Server) awgRename(w http.ResponseWriter, r *http.Request, a auth.Actor, _ store.Session) {
 	if !a.IsOwner {
 		s.writeErr(w, r, http.StatusForbidden, "forbidden", "only the owner can rename devices")
@@ -183,8 +183,8 @@ const (
 	awgMaxExpiry = 5 * 365 * 24 * time.Hour
 )
 
-// awgSetLimits sets or clears a device's expiry date and traffic allowance. RemnaScope enforces them by
-// revoking the device on the host, so they only make sense on a server the host lets RemnaScope manage, and
+// awgSetLimits sets or clears a device's expiry date and traffic allowance. Owlery enforces them by
+// revoking the device on the host, so they only make sense on a server the host lets Owlery manage, and
 // only the owner may set them. A revoked device cannot be switched back on: it has to be created again.
 func (s *Server) awgSetLimits(w http.ResponseWriter, r *http.Request, a auth.Actor, _ store.Session) {
 	if !a.IsOwner {

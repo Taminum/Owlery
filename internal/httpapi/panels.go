@@ -10,11 +10,11 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/Taminum/RemnaScope/internal/auth"
-	"github.com/Taminum/RemnaScope/internal/remnawave"
-	"github.com/Taminum/RemnaScope/internal/safehttp"
-	"github.com/Taminum/RemnaScope/internal/store"
-	"github.com/Taminum/RemnaScope/internal/syncer"
+	"github.com/Taminum/Owlery/internal/auth"
+	"github.com/Taminum/Owlery/internal/remnawave"
+	"github.com/Taminum/Owlery/internal/safehttp"
+	"github.com/Taminum/Owlery/internal/store"
+	"github.com/Taminum/Owlery/internal/syncer"
 )
 
 // panelDTO is the only shape in which a panel leaves the server. It has no field

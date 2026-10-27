@@ -10,12 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/auth"
-	"github.com/Taminum/RemnaScope/internal/f2bhelper"
-	"github.com/Taminum/RemnaScope/internal/secagent"
-	"github.com/Taminum/RemnaScope/internal/seccollect"
-	"github.com/Taminum/RemnaScope/internal/secproto"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/auth"
+	"github.com/Taminum/Owlery/internal/f2bhelper"
+	"github.com/Taminum/Owlery/internal/secagent"
+	"github.com/Taminum/Owlery/internal/seccollect"
+	"github.com/Taminum/Owlery/internal/secproto"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 // banFake is a fail2ban-client with one jail whose banned list the test can see.

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 // majorMinor reads "3.1.20260812" as "3.1"; anything else gives "".

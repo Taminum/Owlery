@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/seccollect"
+	"github.com/Taminum/Owlery/internal/seccollect"
 )
 
 // fakeF2B behaves like fail2ban-client for one or two jails and records every command it was given.

@@ -12,9 +12,9 @@ import (
 
 	"golang.org/x/net/dns/dnsmessage"
 
-	"github.com/Taminum/RemnaScope/internal/dnsmap"
-	"github.com/Taminum/RemnaScope/internal/store"
-	"github.com/Taminum/RemnaScope/internal/store/storetest"
+	"github.com/Taminum/Owlery/internal/dnsmap"
+	"github.com/Taminum/Owlery/internal/store"
+	"github.com/Taminum/Owlery/internal/store/storetest"
 )
 
 // zoneState is the zone the fake network serves; the test changes it between runs.

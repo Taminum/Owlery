@@ -63,7 +63,7 @@ panel; all other writes 60/min per account.
 - **Backups.** The security tables are in the same database as everything else, so `backup.sh` covers them.
 - **Checkers.** A host whose agent runs with `-probe` is asked to make the external checks of the *other*
   servers, so that they are seen from outside. It is a decision per host (see SECURITY_AGENT.md); with none,
-  or when none qualifies, the RemnaScope server checks and the result is marked not independent.
+  or when none qualifies, the Owlery server checks and the result is marked not independent.
 - **Discovery.** TLS endpoints are found on their own where a certificate is presented. The port scan is off
   per server until someone turns it on; it tries a fixed list of about sixty ports on registered IP addresses
   once a day.

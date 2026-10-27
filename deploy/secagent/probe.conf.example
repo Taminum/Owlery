@@ -1,6 +1,6 @@
 # /etc/systemd/system/remnascope-secagent.service.d/probe.conf
 #
-# Makes this host a checker: the RemnaScope server may ask it to connect to a public TCP port or read a TLS
+# Makes this host a checker: the Owlery server may ask it to connect to a public TCP port or read a TLS
 # certificate. Copy the ExecStart of your own unit and add -probe; the empty ExecStart= line is required.
 [Service]
 ExecStart=

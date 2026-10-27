@@ -1,8 +1,14 @@
-# RemnaScope
+# Owlery
 
-Self-hosted monitoring for [Remnawave](https://github.com/remnawave) / Xray setups: traffic analytics over several
-independent panels and their nodes, the state of the servers they run on, AmneziaWG management, security and
-Telegram notifications, with honest attribution of what is measured and what is not.
+*Keeps watch over your servers while you sleep.*
+
+Self-hosted monitoring for a fleet of servers: what each machine is and how it is doing, its resources, security
+and alerts, with Telegram notifications. VPN setups are modules on top: traffic analytics over several
+[Remnawave](https://github.com/remnawave) / Xray panels and their nodes, and AmneziaWG management. It shows only what
+is really measured and says where each number comes from.
+
+> Owlery was called **RemnaScope** until October 2026. Old links to the repository redirect here; the agents keep
+> their `remnascope-*` names on the machines, so nothing needs reinstalling.
 
 > The interface is in **Russian** (all strings live in `apps/web/src/i18n`, so adding a language is a matter of
 > translating those files). Documentation is in English unless a file says otherwise. A short Russian guide is in
@@ -79,7 +85,7 @@ Also: [nodes](docs/screenshots/nodes.png), [panels](docs/screenshots/panels.png)
 You need a Linux server with Docker, a DNS name pointing at it, and ports 80/443 free (Caddy gets the certificate).
 
 ```bash
-git clone https://github.com/Taminum/RemnaScope.git && cd RemnaScope/deploy/prod
+git clone https://github.com/Taminum/Owlery.git && cd Owlery/deploy/prod
 sudo ./init-secrets.sh scope.example.com latest     # host name, release tag (latest or e.g. v0.3.2); creates secrets and .env, prints nothing
 sudo docker compose -f compose.prod.yml up -d       # pulls ghcr.io/taminum/remnascope-{api,web}
 sudo cat secrets/owner_password                     # sign in at https://scope.example.com as "owner"

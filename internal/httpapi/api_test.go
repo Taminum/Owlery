@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/demo"
-	"github.com/Taminum/RemnaScope/internal/remnawave"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/demo"
+	"github.com/Taminum/Owlery/internal/remnawave"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 // --- authentication, sessions, CSRF ------------------------------------------------

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/alerts"
+	"github.com/Taminum/Owlery/internal/alerts"
 )
 
 func TestBillsBelongToTheOwnerMoveOnWhenPaidAndRaiseAnAlertWhenDue(t *testing.T) {

@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/dnsmap"
-	"github.com/Taminum/RemnaScope/internal/netintel"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/dnsmap"
+	"github.com/Taminum/Owlery/internal/netintel"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 const (

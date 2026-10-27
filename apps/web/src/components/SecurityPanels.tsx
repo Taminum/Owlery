@@ -456,8 +456,8 @@ export function AgentCard({ vpsId, canEdit }: { vpsId: string; canEdit: boolean 
             <p>{t('sec.onb.s3')}</p>
             <Code>{`cd /tmp
 case "$(uname -m)" in x86_64) A=amd64 ;; aarch64) A=arm64 ;; *) echo "unsupported processor"; exit 1 ;; esac
-curl -fLO https://github.com/Taminum/RemnaScope/releases/latest/download/remnascope-secagent-linux-$A
-curl -fLO https://github.com/Taminum/RemnaScope/releases/latest/download/remnascope-deploy-files.tar.gz
+curl -fLO https://github.com/Taminum/Owlery/releases/latest/download/remnascope-secagent-linux-$A
+curl -fLO https://github.com/Taminum/Owlery/releases/latest/download/remnascope-deploy-files.tar.gz
 tar -xzf remnascope-deploy-files.tar.gz`}</Code>
             <p>{t('sec.onb.s4')}</p>
             <Code>{`install -m 0755 remnascope-secagent-linux-$A /usr/local/bin/remnascope-secagent

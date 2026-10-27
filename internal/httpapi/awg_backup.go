@@ -14,9 +14,9 @@ import (
 
 	"golang.org/x/crypto/argon2"
 
-	"github.com/Taminum/RemnaScope/internal/auth"
-	"github.com/Taminum/RemnaScope/internal/ingestproto"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/auth"
+	"github.com/Taminum/Owlery/internal/ingestproto"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 // A backup file is "RSAWGB1\n" + salt(16) + nonce(12) + AES-256-GCM(JSON of the files). The key comes from the
@@ -62,7 +62,7 @@ func awgBackupSeal(files []ingestproto.AWGFile, pass string) ([]byte, error) {
 func awgBackupOpen(blob []byte, pass string) ([]ingestproto.AWGFile, error) {
 	n := len(awgBackupMagic)
 	if len(blob) < n+16+12+16 || string(blob[:n]) != awgBackupMagic {
-		return nil, errors.New("this is not a RemnaScope backup")
+		return nil, errors.New("this is not a Owlery backup")
 	}
 	salt, nonce, ct := blob[n:n+16], blob[n+16:n+28], blob[n+28:]
 	gcm, err := awgBackupGCM(pass, salt)
@@ -75,7 +75,7 @@ func awgBackupOpen(blob []byte, pass string) ([]ingestproto.AWGFile, error) {
 	}
 	var files []ingestproto.AWGFile
 	if json.Unmarshal(plain, &files) != nil || len(files) == 0 || len(files) > len(ingestproto.AWGFileNames) {
-		return nil, errors.New("this is not a RemnaScope backup")
+		return nil, errors.New("this is not a Owlery backup")
 	}
 	return files, nil
 }
@@ -195,7 +195,7 @@ func (s *Server) awgRestore(w http.ResponseWriter, r *http.Request, a auth.Actor
 	}
 	blob, err := base64.StdEncoding.DecodeString(in.Backup)
 	if err != nil {
-		s.writeErr(w, r, http.StatusUnprocessableEntity, "bad_backup", "this is not a RemnaScope backup")
+		s.writeErr(w, r, http.StatusUnprocessableEntity, "bad_backup", "this is not a Owlery backup")
 		return
 	}
 	files, err := awgBackupOpen(blob, in.Passphrase)

@@ -1,5 +1,5 @@
 [Unit]
-Description=RemnaScope: refresh the list of running containers
+Description=Owlery: refresh the list of running containers
 
 [Timer]
 OnBootSec=20s

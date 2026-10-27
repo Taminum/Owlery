@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/secprobe"
+	"github.com/Taminum/Owlery/internal/secprobe"
 )
 
 // allowLoopback lets the checker dial the test servers, then puts the real rule back.

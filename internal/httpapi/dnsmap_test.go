@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/alerts"
-	"github.com/Taminum/RemnaScope/internal/auth"
-	"github.com/Taminum/RemnaScope/internal/dnsmap"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/alerts"
+	"github.com/Taminum/Owlery/internal/auth"
+	"github.com/Taminum/Owlery/internal/dnsmap"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 type dnsMapResp struct {

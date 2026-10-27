@@ -16,10 +16,10 @@ import (
 
 	"golang.org/x/net/publicsuffix"
 
-	"github.com/Taminum/RemnaScope/internal/site"
+	"github.com/Taminum/Owlery/internal/site"
 )
 
-// Category is one of the categories RemnaScope already has. The model is shown the number and the
+// Category is one of the categories Owlery already has. The model is shown the number and the
 // name and answers with the number; it cannot create a category.
 type Category struct {
 	ID   int

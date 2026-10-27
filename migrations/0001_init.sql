@@ -1,4 +1,4 @@
--- RemnaScope 0001: multi-panel from the very first migration.
+-- Owlery 0001: multi-panel from the very first migration.
 -- Isolation is enforced in the schema too: every child row carries panel_id and
 -- references its parent through a composite (panel_id, id) key, so a node, user
 -- or agent from one panel can never be linked to another panel's rows.

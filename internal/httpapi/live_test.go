@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/ingestproto"
-	"github.com/Taminum/RemnaScope/internal/live"
+	"github.com/Taminum/Owlery/internal/ingestproto"
+	"github.com/Taminum/Owlery/internal/live"
 )
 
 type liveResp struct {

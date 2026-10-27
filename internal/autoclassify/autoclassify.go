@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/classify"
-	"github.com/Taminum/RemnaScope/internal/gemini"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/classify"
+	"github.com/Taminum/Owlery/internal/gemini"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 const (
@@ -31,7 +31,7 @@ var (
 	ErrNoSites = errors.New("autoclassify: there are no unknown domains to look at")
 )
 
-// Categories numbers the categories RemnaScope has, in a stable order, for the prompt.
+// Categories numbers the categories Owlery has, in a stable order, for the prompt.
 func Categories(names []string) []classify.Category {
 	sorted := append([]string(nil), names...)
 	sort.Strings(sorted)

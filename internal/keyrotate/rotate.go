@@ -5,8 +5,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/Taminum/RemnaScope/internal/secrets"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/secrets"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 type Result struct {

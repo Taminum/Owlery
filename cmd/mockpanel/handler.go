@@ -85,7 +85,7 @@ func user(id int, name, status string) map[string]any {
 func uid(prefix string, n int) string { return fmt.Sprintf("%s-0000-4000-8000-%012d", prefix, n) }
 
 // specs returns the two demo panels. They share some remote UUIDs and user names on
-// purpose: RemnaScope must keep them apart.
+// purpose: Owlery must keep them apart.
 func specs(homeToken, workToken string) (home, work spec) {
 	home = spec{Name: "mock-home", Token: homeToken,
 		Nodes: []map[string]any{

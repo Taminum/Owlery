@@ -21,7 +21,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/seccollect"
+	"github.com/Taminum/Owlery/internal/seccollect"
 )
 
 // Operations the helper offers. There are no others.

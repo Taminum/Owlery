@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/auth"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/auth"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 const sourcePanelCounters = "panel_api_counters"

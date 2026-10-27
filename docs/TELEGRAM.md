@@ -1,12 +1,12 @@
 # Telegram: notifications and bot commands
 
-RemnaScope can tell you what is wrong, and answer when you ask, through a Telegram bot of your own.
+Owlery can tell you what is wrong, and answer when you ask, through a Telegram bot of your own.
 It talks to `api.telegram.org` only (outbound, no webhook, nothing to open on the server).
 
 ## Connect a bot
 1. In Telegram, ask `@BotFather` for a new bot (`/newbot`) and copy the token.
 2. Open your bot and press **Start** (the bot cannot write to a chat that never wrote to it).
-3. In RemnaScope: **Settings → Notifications**. Paste the token, press *Find the chat*, pick yours, and connect.
+3. In Owlery: **Settings → Notifications**. Paste the token, press *Find the chat*, pick yours, and connect.
    A channel is saved only after a test message really reached the chat.
 4. The token and the chat id are encrypted with the master key like a panel token. The page never gets them back:
    it shows only the end of the chat id and how the last send went.

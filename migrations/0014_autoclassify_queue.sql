@@ -1,4 +1,4 @@
--- RemnaScope 0014: automatic classification, stage B (queue, worker, auto rules, budget).
+-- Owlery 0014: automatic classification, stage B (queue, worker, auto rules, budget).
 --
 -- An automatic result is an ordinary row of service_rules with source 'auto' and rule_version 0, the
 -- lowest version there is: a built-in rule (1) or a custom rule (1000) for the same pattern always wins
@@ -19,7 +19,7 @@ ALTER TABLE autoclassify_settings ADD COLUMN IF NOT EXISTS last_error_at     tim
 ALTER TABLE autoclassify_settings ADD COLUMN IF NOT EXISTS backfill_state    text NOT NULL DEFAULT 'idle' CHECK (backfill_state IN ('idle', 'running', 'done'));
 ALTER TABLE autoclassify_settings ADD COLUMN IF NOT EXISTS backfill_started_at timestamptz;
 
--- One job per canonical domain. Rules are global in RemnaScope, so the queue is too.
+-- One job per canonical domain. Rules are global in Owlery, so the queue is too.
 CREATE TABLE classify_jobs (
     domain          text PRIMARY KEY,
     state           text        NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'running', 'retry', 'done', 'undetermined', 'failed', 'skipped')),

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 func TestToolsMismatchComparesTheGenerationAndNeedsBothVersions(t *testing.T) {

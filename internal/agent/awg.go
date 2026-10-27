@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/ingestproto"
+	"github.com/Taminum/Owlery/internal/ingestproto"
 )
 
 // SnapshotCommandOutputLimit caps what is read from the helper: a snapshot is a few kilobytes.

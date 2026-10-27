@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/auth"
+	"github.com/Taminum/Owlery/internal/auth"
 )
 
 type mfaCtx struct {
@@ -53,7 +53,7 @@ func enableMFA(t *testing.T) (*mfaCtx, *client) {
 		URI    string `json:"uri"`
 	}
 	_ = json.Unmarshal(b, &setup)
-	if st != 200 || !strings.HasPrefix(setup.URI, "otpauth://totp/RemnaScope:owner?") || setup.Secret == "" {
+	if st != 200 || !strings.HasPrefix(setup.URI, "otpauth://totp/Owlery:owner?") || setup.Secret == "" {
 		t.Fatalf("setup: %d %s", st, b)
 	}
 	var err error

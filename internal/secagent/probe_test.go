@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Taminum/RemnaScope/internal/secprobe"
-	"github.com/Taminum/RemnaScope/internal/secproto"
+	"github.com/Taminum/Owlery/internal/secprobe"
+	"github.com/Taminum/Owlery/internal/secproto"
 )
 
 func TestProbeRefusesWhatItShouldNotRun(t *testing.T) {

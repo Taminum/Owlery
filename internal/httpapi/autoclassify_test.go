@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/autoclassify"
-	"github.com/Taminum/RemnaScope/internal/gemini"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/autoclassify"
+	"github.com/Taminum/Owlery/internal/gemini"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 const apiTestKey = "AIzaHTTPTESTKEY0123456789abcdef"

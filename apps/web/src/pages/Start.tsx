@@ -25,7 +25,7 @@ interface Step {
   docs?: { href: string; label: MsgKey }
 }
 
-const DOCS = 'https://github.com/Taminum/RemnaScope/blob/master/docs/'
+const DOCS = 'https://github.com/Taminum/Owlery/blob/master/docs/'
 
 export function steps(c: Counts, mfa: boolean): Step[] {
   const pick = (done: boolean, partial = false): State => (done ? 'done' : partial ? 'partial' : 'todo')

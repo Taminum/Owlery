@@ -1,4 +1,4 @@
--- RemnaScope 0021: the VPS as the unit of security.
+-- Owlery 0021: the VPS as the unit of security.
 --
 -- A VPS is not a panel and not a node: one server can hold a panel, several nodes, AmneziaWG and
 -- anything else. It exists on its own (created by hand) and may be linked to panels or nodes the

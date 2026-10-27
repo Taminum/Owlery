@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/notify"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/notify"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 func TestABlipThatClosesWithinTheGraceNeverShowsOrNotifies(t *testing.T) {

@@ -11,11 +11,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Taminum/RemnaScope/internal/auth"
-	"github.com/Taminum/RemnaScope/internal/f2bhelper"
-	"github.com/Taminum/RemnaScope/internal/safehttp"
-	"github.com/Taminum/RemnaScope/internal/secproto"
-	"github.com/Taminum/RemnaScope/internal/store"
+	"github.com/Taminum/Owlery/internal/auth"
+	"github.com/Taminum/Owlery/internal/f2bhelper"
+	"github.com/Taminum/Owlery/internal/safehttp"
+	"github.com/Taminum/Owlery/internal/secproto"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 // commandTTL is how long the agent has, from receiving a command, to start it, and how long the server waits
