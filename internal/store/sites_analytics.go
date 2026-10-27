@@ -21,7 +21,7 @@ func visitsCTE() string {
   SELECT ev.site, ev.w, ev.src, ev.ukey, ev.dev, ev.host, ev.ip, ev.bytes, ev.rtr, ev.ts, lag(ev.ts) OVER (PARTITION BY ev.ukey, ev.site ORDER BY ev.ts) AS prev
   FROM ev WHERE ev.site IS NOT NULL AND ev.site !~ '^[0-9]+(\.[0-9]+){3}$' AND position(':' IN ev.site) = 0
 ), sites AS (SELECT DISTINCT site AS name FROM c),
-cls AS (SELECT s.name, r.service, r.confidence, r.category, r.source, r.score FROM sites s ` + ruleMatch("s.name") + `)`
+cls AS MATERIALIZED (SELECT s.name, r.service, r.confidence, r.category, r.source, r.score FROM sites s ` + ruleMatch("s.name") + `)`
 }
 
 const isVisit = `(c.prev IS NULL OR c.ts - c.prev > make_interval(secs => 1800))`
