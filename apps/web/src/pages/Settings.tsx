@@ -14,9 +14,10 @@ import { Card, Chip } from '../components/ui'
 import AutoClassify from './AutoClassify'
 import { Field, GhostButton, Modal, PrimaryButton, inputCls } from '../components/Modal'
 import { NotifyTab } from '../components/NotifyTab'
+import { ModulesTab } from '../components/ModulesTab'
 import { AppearanceTab } from '../ember/AppearanceTab'
 
-type Tab = 'profile' | 'accounts' | 'rules' | 'autoclassify' | 'notify' | 'appearance' | 'audit'
+type Tab = 'profile' | 'accounts' | 'modules' | 'rules' | 'autoclassify' | 'notify' | 'appearance' | 'audit'
 
 export default function Settings() {
   const { state } = useAuth()
@@ -28,6 +29,7 @@ export default function Settings() {
   const tabs: { id: Tab; label: MsgKey; show: boolean }[] = [
     { id: 'profile', label: 'settings.tab.profile', show: true },
     { id: 'accounts', label: 'settings.tab.accounts', show: owner },
+    { id: 'modules', label: 'settings.tab.modules', show: owner },
     { id: 'rules', label: 'settings.tab.rules', show: owner },
     { id: 'autoclassify', label: 'settings.tab.autoclassify', show: owner },
     { id: 'notify', label: 'settings.tab.notify', show: owner },
@@ -48,6 +50,7 @@ export default function Settings() {
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
         {tab === 'profile' && <Profile />}
         {tab === 'accounts' && owner && <Accounts />}
+        {tab === 'modules' && owner && <ModulesTab />}
         {tab === 'rules' && owner && <RulesTab />}
         {tab === 'autoclassify' && owner && <AutoClassify />}
         {tab === 'notify' && owner && <NotifyTab />}

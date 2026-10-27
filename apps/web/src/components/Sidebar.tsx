@@ -5,29 +5,43 @@ import { api } from '../lib/api'
 import { useLoad } from '../hooks/useLoad'
 import type { AlertsResponse } from '../lib/types'
 import { useAuth } from '../lib/auth'
+import { useModulesOff, type ModuleId } from '../lib/modules'
 
-interface Item { to: string; key: MsgKey; icon: LucideIcon; disabled?: boolean }
+interface Item { to: string; key: MsgKey; icon: LucideIcon; disabled?: boolean; module?: ModuleId; owner?: boolean }
+interface Section { key: MsgKey; items: Item[] }
 
-const MAIN: Item[] = [
-  { to: '/', key: 'nav.overview', icon: LayoutDashboard },
-  { to: '/digest', key: 'nav.digest', icon: History },
-  { to: '/live', key: 'nav.live', icon: Radio },
-  { to: '/servers', key: 'nav.servers', icon: HardDrive },
-  { to: '/traffic', key: 'nav.traffic', icon: BarChart3 },
-  { to: '/sites', key: 'nav.sites', icon: Compass },
-  { to: '/domains', key: 'nav.domains', icon: Globe2 },
-  { to: '/users', key: 'nav.users', icon: Users },
-  { to: '/awg', key: 'nav.awg', icon: Shield },
-  { to: '/security', key: 'nav.security', icon: ShieldCheck },
-  { to: '/intel', key: 'nav.intel', icon: Telescope },
-  { to: '/nodes', key: 'nav.nodes', icon: Server },
-  { to: '/hosts', key: 'nav.hosts', icon: Cpu },
-  { to: '/channels', key: 'nav.channels', icon: Gauge },
-  { to: '/devices', key: 'nav.devices', icon: Laptop },
-  { to: '/panels', key: 'nav.panels', icon: Waypoints },
-  { to: '/billing', key: 'nav.billing', icon: Wallet },
-  { to: '/start', key: 'nav.start', icon: Rocket },
-  { to: '/alerts', key: 'nav.alerts', icon: Bell },
+// The menu by sections. An item of a module that is off is not shown, and a section left empty disappears with it.
+// Addresses never change, so old links and bookmarks keep working.
+const SECTIONS: Section[] = [
+  { key: 'nav.section.summary', items: [
+    { to: '/', key: 'nav.overview', icon: LayoutDashboard },
+    { to: '/digest', key: 'nav.digest', icon: History, module: 'remnawave' },
+    { to: '/live', key: 'nav.live', icon: Radio, module: 'remnawave' },
+  ] },
+  { key: 'nav.section.servers', items: [
+    { to: '/servers', key: 'nav.servers', icon: HardDrive },
+    { to: '/hosts', key: 'nav.hosts', icon: Cpu },
+    { to: '/security', key: 'nav.security', icon: ShieldCheck, module: 'security' },
+    { to: '/channels', key: 'nav.channels', icon: Gauge, module: 'remnawave' },
+  ] },
+  { key: 'nav.section.traffic', items: [
+    { to: '/traffic', key: 'nav.traffic', icon: BarChart3, module: 'remnawave' },
+    { to: '/sites', key: 'nav.sites', icon: Compass, module: 'remnawave' },
+    { to: '/domains', key: 'nav.domains', icon: Globe2, module: 'remnawave' },
+    { to: '/users', key: 'nav.users', icon: Users, module: 'remnawave' },
+    { to: '/devices', key: 'nav.devices', icon: Laptop, module: 'remnawave' },
+    { to: '/nodes', key: 'nav.nodes', icon: Server, module: 'remnawave' },
+  ] },
+  { key: 'nav.section.vpn', items: [
+    { to: '/panels', key: 'nav.panels', icon: Waypoints, module: 'remnawave' },
+    { to: '/awg', key: 'nav.awg', icon: Shield, module: 'awg' },
+  ] },
+  { key: 'nav.section.intel', items: [{ to: '/intel', key: 'nav.intel', icon: Telescope, module: 'intel' }] },
+  { key: 'nav.section.money', items: [{ to: '/billing', key: 'nav.billing', icon: Wallet, module: 'billing', owner: true }] },
+  { key: 'nav.section.system', items: [
+    { to: '/alerts', key: 'nav.alerts', icon: Bell },
+    { to: '/start', key: 'nav.start', icon: Rocket, owner: true },
+  ] },
 ]
 
 /** How many alerts are open right now; checked once a minute. */
@@ -41,7 +55,7 @@ function NavItem({ item, onNavigate }: { item: Item; onNavigate: () => void }) {
   const alerts = useOpenAlerts(item.to === '/alerts' && !item.disabled)
   const badge = item.to === '/alerts' ? alerts : 0
   const Icon = item.icon
-  const base = 'flex h-11 items-center gap-3 rounded-control px-3 text-[14px]'
+  const base = 'flex h-9 items-center gap-3 rounded-control px-3 text-[14px]'
   if (item.disabled) {
     return (
       <span aria-disabled="true" className={`${base} cursor-not-allowed text-muted/60`}>
@@ -64,6 +78,7 @@ function NavItem({ item, onNavigate }: { item: Item; onNavigate: () => void }) {
 export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { state: auth } = useAuth()
   const owner = auth.status === 'authed' && auth.me.account.is_owner
+  const off = useModulesOff()
   return (
     <>
       {open && <div className="fixed inset-0 z-30 bg-black/60 lg:hidden" onClick={onClose} aria-hidden />}
@@ -77,8 +92,17 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
             <X size={18} aria-hidden />
           </button>
         </div>
-        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2">
-          {MAIN.filter((i) => owner || (i.to !== '/billing' && i.to !== '/start')).map((i) => <NavItem key={i.to} item={i} onNavigate={onClose} />)}
+        <nav className="flex-1 overflow-y-auto px-3 py-1">
+          {SECTIONS.map((sec) => {
+            const items = sec.items.filter((i) => (owner || !i.owner) && !(i.module && off.has(i.module)))
+            if (items.length === 0) return null
+            return (
+              <div key={sec.key} className="pb-2">
+                <div className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted/80">{t(sec.key)}</div>
+                <div className="space-y-0.5">{items.map((i) => <NavItem key={i.to} item={i} onNavigate={onClose} />)}</div>
+              </div>
+            )
+          })}
         </nav>
         <div className="border-t border-line p-3">
           <NavItem item={{ to: '/settings', key: 'nav.settings', icon: Settings }} onNavigate={onClose} />
