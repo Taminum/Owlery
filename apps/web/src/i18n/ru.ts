@@ -10,6 +10,7 @@ import { billingText } from './ru.billing'
 import { hostsText } from './ru.hosts'
 import { notifyTuneText } from './ru.notifytune'
 import { startText } from './ru.start'
+import { serversText } from './ru.servers'
 // All UI text lives here so a second locale can be added without touching components.
 const base = {
   'app.name': 'RemnaScope',
@@ -147,6 +148,6 @@ const base = {
   'a11y.statusLag': 'отстаёт',
 } as const
 
-export const ru = { ...base, ...m1, ...intel, ...intel2, ...awgText, ...securityText, ...dnsText, ...digestText, ...kawaiiText, ...billingText, ...hostsText, ...notifyTuneText, ...startText } as const
+export const ru = { ...base, ...m1, ...intel, ...intel2, ...awgText, ...securityText, ...dnsText, ...digestText, ...kawaiiText, ...billingText, ...hostsText, ...notifyTuneText, ...startText, ...serversText } as const
 
 export type MsgKey = keyof typeof ru

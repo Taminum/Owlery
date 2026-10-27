@@ -43,7 +43,23 @@ type VPS struct {
 	// addresses once a day, and what answers becomes a port endpoint that is not expected.
 	DiscoveryScan   bool       `json:"discovery_scan"`
 	DiscoveryScanAt *time.Time `json:"discovery_scan_at"`
+	Inventory
 }
+
+// Inventory is what a person says about a server: its roles, system, provider, place, group and labels.
+type Inventory struct {
+	Roles       []string   `json:"roles"`
+	OS          string     `json:"os"`
+	Provider    string     `json:"provider"`
+	Country     string     `json:"country"`
+	City        string     `json:"city"`
+	Group       string     `json:"group"`
+	Tags        []string   `json:"tags"`
+	PurchasedOn *time.Time `json:"purchased_on"`
+}
+
+// ServerRoles are the roles a server may have, in the order they are shown.
+var ServerRoles = []string{"entry", "exit", "panel", "service", "workstation", "home", "hypervisor", "router"}
 
 type VPSPatch struct {
 	Name          *string
@@ -51,6 +67,7 @@ type VPSPatch struct {
 	Enabled       *bool
 	Addresses     *[]VPSAddress // replaces the whole set
 	DiscoveryScan *bool
+	Inventory     *Inventory // replaces the whole inventory
 }
 
 // vpsVisible is the predicate every VPS read shares: the server is not archived and the actor is the
@@ -63,12 +80,14 @@ func vpsVisible(sc Scope, n int) (string, []any) {
 		strconv.Itoa(n+1) + `::uuid[]))`, []any{uuids(sc.IDs)}
 }
 
-const vpsCols = `v.id, v.name, v.origin, v.enabled, v.note, v.created_at, v.updated_at, v.discovery_scan, v.discovery_scan_at`
+const vpsCols = `v.id, v.name, v.origin, v.enabled, v.note, v.created_at, v.updated_at, v.discovery_scan, v.discovery_scan_at,
+	v.roles, v.os, v.provider, v.country, v.city, v.grp, v.tags, v.purchased_on`
 
 func scanVPS(r pgx.Row) (VPS, error) {
 	var v VPS
 	var id uuid.UUID
-	err := r.Scan(&id, &v.Name, &v.Origin, &v.Enabled, &v.Note, &v.CreatedAt, &v.UpdatedAt, &v.DiscoveryScan, &v.DiscoveryScanAt)
+	err := r.Scan(&id, &v.Name, &v.Origin, &v.Enabled, &v.Note, &v.CreatedAt, &v.UpdatedAt, &v.DiscoveryScan, &v.DiscoveryScanAt,
+		&v.Roles, &v.OS, &v.Provider, &v.Country, &v.City, &v.Group, &v.Tags, &v.PurchasedOn)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return v, ErrNotFound
 	}
@@ -237,6 +256,12 @@ func (s *Store) updateVPS(ctx context.Context, sc Scope, u uuid.UUID, p VPSPatch
 		if tag.RowsAffected() == 0 {
 			return ErrNotFound
 		}
+		if in := p.Inventory; in != nil {
+			if _, err := tx.Exec(ctx, `UPDATE security_vps SET roles=$2, os=$3, provider=$4, country=$5, city=$6, grp=$7, tags=$8, purchased_on=$9 WHERE id=$1`,
+				u, nonNil(in.Roles), in.OS, in.Provider, in.Country, in.City, in.Group, nonNil(in.Tags), in.PurchasedOn); err != nil {
+				return err
+			}
+		}
 		if p.Addresses != nil {
 			return replaceVPSAddresses(ctx, tx, u, *p.Addresses)
 		}
@@ -394,4 +419,11 @@ func (s *Store) VPSByAddresses(ctx context.Context, sc Scope, addrs []string) (m
 		}
 	}
 	return out, rows.Err()
+}
+
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }
