@@ -24,7 +24,9 @@ type AnalyticsQuery struct {
 	Category    string  // only traffic of this category (host-level rule)
 	Service     string  // only traffic of this service (host-level rule)
 	Zone        string  // "" | "ru" (.ru .su .рф) | "other": only for the sites view
-	NewOnly     bool    // only sites that nobody in scope had visited before the range started
+	Sort        string  // sites view: a key of SiteSorts
+	Desc        bool
+	NewOnly     bool // only sites that nobody in scope had visited before the range started
 }
 
 func (q AnalyticsQuery) args() []any {

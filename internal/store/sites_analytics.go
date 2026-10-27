@@ -1,8 +1,11 @@
 package store
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -52,25 +55,83 @@ func (s *Store) Sites(ctx context.Context, q AnalyticsQuery) (rows []SiteRow, gr
 	if q.Limit <= 0 || q.Limit > 200 {
 		q.Limit = 50
 	}
-	key := fmt.Sprint(append(q.args7(), escapedLike(q.Search), q.Limit, q.Offset, q.Category, q.Zone, q.NewOnly)...)
-	sitesCache.Lock()
-	if e, ok := sitesCache.m[key]; ok && time.Since(e.at) < catCacheTTL {
-		sitesCache.Unlock()
-		return e.rows, e.groups, e.total, nil
-	}
-	sitesCache.Unlock()
-	rows, groups, total, err = s.sites(ctx, q)
+	all, err := s.allSites(ctx, q)
 	if err != nil {
 		return nil, 0, 0, err
 	}
-	sitesCache.Lock()
-	if len(sitesCache.m) > 64 {
-		sitesCache.m = map[string]sitesEntry{}
+	needle := strings.ToLower(strings.TrimSpace(q.Search))
+	var list []SiteRow
+	for _, r := range all {
+		if needle != "" && !strings.Contains(strings.ToLower(r.Site), needle) && !strings.Contains(strings.ToLower(r.Service), needle) {
+			continue
+		}
+		if q.Category != "" {
+			cat := r.Category
+			if cat == "" {
+				cat = UncategorisedLabel
+			}
+			if cat != q.Category {
+				continue
+			}
+		}
+		if q.Zone != "" && (q.Zone == "ru") != r.RU {
+			continue
+		}
+		list = append(list, r)
+		total += r.Connections
 	}
-	sitesCache.m[key] = sitesEntry{rows: rows, groups: groups, total: total, at: time.Now()}
-	sitesCache.Unlock()
-	return rows, groups, total, nil
+	groups = len(list)
+	sortSites(list, q.Sort, q.Desc)
+	if q.Offset >= len(list) {
+		return []SiteRow{}, groups, total, nil
+	}
+	end := q.Offset + q.Limit
+	if end > len(list) {
+		end = len(list)
+	}
+	return list[q.Offset:end], groups, total, nil
 }
+
+// SiteSorts are the columns the Sites table can be ordered by.
+var SiteSorts = map[string]func(a, b *SiteRow) int{
+	"site":        func(a, b *SiteRow) int { return strings.Compare(strings.ToLower(a.Site), strings.ToLower(b.Site)) },
+	"category":    func(a, b *SiteRow) int { return strings.Compare(a.Category, b.Category) },
+	"visits":      func(a, b *SiteRow) int { return a.Visits - b.Visits },
+	"connections": func(a, b *SiteRow) int { return a.Connections - b.Connections },
+	"users":       func(a, b *SiteRow) int { return a.Users - b.Users },
+	"devices":     func(a, b *SiteRow) int { return a.Devices - b.Devices },
+	"hosts":       func(a, b *SiteRow) int { return a.Hosts - b.Hosts },
+	"bytes":       func(a, b *SiteRow) int { return cmp.Compare(a.Bytes, b.Bytes) },
+	"blocked":     func(a, b *SiteRow) int { return a.Blocked - b.Blocked },
+	"warp":        func(a, b *SiteRow) int { return a.Warp - b.Warp },
+	"last":        func(a, b *SiteRow) int { return a.Last.Compare(b.Last) },
+}
+
+func sortSites(list []SiteRow, by string, desc bool) {
+	f, ok := SiteSorts[by]
+	if !ok {
+		f, desc = SiteSorts["connections"], true
+	}
+	sort.SliceStable(list, func(i, j int) bool {
+		if c := f(&list[i], &list[j]); c != 0 {
+			if desc {
+				return c > 0
+			}
+			return c < 0
+		}
+		return list[i].Site < list[j].Site
+	})
+}
+
+type sitesEntry struct {
+	rows []SiteRow
+	at   time.Time
+}
+
+var sitesCache = struct {
+	sync.Mutex
+	m map[string]sitesEntry
+}{m: map[string]sitesEntry{}}
 
 // dropAnalyticsCache forgets the cached Sites and category summaries; they depend on the rules, so any rule change calls it.
 func dropAnalyticsCache() {
@@ -82,22 +143,31 @@ func dropAnalyticsCache() {
 	catCache.Unlock()
 }
 
-type sitesEntry struct {
-	rows          []SiteRow
-	groups, total int
-	at            time.Time
+// allSites is every site of the scope and range with its figures, not narrowed by search, category or zone, and kept
+// for catCacheTTL: filtering, ordering and paging are done on this list, so none of them touches the events again.
+func (s *Store) allSites(ctx context.Context, q AnalyticsQuery) ([]SiteRow, error) {
+	key := fmt.Sprint(append(q.args7(), q.NewOnly)...)
+	sitesCache.Lock()
+	if e, ok := sitesCache.m[key]; ok && time.Since(e.at) < catCacheTTL {
+		sitesCache.Unlock()
+		return e.rows, nil
+	}
+	sitesCache.Unlock()
+	rows, err := s.sites(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	sitesCache.Lock()
+	if len(sitesCache.m) > 64 {
+		sitesCache.m = map[string]sitesEntry{}
+	}
+	sitesCache.m[key] = sitesEntry{rows: rows, at: time.Now()}
+	sitesCache.Unlock()
+	return rows, nil
 }
 
-var sitesCache = struct {
-	sync.Mutex
-	m map[string]sitesEntry
-}{m: map[string]sitesEntry{}}
-
-func (s *Store) sites(ctx context.Context, q AnalyticsQuery) (rows []SiteRow, groups, total int, err error) {
-	if q.Limit <= 0 || q.Limit > 200 {
-		q.Limit = 50
-	}
-	args := append(q.args7(), escapedLike(q.Search), q.Limit, q.Offset, q.Category, q.Zone, q.NewOnly)
+func (s *Store) sites(ctx context.Context, q AnalyticsQuery) ([]SiteRow, error) {
+	args := append(q.args7(), q.NewOnly)
 	// What the nodes did with the traffic comes from their own log lines. It is counted apart from
 	// the unioned events: for a user a router agent stands for, the nodes' copy is hidden from the
 	// counts above (it would be counted twice) but still says what the node did with it.
@@ -110,9 +180,9 @@ func (s *Store) sites(ctx context.Context, q AnalyticsQuery) (rows []SiteRow, gr
   GROUP BY e.site
 ), fs AS (
   SELECT x.site, min(x.ts) AS first_ever FROM (
-    SELECT e.site, e.ts FROM connection_events e WHERE $13::bool AND e.panel_id = ANY($1::uuid[]) AND e.site IS NOT NULL
+    SELECT e.site, e.ts FROM connection_events e WHERE $8::bool AND e.panel_id = ANY($1::uuid[]) AND e.site IS NOT NULL
     UNION ALL
-    SELECT d.site, d.started_at FROM device_connections d WHERE $13::bool AND d.panel_id = ANY($1::uuid[]) AND d.site IS NOT NULL
+    SELECT d.site, d.started_at FROM device_connections d WHERE $8::bool AND d.panel_id = ANY($1::uuid[]) AND d.site IS NOT NULL
   ) x GROUP BY x.site
 ), agg AS (
   SELECT c.site, sum(c.w)::bigint AS conns, count(*) FILTER (WHERE ` + isVisit + ` AND c.src <> 'awg') AS visits, count(DISTINCT c.ukey) AS users,
@@ -121,32 +191,27 @@ func (s *Store) sites(ctx context.Context, q AnalyticsQuery) (rows []SiteRow, gr
   FROM c GROUP BY c.site
 )
 SELECT a.site, COALESCE(k.service,''), COALESCE(k.confidence,''), COALESCE(k.category,''), COALESCE(k.source,''), COALESCE(k.score,0), a.conns, a.visits, a.users, a.devices, a.hosts, a.bytes, a.rconns, a.first, a.last, a.srcs,
-       a.site ` + ruZone + `, COALESCE(o.blocked, 0), COALESCE(o.warp, 0), count(*) OVER (), sum(a.conns) OVER ()
+       a.site ` + ruZone + `, COALESCE(o.blocked, 0), COALESCE(o.warp, 0)
 FROM agg a JOIN cls k ON k.name = a.site LEFT JOIN oc o ON o.site = a.site LEFT JOIN fs ON fs.site = a.site
-WHERE (a.site ILIKE $8 ESCAPE '\' OR COALESCE(k.service,'') ILIKE $8 ESCAPE '\')
-  AND ($11::text = '' OR COALESCE(k.category, '` + UncategorisedLabel + `') = $11::text)
-  AND ($12::text = '' OR ($12 = 'ru') = (a.site ` + ruZone + `))
-  AND (NOT $13::bool OR fs.first_ever >= $3::timestamptz)
-ORDER BY a.conns DESC, a.site LIMIT $9 OFFSET $10`
+WHERE (NOT $8::bool OR fs.first_ever >= $3::timestamptz)
+ORDER BY a.conns DESC, a.site`
 	rs, err := s.pool.Query(ctx, sql, args...)
 	if err != nil {
-		return nil, 0, 0, err
+		return nil, err
 	}
 	defer rs.Close()
-	rows = []SiteRow{}
+	rows := []SiteRow{}
 	for rs.Next() {
 		var r SiteRow
-		var g, t int64
 		var src string
 		var score float64
-		if err := rs.Scan(&r.Site, &r.Service, &r.Confidence, &r.Category, &src, &score, &r.Connections, &r.Visits, &r.Users, &r.Devices, &r.Hosts, &r.Bytes, &r.RouterConns, &r.First, &r.Last, &r.Sources, &r.RU, &r.Blocked, &r.Warp, &g, &t); err != nil {
-			return nil, 0, 0, err
+		if err := rs.Scan(&r.Site, &r.Service, &r.Confidence, &r.Category, &src, &score, &r.Connections, &r.Visits, &r.Users, &r.Devices, &r.Hosts, &r.Bytes, &r.RouterConns, &r.First, &r.Last, &r.Sources, &r.RU, &r.Blocked, &r.Warp); err != nil {
+			return nil, err
 		}
 		r.Origin = OriginOf(src, score)
-		groups, total = int(g), int(t)
 		rows = append(rows, r)
 	}
-	return rows, groups, total, rs.Err()
+	return rows, rs.Err()
 }
 
 type CategoryRow struct {

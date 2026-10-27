@@ -51,6 +51,16 @@ type aCoverage struct {
 	NodesWithAgent int `json:"nodes_with_agent"`
 }
 
+// presetEnd is where a preset range ends: now, rounded down (to a minute, to five for a day and more) so that the same
+// view asked again within that time is the same query and its cached answer is used instead of a recount.
+func presetEnd(now time.Time, d time.Duration) time.Time {
+	step := time.Minute
+	if d >= 24*time.Hour {
+		step = 5 * time.Minute
+	}
+	return now.Truncate(step)
+}
+
 // resolveScope parses range, panels and nodes and enforces the caller's access. It writes the
 // error response itself and returns ok=false when the request cannot proceed.
 func (s *Server) resolveScope(w http.ResponseWriter, r *http.Request, a auth.Actor) (aScope, bool) {
@@ -65,12 +75,8 @@ func (s *Server) resolveScope(w http.ResponseWriter, r *http.Request, a auth.Act
 		}
 		// The end of a preset range is rounded down (a minute, or five for a day and more) so that the same view asked
 		// again within that time is the same query: its cached answer is used instead of a recount.
-		step := time.Minute
-		if d >= 24*time.Hour {
-			step = 5 * time.Minute
-		}
-		now = now.Truncate(step)
-		sc.to, sc.from = now, now.Add(-d)
+		sc.to = presetEnd(now, d)
+		sc.from = sc.to.Add(-d)
 	} else {
 		var e1, e2 error
 		sc.from, e1 = time.Parse(time.RFC3339, qs.Get("from"))

@@ -190,6 +190,7 @@ func serve(log *slog.Logger) error {
 		go sy.RunPulse(ctx, srv.Pulse, 15*time.Second)
 	}
 	go alerts.Run(ctx, st, time.Minute, log)
+	go srv.WarmAnalytics(ctx)
 	go secChecker.Run(ctx)
 	go (&notify.Worker{Store: st, Ring: ring, Log: log}).Run(ctx)
 	go (&notify.Bot{Store: st, Ring: ring, Log: log}).Run(ctx)

@@ -185,9 +185,21 @@ export default function Sites() {
   const [category, setCategory] = useState('')
   const [zone, setZone] = useState<'' | 'ru' | 'other'>('')
   const [offset, setOffset] = useState(0)
+  const [sort, setSort] = useState('connections')
+  const [dir, setDir] = useState<'asc' | 'desc'>('desc')
+  const sortBy = (key: string) => {
+    if (key === sort) setDir(dir === 'desc' ? 'asc' : 'desc')
+    else { setSort(key); setDir(key === 'site' || key === 'category' ? 'asc' : 'desc') }
+    setOffset(0)
+  }
+  const sortTh = (k: string, label: string, right?: boolean, title?: string) => (
+    <th key={k} scope="col" aria-sort={sort === k ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'} className={`px-2 py-2 font-medium ${right ? 'text-right' : ''}`} title={title}>
+      <button type="button" onClick={() => sortBy(k)} className="font-medium hover:text-fg">{label}{sort === k ? (dir === 'asc' ? ' ▲' : ' ▼') : ''}</button>
+    </th>
+  )
   const [sel, setSel] = useState<string | null>(null)
   const q = useDebounced(search.trim(), 300)
-  const { data, error, reload } = useAnalytics<SitesResponse>('sites', filters, { q, subject, category, zone, ...(newOnly ? { new: '1' } : {}), limit: String(PAGE), offset: String(offset) })
+  const { data, error, reload } = useAnalytics<SitesResponse>('sites', filters, { q, subject, category, zone, ...(newOnly ? { new: '1' } : {}), sort, dir, limit: String(PAGE), offset: String(offset) })
   const tz = filters.tz
   const max = data ? Math.max(0, ...data.rows.map((r) => r.share)) : 0
   const catMax = data ? Math.max(0, ...data.categories.map((c) => c.share)) : 0
@@ -266,18 +278,18 @@ export default function Sites() {
               <table className="w-full border-collapse text-[13px]">
                 <caption className="sr-only">{t('sites.title')}</caption>
                 <thead><tr className="text-left text-xs text-muted">
-                  <th scope="col" className="px-2 py-2 font-medium">{t('sites.site')}</th>
-                  <th scope="col" className="px-2 py-2 font-medium">{t('sites.category')}</th>
-                  <th scope="col" className="px-2 py-2 text-right font-medium" title={t('sites.visitsHint')}>{t('sites.visits')}</th>
-                  <th scope="col" className="px-2 py-2 text-right font-medium">{t('an.connections')}</th>
+                  {sortTh('site', t('sites.site'))}
+                  {sortTh('category', t('sites.category'))}
+                  {sortTh('visits', t('sites.visits'), true, t('sites.visitsHint'))}
+                  {sortTh('connections', t('an.connections'), true)}
                   <th scope="col" className="w-[130px] px-2 py-2 font-medium">{t('an.share')}</th>
-                  <th scope="col" className="px-2 py-2 text-right font-medium">{t('an.users')}</th>
-                  <th scope="col" className="px-2 py-2 text-right font-medium">{t('sites.devices')}</th>
-                  <th scope="col" className="px-2 py-2 text-right font-medium">{t('sites.subs')}</th>
-                  <th scope="col" className="px-2 py-2 text-right font-medium" title={t('an.bytesHint')}>{t('an.bytes')}</th>
-                  <th scope="col" className="px-2 py-2 text-right font-medium" title={t('sites.blockedHint')}>{t('sites.blocked')}</th>
-                  <th scope="col" className="px-2 py-2 text-right font-medium" title={t('sites.warpHint')}>{t('sites.warp')}</th>
-                  <th scope="col" className="px-2 py-2 font-medium">{t('an.lastSeen')}</th>
+                  {sortTh('users', t('an.users'), true)}
+                  {sortTh('devices', t('sites.devices'), true)}
+                  {sortTh('hosts', t('sites.subs'), true)}
+                  {sortTh('bytes', t('an.bytes'), true, t('an.bytesHint'))}
+                  {sortTh('blocked', t('sites.blocked'), true, t('sites.blockedHint'))}
+                  {sortTh('warp', t('sites.warp'), true, t('sites.warpHint'))}
+                  {sortTh('last', t('an.lastSeen'))}
                   {isOwner && <th scope="col" className="px-2 py-2"><span className="sr-only">{t('sites.setCategory')}</span></th>}
                 </tr></thead>
                 <tbody>

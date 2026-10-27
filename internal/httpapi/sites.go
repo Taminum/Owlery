@@ -165,6 +165,11 @@ func (s *Server) analyticsSites(w http.ResponseWriter, r *http.Request, a auth.A
 	category := strings.TrimSpace(qs.Get("category"))
 	zone := qs.Get("zone")
 	newOnly := qs.Get("new") == "1"
+	sortBy, desc := qs.Get("sort"), qs.Get("dir") != "asc"
+	if _, known := store.SiteSorts[sortBy]; sortBy != "" && !known {
+		s.writeErr(w, r, http.StatusBadRequest, "invalid_sort", "unknown sort column")
+		return
+	}
 	if zone != "" && zone != "ru" && zone != "other" {
 		s.writeErr(w, r, http.StatusBadRequest, "invalid_zone", "zone must be ru or other")
 		return
@@ -189,6 +194,7 @@ func (s *Server) analyticsSites(w http.ResponseWriter, r *http.Request, a auth.A
 	if meta.State == "ok" {
 		q := sc.query()
 		q.Subject, q.Search, q.Category, q.Zone, q.NewOnly, q.Limit, q.Offset = subj, search, category, zone, newOnly, limit, offset
+		q.Sort, q.Desc = sortBy, desc
 		qc := q
 		qc.Search, qc.Category = "", ""
 		var cats []store.CategoryRow
