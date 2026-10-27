@@ -14,13 +14,33 @@ services:
       POSTGRES_DB: remnascope
       POSTGRES_USER: remnascope
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run deploy/prod/init-secrets.sh}
+    # The stock Postgres settings assume a tiny machine (128 MB cache): the analytics pages read gigabytes. Tuned for an SSD
+    # and a few GB of RAM; raise PG_SHARED_BUFFERS and PG_MEM_LIMIT in .env on a bigger server (cache about a quarter of RAM).
+    command:
+      - postgres
+      - -c
+      - shared_buffers=${PG_SHARED_BUFFERS:-384MB}
+      - -c
+      - effective_cache_size=${PG_CACHE_SIZE:-1GB}
+      - -c
+      - work_mem=16MB
+      - -c
+      - maintenance_work_mem=128MB
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - max_parallel_workers_per_gather=2
+      - -c
+      - track_io_timing=on
+      - -c
+      - shared_preload_libraries=pg_stat_statements
     volumes: [pgdata:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U remnascope -d remnascope"]
       interval: 5s
       timeout: 3s
       retries: 10
-    deploy: { resources: { limits: { memory: 512M } } }
+    deploy: { resources: { limits: { memory: "${PG_MEM_LIMIT:-1024M}" } } }
     restart: unless-stopped
 
   api:
