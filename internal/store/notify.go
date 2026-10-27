@@ -217,10 +217,10 @@ type PendingAlertNotice struct {
 // PendingAlertNotices lists alerts not yet announced: opened ones, and closed ones whose opening was announced.
 func (s *Store) PendingAlertNotices(ctx context.Context, limit int) ([]PendingAlertNotice, error) {
 	rows, err := s.pool.Query(ctx, `
-SELECT id, kind, label, detail, false, opened_at FROM alerts WHERE resolved_at IS NULL AND notified_open_at IS NULL
+SELECT id, kind, label, detail, false, opened_at FROM alerts WHERE resolved_at IS NULL AND notified_open_at IS NULL AND opened_at <= now() - make_interval(secs => $2)
 UNION ALL
 SELECT id, kind, label, detail, true, opened_at FROM alerts WHERE resolved_at IS NOT NULL AND notified_open_at IS NOT NULL AND notified_close_at IS NULL
-ORDER BY 6 LIMIT $1`, limit)
+ORDER BY 6 LIMIT $1`, limit, AlertGrace.Seconds())
 	if err != nil {
 		return nil, err
 	}

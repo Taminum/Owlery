@@ -19,18 +19,29 @@ function TodoLine({ kind }: { kind: string }) {
 }
 
 export default function Alerts() {
-  const { filters } = useApp()
+  const { filters, update } = useApp()
   const q = filters.panels.length ? `&panel_ids=${filters.panels.join(',')}` : ''
   const { data, error } = useLoad((s) => api.get<AlertsResponse>(`/api/v1/alerts?state=all${q}`, s), [q], 30_000)
+  // With a panel picked, the page shows that panel's alerts only, while the counter in the menu counts every open one
+  // (servers, DNS and the like belong to no panel). Say so instead of letting the two disagree.
+  const filtered = filters.panels.length > 0
+  const everything = useLoad((s) => (filtered ? api.get<AlertsResponse>('/api/v1/alerts?state=open', s) : Promise.resolve(null)), [filtered], 30_000)
   const tz = filters.tz
   const open = data?.alerts.filter((a) => !a.resolved_at) ?? []
   const closed = data?.alerts.filter((a) => a.resolved_at) ?? []
+  const hidden = filtered && everything.data ? Math.max(0, everything.data.open - open.length) : 0
 
   return (
     <div className="space-y-4">
       <PageHead title={t('al.title')} subtitle={t('al.subtitle')} />
       {error && <p role="alert" className="text-[13px] text-red">{error}</p>}
       {!data && !error && <TableSkeleton />}
+      {hidden > 0 && (
+        <div role="status" className="flex flex-wrap items-center gap-3 rounded-card border border-amber/40 bg-amber/10 px-4 py-3 text-[13px]">
+          <span>{t('al.hidden', { n: hidden })}</span>
+          <button type="button" className="underline hover:text-fg" onClick={() => update({ panels: [] })}>{t('al.hidden.show')}</button>
+        </div>
+      )}
       {data && (
         <>
           {open.length === 0 ? (

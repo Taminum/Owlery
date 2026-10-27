@@ -122,6 +122,10 @@ type harnessOpt func(*Server)
 
 func newHarness(t *testing.T, opts ...harnessOpt) *harness {
 	t.Helper()
+	// Alerts are shown at once in the tests; the grace period has a test of its own.
+	oldGrace := store.AlertGrace
+	store.AlertGrace = 0
+	t.Cleanup(func() { store.AlertGrace = oldGrace })
 	st := storetest.New(t)
 	ring, _ := secrets.NewKeyring(map[int][]byte{1: bytes32(1)}, 1)
 	h := &harness{t: t, st: st, ring: ring, logs: &bytes.Buffer{}, remote: map[string]*fakePanel{}, now: time.Now()}
