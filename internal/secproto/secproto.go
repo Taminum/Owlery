@@ -355,6 +355,12 @@ const TunnelPath = Path + "/tunnel"
 // DesktopPorts are the only local ports a tunnel may lead to: RDP and VNC.
 var DesktopPorts = map[int]bool{3389: true, 5900: true}
 
+// The first frame of a tunnel connection, a text frame from the agent: whether the local port answered.
+const (
+	TunnelReady      = "ready"
+	TunnelPortClosed = "port_closed"
+)
+
 // TunnelOpen asks the agent to connect to 127.0.0.1:Port and back to TunnelPath with the session ID.
 type TunnelOpen struct {
 	Type string `json:"type"` // "tunnel_open"

@@ -20,20 +20,29 @@ func Tunnel(ctx context.Context, dial func(ctx context.Context, path, id string)
 	}
 	var d net.Dialer
 	lctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	local, err := d.DialContext(lctx, "tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(req.Port)))
+	local, lerr := d.DialContext(lctx, "tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(req.Port)))
 	cancel()
-	if err != nil {
-		return err
-	}
-	defer local.Close()
 	dctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	c, err := dial(dctx, secproto.TunnelPath, req.ID)
 	cancel()
 	if err != nil {
+		if local != nil {
+			local.Close()
+		}
 		return err
 	}
 	c.SetReadLimit(4 << 20)
 	defer c.CloseNow()
+	// The first frame says whether the local port answered, so Owlery can tell the person at once.
+	if lerr != nil {
+		_ = c.Write(ctx, websocket.MessageText, []byte(secproto.TunnelPortClosed))
+		c.Close(websocket.StatusNormalClosure, "")
+		return lerr
+	}
+	defer local.Close()
+	if err := c.Write(ctx, websocket.MessageText, []byte(secproto.TunnelReady)); err != nil {
+		return err
+	}
 	ctx, stop := context.WithCancel(ctx)
 	defer stop()
 	go func() {
