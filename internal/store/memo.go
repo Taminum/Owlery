@@ -20,7 +20,7 @@ type memoEntry struct {
 }
 
 func memoized[T any](name string, q AnalyticsQuery, extra any, compute func() (T, error)) (T, error) {
-	key := fmt.Sprintf("%s|%+v|%v", name, q, extra)
+	key := fmt.Sprint(append(q.args7(), name, extra, q.GroupBy, q.Site, q.Category, q.Service, q.Search, q.Limit, q.Offset, q.Zone, q.NewOnly)...)
 	memo.Lock()
 	if e, ok := memo.m[key]; ok && time.Since(e.at) < catCacheTTL {
 		memo.Unlock()
@@ -33,7 +33,7 @@ func memoized[T any](name string, q AnalyticsQuery, extra any, compute func() (T
 		return zero, err
 	}
 	memo.Lock()
-	if len(memo.m) > 200 {
+	if len(memo.m) > 24 {
 		memo.m = map[string]memoEntry{}
 	}
 	memo.m[key] = memoEntry{v: v, at: time.Now()}
