@@ -345,3 +345,19 @@ type ShellResize struct {
 	Cols int    `json:"cols"`
 	Rows int    `json:"rows"`
 }
+
+// CapDesktop is announced by an agent whose machine allows its remote desktop to be reached through the agent:
+// Owlery asks for a tunnel to one local port (RDP or VNC) and the agent connects back to TunnelPath with it.
+const CapDesktop = "desktop"
+
+const TunnelPath = Path + "/tunnel"
+
+// DesktopPorts are the only local ports a tunnel may lead to: RDP and VNC.
+var DesktopPorts = map[int]bool{3389: true, 5900: true}
+
+// TunnelOpen asks the agent to connect to 127.0.0.1:Port and back to TunnelPath with the session ID.
+type TunnelOpen struct {
+	Type string `json:"type"` // "tunnel_open"
+	ID   string `json:"id"`
+	Port int    `json:"port"`
+}

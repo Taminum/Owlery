@@ -60,8 +60,8 @@ func (s *Server) log() *slog.Logger {
 	return slog.Default()
 }
 
-// ShellHandler is where an agent connects back for one terminal session it was asked to open. The connection carries
-// only that session and lasts as long as it.
+// ShellHandler is where an agent connects back for one terminal session or desktop tunnel it was asked to open. The
+// connection carries only that session and lasts as long as it.
 func (s *Server) ShellHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet || s.Ops == nil {
@@ -92,7 +92,7 @@ func (s *Server) ShellHandler() http.Handler {
 			return
 		}
 		defer c.CloseNow()
-		c.SetReadLimit(64 << 10)
+		c.SetReadLimit(4 << 20)
 		if !s.Ops.AttachShell(agent.ID, id, c) {
 			closeWith(c, secproto.CloseProtocol, "no such session")
 		}
@@ -164,7 +164,7 @@ func closeWith(c *websocket.Conn, code int, reason string) {
 	_ = c.Close(websocket.StatusCode(code), reason)
 }
 
-var knownCaps = map[string]bool{"fail2ban_read": true, "socket_read": true, "firewall_read": true, secproto.CapFail2banBan: true, secproto.CapProbe: true, secproto.CapShell: true}
+var knownCaps = map[string]bool{"fail2ban_read": true, "socket_read": true, "firewall_read": true, secproto.CapFail2banBan: true, secproto.CapProbe: true, secproto.CapShell: true, secproto.CapDesktop: true}
 
 func (s *Server) session(ctx context.Context, c *websocket.Conn, agent store.SecAgent) {
 	hctx, cancel := context.WithTimeout(ctx, 10*time.Second)
