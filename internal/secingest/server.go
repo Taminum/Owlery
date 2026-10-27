@@ -235,7 +235,12 @@ func (s *Server) session(ctx context.Context, c *websocket.Conn, agent store.Sec
 		case "command_result":
 			s.commandResult(ctx, agent, data)
 		case "host":
-			// How loaded the host is: best effort, unanswered, a bad one is dropped.
+			// How loaded the host is: best effort, unanswered, a bad one is dropped. It is also a sign of life: an agent
+			// that reads nothing else (on Windows) sends only this.
+			if err := s.Store.TouchSecAgent(ctx, agent.ID); err != nil {
+				closeWith(c, secproto.CloseRevoked, "revoked")
+				return
+			}
 			var h secproto.Host
 			if len(data) <= 16<<10 && json.Unmarshal(data, &h) == nil {
 				if err := s.Store.SaveHost(ctx, agent.VPSID, h, time.Now().UTC()); err != nil {
