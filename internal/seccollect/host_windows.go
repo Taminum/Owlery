@@ -6,6 +6,7 @@ import (
 	"errors"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/shirou/gopsutil/v4/cpu"
@@ -45,16 +46,10 @@ func (h *HostReader) readOS(now time.Time) secproto.Host {
 	if sw, err := mem.SwapMemory(); err == nil {
 		out.SwapTotal, out.SwapUsed = int64(sw.Total), int64(sw.Used)
 	}
-	if hi, err := host.Info(); err == nil {
-		out.OS = clean(strings.TrimSpace(hi.Platform+" "+hi.PlatformVersion), 80)
-		out.Kernel = clean(hi.KernelVersion, 80)
-		out.UptimeSec = int64(hi.Uptime)
-	}
-	if ci, err := cpu.Info(); err == nil && len(ci) > 0 {
-		out.CPUModel = clean(ci[0].ModelName, 120)
-	}
-	if n, err := cpu.Counts(true); err == nil {
-		out.CPUs = n
+	st := staticInfo(now)
+	out.OS, out.Kernel, out.CPUModel, out.CPUs = st.os, st.kernel, st.cpuModel, st.cpus
+	if up, err := host.Uptime(); err == nil {
+		out.UptimeSec = int64(up)
 	}
 	if nics, err := net.IOCounters(true); err == nil {
 		for _, c := range nics {
@@ -92,6 +87,41 @@ func (h *HostReader) readOS(now time.Time) secproto.Host {
 	}
 	out.Procs, out.Units = h.windowsProcs(now)
 	return out
+}
+
+// What the machine is changes only with an upgrade, and asking Windows for it goes through WMI, which costs a
+// noticeable share of a core each time. It is read once an hour.
+type machineInfo struct {
+	os, kernel, cpuModel string
+	cpus                 int
+	at                   time.Time
+}
+
+var (
+	infoMu    sync.Mutex
+	infoCache machineInfo
+)
+
+func staticInfo(now time.Time) machineInfo {
+	infoMu.Lock()
+	defer infoMu.Unlock()
+	if !infoCache.at.IsZero() && now.Sub(infoCache.at) < time.Hour {
+		return infoCache
+	}
+	var m machineInfo
+	if hi, err := host.Info(); err == nil {
+		m.os = clean(strings.TrimSpace(hi.Platform+" "+hi.PlatformVersion), 80)
+		m.kernel = clean(hi.KernelVersion, 80)
+	}
+	if ci, err := cpu.Info(); err == nil && len(ci) > 0 {
+		m.cpuModel = clean(ci[0].ModelName, 120)
+	}
+	if n, err := cpu.Counts(true); err == nil {
+		m.cpus = n
+	}
+	m.at = now
+	infoCache = m
+	return m
 }
 
 // virtualNIC says whether an adapter only carries traffic that real adapters carry too, or none at all.
