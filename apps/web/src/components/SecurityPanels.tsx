@@ -404,6 +404,7 @@ export function AgentCard({ vpsId, canEdit }: { vpsId: string; canEdit: boolean 
   const { data, error, reload } = useLoad((s) => api.get<{ agent: SecAgent | null }>(`/api/v1/security/vps/${vpsId}/agent`, s), [vpsId], 15_000)
   const [token, setToken] = useState('')
   const [os, setOS] = useState<'linux' | 'windows'>('linux')
+  const [shell, setShell] = useState(true)
   const [err, setErr] = useState('')
   const [confirm, setConfirm] = useState(false)
   const agent = data?.agent ?? null
@@ -455,6 +456,11 @@ export function AgentCard({ vpsId, canEdit }: { vpsId: string; canEdit: boolean 
                   className={`h-8 rounded-control border px-3 text-[13px] ${os === x ? 'border-cyan bg-elevated text-fg' : 'border-line text-muted hover:text-fg'}`}>{x === 'linux' ? 'Linux' : 'Windows'}</button>
               ))}
             </div>
+            <label className="flex items-center gap-2 text-[13px]">
+              <input type="checkbox" checked={shell} onChange={(e) => setShell(e.target.checked)} />
+              <span>{t('sec.onb.shell')}</span>
+            </label>
+            <p className="-mt-2 text-xs text-muted">{t('sec.onb.shellHint')}</p>
             {os === 'windows' ? (
               <>
                 <p className="text-muted">{t('sec.onb.win.intro')}</p>
@@ -468,7 +474,7 @@ icacls "$d\\secagent.token" /inheritance:r /grant:r "*S-1-5-18:R" "*S-1-5-32-544
 $a = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'amd64' }
 [Net.ServicePointManager]::SecurityProtocol = 'Tls12'
 Invoke-WebRequest "https://github.com/Taminum/Owlery/releases/latest/download/remnascope-secagent-windows-$a.exe" -OutFile "$d\\secagent.exe" -UseBasicParsing
-& "$d\\secagent.exe" install -server "wss://${window.location.host}" -token-file "$d\\secagent.token"`}</Code>
+& "$d\\secagent.exe" install -server "wss://${window.location.host}" -token-file "$d\\secagent.token"${shell ? ' -allow-shell' : ''}`}</Code>
                 <p>{t('sec.onb.win.s2')}</p>
                 <Code>{`Get-Service OwlerySecAgent
 Get-Content "$env:ProgramData\\Owlery\\secagent.log" -Tail 5`}</Code>
@@ -499,6 +505,13 @@ EOF
 systemctl daemon-reload && systemctl restart fail2ban
 systemctl enable --now remnascope-secagent-f2b remnascope-secagent`}</Code>
             <p className="text-muted">{t('sec.onb.s5hint')}</p>
+            {shell && (
+              <>
+                <p>{t('sec.onb.shellStep')}</p>
+                <Code>{`sed 's#wss://SCOPE_HOST#wss://${window.location.host}#' deploy/secagent/remnascope-shell.service > /etc/systemd/system/remnascope-shell.service
+systemctl daemon-reload && systemctl enable --now remnascope-shell && systemctl restart remnascope-secagent`}</Code>
+              </>
+            )}
             <p>{t('sec.onb.s6')}</p>
             <Code>{`install -m 0755 deploy/secagent/remnascope-containers-list /usr/local/sbin/
 cp deploy/secagent/remnascope-containers-list.service deploy/secagent/remnascope-containers-list.timer /etc/systemd/system/

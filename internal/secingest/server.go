@@ -60,6 +60,45 @@ func (s *Server) log() *slog.Logger {
 	return slog.Default()
 }
 
+// ShellHandler is where an agent connects back for one terminal session it was asked to open. The connection carries
+// only that session and lasts as long as it.
+func (s *Server) ShellHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || s.Ops == nil {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if r.Header.Get("Origin") != "" {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		if s.Limiter != nil && s.ClientIP != nil && !s.Limiter.Allow(s.ClientIP(r).String()) {
+			w.Header().Set("Retry-After", "60")
+			http.Error(w, "too many connection attempts", http.StatusTooManyRequests)
+			return
+		}
+		agent, ok := s.authenticate(r)
+		if !ok {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		id := r.URL.Query().Get("id")
+		if id == "" || len(id) > 64 {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		c, err := websocket.Accept(w, r, &websocket.AcceptOptions{CompressionMode: websocket.CompressionDisabled})
+		if err != nil {
+			return
+		}
+		defer c.CloseNow()
+		c.SetReadLimit(64 << 10)
+		if !s.Ops.AttachShell(agent.ID, id, c) {
+			closeWith(c, secproto.CloseProtocol, "no such session")
+		}
+	})
+}
+
 func (s *Server) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -125,7 +164,7 @@ func closeWith(c *websocket.Conn, code int, reason string) {
 	_ = c.Close(websocket.StatusCode(code), reason)
 }
 
-var knownCaps = map[string]bool{"fail2ban_read": true, "socket_read": true, "firewall_read": true, secproto.CapFail2banBan: true, secproto.CapProbe: true}
+var knownCaps = map[string]bool{"fail2ban_read": true, "socket_read": true, "firewall_read": true, secproto.CapFail2banBan: true, secproto.CapProbe: true, secproto.CapShell: true}
 
 func (s *Server) session(ctx context.Context, c *websocket.Conn, agent store.SecAgent) {
 	hctx, cancel := context.WithTimeout(ctx, 10*time.Second)

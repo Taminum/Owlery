@@ -140,7 +140,7 @@ func serve(log *slog.Logger) error {
 
 	srv := &httpapi.Server{Store: st, Ring: ring, Probe: httpapi.NewProbeFactory(policy), Sync: sy, Log: log,
 		CookieSecure: c.CookieSecure, Trusted: c.TrustedProxies, CustomCA: len(policy.ExtraCAPEM) > 0,
-		SessionTTL: c.SessionTTL, IdleTTL: c.IdleTTL}
+		SessionTTL: c.SessionTTL, IdleTTL: c.IdleTTL, RecordsDir: c.RecordsDir}
 
 	srv.Live = live.New()
 	srv.Gemini = &gemini.Client{KeyFile: c.GeminiKeyFile}
@@ -172,7 +172,8 @@ func serve(log *slog.Logger) error {
 	srv.SecOps = secHub
 	secChecker.Probes = secHub // a security agent set up as a checker can run the external checks
 	srv.SecChecks = secChecker
-	srv.SecIngest = (&secingest.Server{Store: st, Log: log, Limiter: auth.NewLimiter(1, 10), ClientIP: srv.ClientAddr, Ops: secHub}).Handler()
+	secIn := &secingest.Server{Store: st, Log: log, Limiter: auth.NewLimiter(1, 10), ClientIP: srv.ClientAddr, Ops: secHub}
+	srv.SecIngest, srv.SecShell = secIn.Handler(), secIn.ShellHandler()
 	srv.Ingest = (&ingest.Server{Store: st, Log: log, Limiter: auth.NewLimiter(1, 10), ClientIP: srv.ClientAddr, Live: srv.Live, Ops: srv.AWGOps}).Handler()
 
 	hs := &http.Server{

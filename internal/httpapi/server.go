@@ -69,6 +69,8 @@ type Server struct {
 	Sync         *syncer.Syncer
 	Ingest       http.Handler // the agents' WebSocket endpoint; authenticates by agent credential, not by session
 	SecIngest    http.Handler // the security agents' endpoint, with its own credentials
+	SecShell     http.Handler // where an agent connects back for one terminal session
+	RecordsDir   string       // where terminal sessions are written as they happen; empty = not recorded
 	SecChecks    Nudger       // the external checker, woken by a manual request (nil = none)
 	SecOps       *secops.Hub  // carries ban/unban to security agents that are connected (nil = commands off)
 	DNSWorker    Nudger       // the DNS Map worker, woken by a refresh (nil = none)
@@ -162,6 +164,9 @@ func (s *Server) Handler() http.Handler {
 		mux.Handle(ingestproto.Path, s.Ingest)
 	}
 
+	if s.SecShell != nil {
+		mux.Handle(secproto.ShellPath, s.SecShell)
+	}
 	if s.SecIngest != nil {
 		mux.Handle(secproto.Path, s.SecIngest)
 	}
@@ -196,6 +201,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("PUT /api/v1/modules/{id}", s.session(s.moduleSet))
 	mux.Handle("GET /api/v1/servers", s.session(s.serverList))
 	mux.Handle("GET /api/v1/servers/{id}", s.session(s.serverCard))
+	mux.Handle("GET /api/v1/servers/{id}/terminal", s.session(s.terminal))
 	mux.Handle("GET /api/v1/hosts", s.session(s.hostList))
 	mux.Handle("GET /api/v1/onboarding", s.session(s.onboarding))
 	mux.Handle("GET /api/v1/hosts/{id}/series", s.session(s.hostSeries))

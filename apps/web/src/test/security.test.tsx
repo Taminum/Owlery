@@ -168,7 +168,18 @@ describe('Security page', () => {
     expect(screen.getByText(/systemctl enable --now remnascope-secagent/)).toBeInTheDocument()
     // The steps are complete: where the files come from, the address of this server in the unit, Fail2ban, the check.
     expect(screen.getByText(/curl -fLO https:\/\/github\.com\/Taminum\/Owlery\/releases\/latest\/download\/remnascope-secagent-linux-\$A/)).toBeInTheDocument()
-    expect(screen.getByText((c) => c.includes(`wss://${window.location.host}`))).toBeInTheDocument()
+    expect(screen.getAllByText((c) => c.includes(`wss://${window.location.host}`)).length).toBeGreaterThan(0)
+    // The terminal is allowed by default: the root helper is a step of its own, and unticking the box removes it.
+    expect(screen.getByText(/systemctl enable --now remnascope-shell/)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Разрешить терминал' }))
+    expect(screen.queryByText(/remnascope-shell/)).toBeNull()
+    // Windows: one PowerShell block, with -allow-shell only when the terminal is allowed.
+    await userEvent.click(screen.getByRole('tab', { name: 'Windows' }))
+    expect(screen.getByText(/secagent\.exe" install/)).toBeInTheDocument()
+    expect(screen.queryByText(/-allow-shell/)).toBeNull()
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Разрешить терминал' }))
+    expect(screen.getByText(/-allow-shell/)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('tab', { name: 'Linux' }))
     expect(screen.getByText(/fail2ban\.service\.d\/remnascope\.conf/)).toBeInTheDocument()
     expect(screen.getByText(/journalctl -u remnascope-secagent/)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Секрет сохранён' }))

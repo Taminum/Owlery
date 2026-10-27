@@ -53,8 +53,10 @@ services:
       BOOTSTRAP_OWNER: owner
       BOOTSTRAP_PASSWORD_FILE: /run/secrets/owner_password
       GEMINI_API_KEY_FILE: /run/secrets/gemini_api_key
+      RECORDS_DIR: /var/lib/owlery/records # terminal sessions, one file each
       # COOKIE_SECURE, SEED_DEMO, ALLOW_PRIVATE_HOSTS stay unset: secure cookies, no demo, no private targets.
     secrets: [master_key, owner_password, gemini_api_key]
+    volumes: [records:/var/lib/owlery/records]
     depends_on: { postgres: { condition: service_healthy } }
     read_only: true
     cap_drop: [ALL]
@@ -96,5 +98,6 @@ services:
 
 volumes:
   pgdata:
+  records:
   caddy-data:
   caddy-config:
