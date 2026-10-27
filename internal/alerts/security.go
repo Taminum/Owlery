@@ -40,7 +40,7 @@ func SecurityConditions(st store.SecAlertStates, now time.Time) []store.Conditio
 		}
 		if quiet := now.Sub(*a.LastSeen); quiet > AgentSilentAfter {
 			out = append(out, store.Condition{PanelID: a.PanelID, Kind: store.AlertSecAgent, Subject: a.AgentID, Label: "Агент безопасности: " + a.VPSName,
-				Detail: "не выходит на связь " + minutes(quiet) + "; данные Fail2ban, портов и firewall устаревают"})
+				Detail: "не выходит на связь " + minutes(quiet) + "; данные о машине устаревают"})
 		}
 	}
 	for _, e := range st.TLS {
