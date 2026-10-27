@@ -35,6 +35,9 @@ body {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 
+@keyframes busy-slide { 0% { transform: translateX(-100%) } 100% { transform: translateX(300%) } }
+.busy-bar { animation: busy-slide 1.1s ease-in-out infinite }
+@media (prefers-reduced-motion: reduce) { .busy-bar { animation: none; width: 100% } }
 @keyframes shimmer { 0% { opacity: .45 } 50% { opacity: .8 } 100% { opacity: .45 } }
 .skeleton { background: var(--color-elevated); border-radius: 8px; animation: shimmer 1.6s ease-in-out infinite; }
 
