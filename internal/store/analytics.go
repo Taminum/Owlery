@@ -63,21 +63,46 @@ type DestRow struct {
 // mapped to a service. Counts are connection_count (log lines and router records), bytes only
 // exist for router records.
 func (s *Store) Destinations(ctx context.Context, q AnalyticsQuery) (rows []DestRow, groups, total int, err error) {
+	if q.Limit <= 0 || q.Limit > 200 {
+		q.Limit = 50
+	}
+	// The list of the whole scope is counted once and kept; searching and paging happen on it.
+	full := q
+	full.Search, full.Limit, full.Offset = "", destCap, 0
 	type res struct {
 		rows          []DestRow
 		groups, total int
 	}
-	r, err := memoized("destinations", q, nil, func() (res, error) {
-		rows, groups, total, err := s.destinations(ctx, q)
+	r, err := memoized("destinations", full, nil, func() (res, error) {
+		rows, groups, total, err := s.destinations(ctx, full)
 		return res{rows, groups, total}, err
 	})
-	return r.rows, r.groups, r.total, err
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	list, groups, total := r.rows, r.groups, r.total
+	if needle := strings.ToLower(strings.TrimSpace(q.Search)); needle != "" {
+		var hit []DestRow
+		groups, total = 0, 0
+		for _, d := range list {
+			if strings.Contains(strings.ToLower(d.Key), needle) {
+				hit = append(hit, d)
+				total += d.Connections
+			}
+		}
+		list, groups = hit, len(hit)
+	}
+	if q.Offset >= len(list) {
+		return []DestRow{}, groups, total, nil
+	}
+	end := min(q.Offset+q.Limit, len(list))
+	return list[q.Offset:end], groups, total, nil
 }
 
+// destCap is how many destinations of a scope are kept for searching and paging; the rest are the long tail of single hits.
+const destCap = 20000
+
 func (s *Store) destinations(ctx context.Context, q AnalyticsQuery) (rows []DestRow, groups, total int, err error) {
-	if q.Limit <= 0 || q.Limit > 200 {
-		q.Limit = 50
-	}
 	args := q.args7()
 	args = append(args, "%"+likeEscape(q.Search)+"%", q.Limit, q.Offset, q.Site, q.Service, q.Category)
 

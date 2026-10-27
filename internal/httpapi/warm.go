@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/Taminum/RemnaScope/internal/store"
@@ -48,6 +49,16 @@ func (s *Server) warmOnce(ctx context.Context) {
 		}
 		if _, err := s.Store.Categories(ctx, q); err != nil {
 			s.Log.Warn("analytics warm-up failed", "range", rng, "err", err)
+			return
+		}
+		// The other analytics pages open on the same ranges; each call fills the cache their first request would otherwise wait for.
+		dq := q
+		dq.GroupBy = "site"
+		_, _, _, e1 := s.Store.Destinations(ctx, dq)
+		_, _, e2 := s.Store.UsersAnalytics(ctx, q)
+		_, e3 := s.Store.Subjects(ctx, q)
+		if e1 != nil || e2 != nil || e3 != nil {
+			s.Log.Warn("analytics warm-up failed", "range", rng, "err", errors.Join(e1, e2, e3))
 			return
 		}
 	}
