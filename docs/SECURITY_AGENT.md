@@ -161,3 +161,13 @@ For each session the machine connects back to `/ingest/security/v1/shell` with i
 bytes never share a connection with the reports. Owlery writes what the machine prints to a recording as it arrives
 (`RECORDS_DIR`, one file per session, at most 50 MB each) and puts opening and closing, with the duration, into the
 audit log. Only the owner and administrators of a linked panel can open a terminal.
+
+## Remote desktop (optional, Windows)
+
+`secagent.exe install ... -allow-desktop` lets Owlery open the machine's own remote desktop (RDP on 127.0.0.1:3389,
+or VNC on :5900) in the browser, tab "Рабочий стол" of the server card. The agent dials out twice for each session,
+to Owlery and to the local port, and listens on nothing, so the desktop port can stay closed to the whole network.
+In Owlery the stream goes through guacd (the `guacd` service of the stack, `GUACD_ADDR`), which reaches the tunnel
+through a one-off port on the API that accepts only guacd. The Windows login is typed for each connection and never
+stored: the page trades it for a ticket that is good for one connection within a minute. Opening and closing go to
+the audit log; the picture itself is not recorded.

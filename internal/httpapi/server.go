@@ -71,9 +71,12 @@ type Server struct {
 	SecIngest    http.Handler // the security agents' endpoint, with its own credentials
 	SecShell     http.Handler // where an agent connects back for one terminal session
 	RecordsDir   string       // where terminal sessions are written as they happen; empty = not recorded
-	SecChecks    Nudger       // the external checker, woken by a manual request (nil = none)
-	SecOps       *secops.Hub  // carries ban/unban to security agents that are connected (nil = commands off)
-	DNSWorker    Nudger       // the DNS Map worker, woken by a refresh (nil = none)
+	GuacdAddr    string       // guacd's address for remote desktops (host:4822); empty = desktops off
+	DesktopHost  string       // how guacd reaches this API for a desktop tunnel (the API's name on their network)
+	tickets      ticketBox
+	SecChecks    Nudger      // the external checker, woken by a manual request (nil = none)
+	SecOps       *secops.Hub // carries ban/unban to security agents that are connected (nil = commands off)
+	DNSWorker    Nudger      // the DNS Map worker, woken by a refresh (nil = none)
 	dnsLimit     *auth.Limiter
 	checkLimit   *auth.Limiter
 	cmdLimit     *auth.Limiter
@@ -166,6 +169,7 @@ func (s *Server) Handler() http.Handler {
 
 	if s.SecShell != nil {
 		mux.Handle(secproto.ShellPath, s.SecShell)
+		mux.Handle(secproto.TunnelPath, s.SecShell)
 	}
 	if s.SecIngest != nil {
 		mux.Handle(secproto.Path, s.SecIngest)
@@ -202,6 +206,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/servers", s.session(s.serverList))
 	mux.Handle("GET /api/v1/servers/{id}", s.session(s.serverCard))
 	mux.Handle("GET /api/v1/servers/{id}/terminal", s.session(s.terminal))
+	mux.Handle("POST /api/v1/servers/{id}/desktop", s.session(s.desktopTicket))
+	mux.Handle("GET /api/v1/servers/{id}/desktop", s.session(s.desktop))
 	mux.Handle("GET /api/v1/hosts", s.session(s.hostList))
 	mux.Handle("GET /api/v1/onboarding", s.session(s.onboarding))
 	mux.Handle("GET /api/v1/hosts/{id}/series", s.session(s.hostSeries))

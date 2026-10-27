@@ -27,12 +27,13 @@ func platformCommand(cmd string, args []string) bool {
 		tokenFile := fs.String("token-file", "", "file holding the agent credential")
 		probe := fs.Bool("probe", false, "act as a checker for the other servers")
 		shell := fs.Bool("allow-shell", false, "let Owlery open a terminal on this machine")
+		desktop := fs.Bool("allow-desktop", false, "let Owlery reach this machine's remote desktop through the agent")
 		_ = fs.Parse(args)
 		if *server == "" || *tokenFile == "" {
 			fmt.Fprintln(os.Stderr, "secagent install: -server and -token-file are required")
 			os.Exit(2)
 		}
-		if err := install(*server, *tokenFile, *probe, *shell); err != nil {
+		if err := install(*server, *tokenFile, *probe, *shell, *desktop); err != nil {
 			fmt.Fprintln(os.Stderr, "secagent install:", err)
 			os.Exit(1)
 		}
@@ -49,7 +50,7 @@ func platformCommand(cmd string, args []string) bool {
 	return true
 }
 
-func install(server, tokenFile string, probe, shell bool) error {
+func install(server, tokenFile string, probe, shell, desktop bool) error {
 	exe, err := os.Executable()
 	if err != nil {
 		return err
@@ -79,6 +80,9 @@ func install(server, tokenFile string, probe, shell bool) error {
 	}
 	if shell {
 		args = append(args, "-allow-shell")
+	}
+	if desktop {
+		args = append(args, "-allow-desktop")
 	}
 	s, err := m.CreateService(serviceName, exe, mgr.Config{
 		DisplayName: "Owlery security agent",

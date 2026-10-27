@@ -42,11 +42,16 @@ type Dialer struct {
 }
 
 func (d Dialer) Dial(ctx context.Context, id string) (*websocket.Conn, error) {
+	return d.DialPath(ctx, secproto.ShellPath, id)
+}
+
+// DialPath connects back to one of the per-session endpoints (a terminal or a tunnel).
+func (d Dialer) DialPath(ctx context.Context, path, id string) (*websocket.Conn, error) {
 	tok, err := d.Token()
 	if err != nil {
 		return nil, err
 	}
-	u := strings.TrimRight(d.BaseURL, "/") + secproto.ShellPath + "?id=" + url.QueryEscape(id)
+	u := strings.TrimRight(d.BaseURL, "/") + path + "?id=" + url.QueryEscape(id)
 	c, _, err := websocket.Dial(ctx, u, &websocket.DialOptions{HTTPClient: d.Client, HTTPHeader: http.Header{"Authorization": {"Bearer " + tok}}})
 	if err != nil {
 		return nil, err

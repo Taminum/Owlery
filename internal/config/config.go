@@ -27,6 +27,8 @@ type Config struct {
 	BootstrapPassFile string
 	GeminiKeyFile     string // optional: the file holding the Gemini API key (a secret, never a variable)
 	RecordsDir        string // optional: where terminal sessions are recorded; empty = not recorded
+	GuacdAddr         string // optional: guacd for remote desktops (host:port); empty = desktops off
+	DesktopHost       string // how guacd reaches the API for a desktop tunnel
 	SyncEnabled       bool
 	SessionTTL        time.Duration
 	IdleTTL           time.Duration
@@ -45,6 +47,8 @@ func Load(get func(string) string) (Config, error) {
 		BootstrapPassFile: get("BOOTSTRAP_PASSWORD_FILE"),
 		GeminiKeyFile:     get("GEMINI_API_KEY_FILE"),
 		RecordsDir:        get("RECORDS_DIR"),
+		GuacdAddr:         get("GUACD_ADDR"),
+		DesktopHost:       or(get("DESKTOP_HOST"), "api"),
 		SyncEnabled:       true,
 		SessionTTL:        12 * time.Hour,
 		IdleTTL:           2 * time.Hour,

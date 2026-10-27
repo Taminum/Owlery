@@ -54,6 +54,8 @@ services:
       BOOTSTRAP_PASSWORD_FILE: /run/secrets/owner_password
       GEMINI_API_KEY_FILE: /run/secrets/gemini_api_key
       RECORDS_DIR: /var/lib/owlery/records # terminal sessions, one file each
+      GUACD_ADDR: guacd:4822 # remote desktops; remove to turn them off
+      DESKTOP_HOST: api
       # COOKIE_SECURE, SEED_DEMO, ALLOW_PRIVATE_HOSTS stay unset: secure cookies, no demo, no private targets.
     secrets: [master_key, owner_password, gemini_api_key]
     volumes: [records:/var/lib/owlery/records]
@@ -62,6 +64,15 @@ services:
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     deploy: { resources: { limits: { memory: 256M } } }
+    restart: unless-stopped
+
+  # Remote desktops: guacd speaks RDP and VNC. It reaches machines only through Owlery (the agents' tunnels), never
+  # the network directly, and nothing reaches it from outside.
+  guacd:
+    image: guacamole/guacd:1.5.5
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    deploy: { resources: { limits: { memory: 384M } } }
     restart: unless-stopped
 
   web:

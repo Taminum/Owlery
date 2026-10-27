@@ -69,6 +69,9 @@ type Config struct {
 	// only when that socket is there, so a machine without the helper cannot be given one.
 	AllowShell  bool
 	ShellSocket string
+	// AllowDesktop lets Owlery reach this machine's own RDP or VNC port through the agent, so that the port need not be
+	// open to the network at all.
+	AllowDesktop bool
 }
 
 func (c *Config) defaults() {
@@ -136,7 +139,8 @@ func Run(ctx context.Context, cfg Config) error {
 		return err
 	}
 	a := &agent{cfg: cfg, url: url, hc: hc, epoch: newEpoch(), probes: make(chan struct{}, maxProbes), socks: seccollect.NewSocketWatch(10 * time.Minute), host: newHostReader(cfg), runCtx: ctx}
-	a.shells = &secshell.Runner{Log: cfg.Log, Dial: secshell.Dialer{BaseURL: strings.TrimRight(cfg.ServerURL, "/"), Token: a.token, Client: hc}.Dial}
+	back := secshell.Dialer{BaseURL: strings.TrimRight(cfg.ServerURL, "/"), Token: a.token, Client: hc}
+	a.shells, a.dialBack = &secshell.Runner{Log: cfg.Log, Dial: back.Dial}, back.DialPath
 	if cfg.HelperSocket != "" {
 		a.helper = f2bhelper.Client{Path: cfg.HelperSocket}
 		// Fail2ban is read through the helper, and the agent never runs fail2ban-client itself.
@@ -185,6 +189,8 @@ type agent struct {
 	host   *seccollect.HostReader
 	runCtx context.Context // lives as long as the agent: a terminal outlives a reconnect of the reports
 	shells *secshell.Runner
+	// dialBack connects back to Owlery for one session (terminal or tunnel).
+	dialBack func(ctx context.Context, path, id string) (*websocket.Conn, error)
 }
 
 // shellReady says whether this machine allows a terminal right now.
@@ -248,6 +254,9 @@ func (a *agent) capabilities(ban bool) []string {
 	}
 	if a.shellReady() {
 		caps = append(caps, secproto.CapShell)
+	}
+	if a.cfg.AllowDesktop {
+		caps = append(caps, secproto.CapDesktop)
 	}
 	return caps
 }
@@ -414,6 +423,21 @@ func (a *agent) reader(ctx context.Context, c *websocket.Conn, ban bool, acks ch
 				return
 			}
 			go a.openShell(req)
+		case "tunnel_open":
+			var req secproto.TunnelOpen
+			if json.Unmarshal(b, &req) != nil || req.ID == "" || len(req.ID) > 64 {
+				fail(errors.New("secagent: a bad tunnel request"))
+				return
+			}
+			if !a.cfg.AllowDesktop {
+				a.cfg.Log.Warn("desktop asked for, but this machine does not allow it", "id", req.ID)
+				continue
+			}
+			go func() {
+				if err := secshell.Tunnel(a.runCtx, a.dialBack, req); err != nil {
+					a.cfg.Log.Warn("desktop tunnel", "port", req.Port, "err", err)
+				}
+			}()
 		case "error":
 			fail(fmt.Errorf("secagent: the server refused: %s", head.Code))
 			return

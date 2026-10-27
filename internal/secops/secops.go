@@ -130,6 +130,16 @@ type shellWait struct {
 // OpenShell asks an agent for a terminal and waits for its connection back. Call release when the session is over:
 // it lets the agent's side of the connection end.
 func (h *Hub) OpenShell(ctx context.Context, agentID string, cols, rows int) (c *websocket.Conn, release func(), err error) {
+	return h.openBack(ctx, agentID, func(id string) any { return secproto.ShellOpen{Type: "shell_open", ID: id, Cols: cols, Rows: rows} })
+}
+
+// OpenTunnel asks an agent for a tunnel to one local desktop port and waits for its connection back.
+func (h *Hub) OpenTunnel(ctx context.Context, agentID string, port int) (c *websocket.Conn, release func(), err error) {
+	return h.openBack(ctx, agentID, func(id string) any { return secproto.TunnelOpen{Type: "tunnel_open", ID: id, Port: port} })
+}
+
+// openBack sends the request built for a fresh session ID and waits for the agent to connect back with that ID.
+func (h *Hub) openBack(ctx context.Context, agentID string, msg func(id string) any) (c *websocket.Conn, release func(), err error) {
 	id := uuid.NewString()
 	w := &shellWait{agent: agentID, ch: make(chan *websocket.Conn, 1), done: make(chan struct{})}
 	h.mu.Lock()
@@ -143,7 +153,7 @@ func (h *Hub) OpenShell(ctx context.Context, agentID string, cols, rows int) (c 
 		delete(h.shells, id)
 		h.mu.Unlock()
 	}
-	if err := h.Send(ctx, agentID, secproto.ShellOpen{Type: "shell_open", ID: id, Cols: cols, Rows: rows}); err != nil {
+	if err := h.Send(ctx, agentID, msg(id)); err != nil {
 		drop()
 		return nil, nil, err
 	}
