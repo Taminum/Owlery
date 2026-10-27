@@ -29,6 +29,10 @@ const (
 	AlertDNSChange = "dns_change"       // an important record changed in the last day, confirmed by two resolvers
 )
 
+// AlertGrace is how long a condition must hold before it counts as an alert for the people who read the list or the
+// notifications: what opens and closes within it was a blip, and shows neither on the page nor in Telegram.
+var AlertGrace = 2 * time.Minute
+
 type Alert struct {
 	ID         string     `json:"id"`
 	PanelID    string     `json:"panel_id"`
@@ -104,7 +108,9 @@ func (s *Store) ListAlerts(ctx context.Context, panelIDs []string, withUnscoped,
 	}
 	rs, err := s.pool.Query(ctx, `SELECT id, panel_id, kind, subject, label, detail, opened_at, last_seen_at, resolved_at FROM alerts
 		WHERE (panel_id = ANY($1::uuid[]) OR ($4 AND panel_id IS NULL)) AND ($2 = false OR resolved_at IS NULL)
-		ORDER BY (resolved_at IS NULL) DESC, COALESCE(resolved_at, opened_at) DESC LIMIT $3`, uuids(panelIDs), openOnly, limit, withUnscoped)
+		  AND ((resolved_at IS NULL AND opened_at <= now() - make_interval(secs => $5))
+		    OR (resolved_at IS NOT NULL AND resolved_at - opened_at >= make_interval(secs => $5)))
+		ORDER BY (resolved_at IS NULL) DESC, COALESCE(resolved_at, opened_at) DESC LIMIT $3`, uuids(panelIDs), openOnly, limit, withUnscoped, AlertGrace.Seconds())
 	if err != nil {
 		return nil, err
 	}
