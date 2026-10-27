@@ -141,6 +141,9 @@ func dropAnalyticsCache() {
 	catCache.Lock()
 	catCache.m = map[string]catEntry{}
 	catCache.Unlock()
+	memo.Lock()
+	memo.m = map[string]memoEntry{}
+	memo.Unlock()
 }
 
 // allSites is every site of the scope and range with its figures, not narrowed by search, category or zone, and kept
@@ -441,6 +444,10 @@ type SubjectRow struct {
 
 // Subjects lists the people and devices that have traffic in the range, for the filter.
 func (s *Store) Subjects(ctx context.Context, q AnalyticsQuery) ([]SubjectRow, error) {
+	return memoized("subjects", q, nil, func() ([]SubjectRow, error) { return s.subjects(ctx, q) })
+}
+
+func (s *Store) subjects(ctx context.Context, q AnalyticsQuery) ([]SubjectRow, error) {
 	rs, err := s.pool.Query(ctx, `WITH `+eventsCTE+`
 SELECT CASE WHEN ev.dev IS NOT NULL THEN 'device' WHEN ev.uid IS NOT NULL THEN 'user' ELSE 'raw' END,
        ev.panel_id, COALESCE(ev.dev, ev.uid::text, ev.email, ''), COALESCE(max(ev.dname), max(u.display_name), ''), count(*)
