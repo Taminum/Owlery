@@ -179,13 +179,21 @@ and keyboard, like a remote assistant; it is not a replacement for the RDP tab. 
 `secagent.exe install ... -allow-screen` (the box "Разрешить показ экрана" in the install dialog) **and** the helper
 `owlery-remote.exe` is installed. Without either, the machine cannot be shown from Owlery.
 
-The agent is a system service and cannot see a desktop, so the helper runs in the signed-in person's own session (a
-scheduled task at logon, with that person's rights). It listens on 127.0.0.1 only and accepts a connection only after the
-shared secret written at install, readable by SYSTEM, administrators and that one user. The agent dials out to Owlery for
-each session and relays bytes to the helper; Owlery relays them to the browser. The picture is H.264 from `ffmpeg.exe`
-(installed next to the helper), decoded by the browser (WebCodecs); without ffmpeg it falls back to JPEG pictures.
+The agent is a system service in session 0 and cannot see any desktop, so when a session is asked for it launches the
+helper into the signed-in person's own session, as the system account (`WTSGetActiveConsoleSessionId` + a session-stamped
+copy of the agent's token + `CreateProcessAsUser`). Running as the system account, and moving each screen grab and each
+click onto whichever desktop is receiving input (`OpenInputDesktop` + `SetThreadDesktop`), is what lets it reach the
+secure desktop as well — UAC prompts and the lock screen — and drive windows opened "as administrator", which a tool
+running with the person's ordinary rights cannot. If nobody is signed in, there is no session to launch into and Owlery
+says so.
+
+The helper listens on 127.0.0.1 only and accepts a connection only after the shared secret written at install, readable
+by the system account and administrators alone — the boundary that stops any other local process from driving the screen.
+The agent dials out to Owlery for each session and relays bytes to the helper; Owlery relays them to the browser. The
+picture is H.264: this process captures each frame (GDI, so it can follow onto the secure desktop, which DXGI Desktop
+Duplication cannot) and feeds it to `ffmpeg.exe` installed next to the helper, which encodes it; the browser decodes with
+WebCodecs. Without ffmpeg it falls back to JPEG pictures.
 
 While a session is open the helper shows an icon in the person's notification area; its menu has "Прекратить показ",
 which ends the session at once. Opening and closing go to the audit log (`screen.open`, `screen.close`); the screen is
-never recorded. Limits: the helper runs with the person's ordinary rights, so it cannot click into windows opened as
-administrator, and the lock screen and UAC prompts are not visible to it.
+never recorded.

@@ -64,30 +64,34 @@ func screenBounds() (x, y, w, h int) {
 	return int(int32(gx)), int(int32(gy)), int(int32(gw)), int(int32(gh))
 }
 
-// captureScreen takes one screenshot of the whole virtual screen (every monitor, as one image) through plain GDI.
-// This is the simple, broadly-compatible way to read the screen; it costs a full-frame copy on every call, which is
-// fine at the handful of frames per second this sends over the network, but is not the fastest Windows offers (that
-// would be DXGI Desktop Duplication, a sizeable addition of its own — worth it later if GDI proves too slow).
-func captureScreen() (img *image.NRGBA, err error) {
+// captureRaw takes one screenshot of the whole virtual screen (every monitor, as one image) through plain GDI and
+// returns it as top-down BGRA bytes — the order Windows gives and the order ffmpeg's "bgra" input wants, so the video
+// path feeds this straight to the encoder with no conversion. The thread the caller runs on decides which desktop is
+// read: bind it to the input desktop first (see follower) so the secure desktop is captured like any other.
+//
+// GDI is the simple, broadly-compatible way to read the screen. It is not the fastest Windows offers (that would be
+// DXGI Desktop Duplication, a sizeable addition of its own), but it can follow onto the secure desktop, which Desktop
+// Duplication cannot — the deciding reason to use it here.
+func captureRaw() (pix []byte, w, h int, err error) {
 	x, y, w, h := screenBounds()
 	if w <= 0 || h <= 0 {
-		return nil, fmt.Errorf("remotehelper: no screen (metrics %dx%d)", w, h)
+		return nil, 0, 0, fmt.Errorf("remotehelper: no screen (metrics %dx%d)", w, h)
 	}
 	screenDC, _, _ := procGetDC.Call(0)
 	if screenDC == 0 {
-		return nil, fmt.Errorf("remotehelper: GetDC failed")
+		return nil, 0, 0, fmt.Errorf("remotehelper: GetDC failed")
 	}
 	defer procReleaseDC.Call(0, screenDC)
 
 	memDC, _, _ := procCreateCompatibleDC.Call(screenDC)
 	if memDC == 0 {
-		return nil, fmt.Errorf("remotehelper: CreateCompatibleDC failed")
+		return nil, 0, 0, fmt.Errorf("remotehelper: CreateCompatibleDC failed")
 	}
 	defer procDeleteDC.Call(memDC)
 
 	bmp, _, _ := procCreateCompatibleBitmap.Call(screenDC, uintptr(w), uintptr(h))
 	if bmp == 0 {
-		return nil, fmt.Errorf("remotehelper: CreateCompatibleBitmap failed")
+		return nil, 0, 0, fmt.Errorf("remotehelper: CreateCompatibleBitmap failed")
 	}
 	defer procDeleteObject.Call(bmp)
 
@@ -96,13 +100,13 @@ func captureScreen() (img *image.NRGBA, err error) {
 
 	ok, _, _ := procBitBlt.Call(memDC, 0, 0, uintptr(w), uintptr(h), screenDC, uintptr(x), uintptr(y), uintptr(srcCopy|captureBlt))
 	if ok == 0 {
-		return nil, fmt.Errorf("remotehelper: BitBlt failed")
+		return nil, 0, 0, fmt.Errorf("remotehelper: BitBlt failed")
 	}
 
 	var bi bitmapInfoHeader
 	bi.Size = uint32(unsafe.Sizeof(bi))
 	bi.Width = int32(w)
-	bi.Height = -int32(h) // negative: rows come back top-down, the order image.NRGBA already expects
+	bi.Height = -int32(h) // negative: rows come back top-down
 	bi.Planes = 1
 	bi.BitCount = 32
 	bi.Compression = biRGB
@@ -110,9 +114,17 @@ func captureScreen() (img *image.NRGBA, err error) {
 	raw := make([]byte, w*h*4)
 	r, _, _ := procGetDIBits.Call(memDC, bmp, 0, uintptr(h), uintptr(unsafe.Pointer(&raw[0])), uintptr(unsafe.Pointer(&bi)), dibRGBColors)
 	if r == 0 {
-		return nil, fmt.Errorf("remotehelper: GetDIBits failed")
+		return nil, 0, 0, fmt.Errorf("remotehelper: GetDIBits failed")
 	}
+	return raw, w, h, nil
+}
 
+// captureScreen is the JPEG fallback's view of the screen: captureRaw turned into an opaque image.
+func captureScreen() (*image.NRGBA, error) {
+	raw, w, h, err := captureRaw()
+	if err != nil {
+		return nil, err
+	}
 	out := image.NewNRGBA(image.Rect(0, 0, w, h))
 	// GDI hands back BGRA with the alpha byte unset; the picture itself is fully opaque.
 	for i := 0; i < w*h; i++ {

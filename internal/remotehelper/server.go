@@ -8,10 +8,13 @@ import (
 	"crypto/subtle"
 	"fmt"
 	"image/jpeg"
+	"io"
 	"log/slog"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -19,9 +22,11 @@ import (
 	"github.com/Taminum/Owlery/internal/secproto"
 )
 
-// frameInterval is how often the screen is captured and sent: about 7 frames a second, a reasonable balance of
-// responsiveness and bandwidth for a whole-screen JPEG stream. Not adaptive yet, and a full frame every tick rather
-// than just the parts that changed — both are reasonable things to improve later if this proves too slow or heavy.
+// videoFPS is how often the screen is captured and handed to the encoder. Full uncompressed frames are copied to
+// ffmpeg, so this trades smoothness against the processor and the pipe; 15 is a sensible middle on a desktop machine.
+const videoFPS = 15
+
+// frameInterval and jpegQuality are the still-picture fallback used when there is no encoder.
 const frameInterval = 140 * time.Millisecond
 
 const jpegQuality = 55
@@ -173,6 +178,12 @@ func runSession(ctx context.Context, conn net.Conn, ffmpeg string, log *slog.Log
 		go stillPictures(ctx, stop, c)
 	}
 
+	// Input is injected from this one thread, locked and kept on the desktop that is receiving input, so a click lands
+	// on a UAC prompt or the lock screen as readily as on an ordinary window.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	var foll follower
+	defer foll.close()
 	var prevButtons uint8
 	for {
 		typ, payload, err := readMsg(c)
@@ -180,6 +191,7 @@ func runSession(ctx context.Context, conn net.Conn, ffmpeg string, log *slog.Log
 			stop()
 			return
 		}
+		foll.bindInput()
 		switch typ {
 		case msgMouse:
 			if ev, ok := parseMouse(payload); ok {
@@ -197,9 +209,14 @@ func runSession(ctx context.Context, conn net.Conn, ffmpeg string, log *slog.Log
 	}
 }
 
-// stillPictures is the fallback without a video encoder: JPEG pictures, only when the screen changed.
+// stillPictures is the fallback without a video encoder: JPEG pictures, only when the screen changed. It too follows
+// the input desktop, so even without ffmpeg a UAC prompt is seen.
 func stillPictures(ctx context.Context, stop context.CancelFunc, c net.Conn) {
 	defer stop()
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	var foll follower
+	defer foll.close()
 	tick := time.NewTicker(frameInterval)
 	defer tick.Stop()
 	var prev []byte
@@ -209,6 +226,7 @@ func stillPictures(ctx context.Context, stop context.CancelFunc, c net.Conn) {
 			return
 		case <-tick.C:
 		}
+		foll.bindCapture()
 		img, err := captureScreen()
 		if err != nil {
 			continue // a single failed capture is not worth ending the session over
@@ -228,32 +246,72 @@ func stillPictures(ctx context.Context, stop context.CancelFunc, c net.Conn) {
 	}
 }
 
-// streamVideo sends the encoder's pictures to the browser. A slow link must not make the picture lag further and
-// further behind: pictures wait in a short queue, and when it is full the rest of that group is dropped, so the picture
-// jumps forward at the next one a decoder can start from instead of sliding into the past.
+// streamVideo captures the screen on a thread it keeps on the input desktop and feeds every frame to ffmpeg, restarting
+// the encoder when the screen's size changes (a resolution change, or a different-sized secure desktop). ffmpeg's H.264
+// is read back and sent to the browser by pumpEncoder.
 func streamVideo(ctx context.Context, c net.Conn, ffmpeg string) error {
-	cmd, err := startVideo(ctx, ffmpeg)
-	if err != nil {
-		return err
-	}
-	out, err := cmd.StdoutPipe()
-	if err != nil {
-		return err
-	}
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	defer func() { _ = cmd.Process.Kill(); _ = cmd.Wait() }()
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	var foll follower
+	defer foll.close()
 
+	var cmd *exec.Cmd
+	var stdin io.WriteCloser
+	var curW, curH int
+	stopEncoder := func() {
+		if cmd != nil {
+			_ = stdin.Close()
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+			cmd = nil
+		}
+	}
+	defer stopEncoder()
+
+	tick := time.NewTicker(time.Second / videoFPS)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-tick.C:
+		}
+		foll.bindCapture()
+		raw, w, h, err := captureRaw()
+		if err != nil || w == 0 || h == 0 {
+			continue // a single failed capture is not worth ending the session over
+		}
+		if cmd == nil || w != curW || h != curH {
+			stopEncoder()
+			var stdout io.ReadCloser
+			cmd, stdin, stdout, err = startEncoder(ctx, ffmpeg, w, h, videoFPS)
+			if err != nil {
+				return err
+			}
+			curW, curH = w, h
+			go pumpEncoder(ctx, c, stdout)
+		}
+		if _, err := stdin.Write(raw); err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			return fmt.Errorf("the encoder stopped (check ffmpeg.exe)")
+		}
+	}
+}
+
+// pumpEncoder carries one encoder's H.264 pictures to the browser. A slow link must not make the picture lag further
+// and further behind, so pictures wait in a short queue and, when it is full, the rest of that group is dropped: the
+// picture jumps forward at the next one a decoder can start from instead of sliding into the past.
+func pumpEncoder(ctx context.Context, c net.Conn, stdout io.ReadCloser) {
 	type unit struct {
 		data []byte
 		key  bool
 	}
 	queue := make(chan unit, 12)
-	readErr := make(chan error, 1)
 	go func() {
 		skipping := false
-		readErr <- splitAccessUnits(out, func(u []byte, key bool) bool {
+		_ = splitAccessUnits(stdout, func(u []byte, key bool) bool {
 			if key {
 				skipping = false
 			}
@@ -269,24 +327,13 @@ func streamVideo(ctx context.Context, c net.Conn, ffmpeg string) error {
 		})
 		close(queue)
 	}()
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case u, ok := <-queue:
-			if !ok {
-				if err := <-readErr; err != nil {
-					return err
-				}
-				return fmt.Errorf("ffmpeg stopped (is a screen available to it?)")
-			}
-			flag := byte(0)
-			if u.key {
-				flag = 1
-			}
-			if err := writeMsg(c, msgVideo, append([]byte{flag}, u.data...)); err != nil {
-				return nil
-			}
+	for u := range queue {
+		flag := byte(0)
+		if u.key {
+			flag = 1
+		}
+		if writeMsg(c, msgVideo, append([]byte{flag}, u.data...)) != nil {
+			return
 		}
 	}
 }

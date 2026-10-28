@@ -75,10 +75,13 @@ type Config struct {
 	// AllowScreen is the machine's explicit permission for screen sharing; without it the capability is never offered,
 	// whatever else is installed.
 	AllowScreen bool
-	// RemoteSecretFile, when set and readable, is the shared secret of the remote-control helper (Windows): a second,
-	// user-session process started at logon that shows the signed-in person's own screen. Its presence is what makes
-	// the capability on, same as ShellSocket for the Linux terminal helper.
+	// RemoteSecretFile and RemoteHelperExe are the screen-sharing helper's shared secret and its program (Windows). The
+	// agent (a system service) launches the helper into the signed-in person's own session as the system account, so
+	// the helper can see and drive that screen including the secure desktop (UAC and the lock screen); the secret, which
+	// only the system and administrators can read, guards the loopback port the agent then relays through. Both files
+	// present, together with AllowScreen, is what turns the capability on — the same shape as ShellSocket for Linux.
 	RemoteSecretFile string
+	RemoteHelperExe  string
 }
 
 func (c *Config) defaults() {
@@ -271,13 +274,17 @@ func (a *agent) capabilities(ban bool) []string {
 	return caps
 }
 
-// remoteReady says whether the remote-control helper is installed and its secret is readable right now; the agent
-// does not start or watch the helper itself, only checks for it.
+// remoteReady says whether screen sharing can be offered: the machine allowed it and the helper and its secret are in
+// place. The agent does not keep the helper running — it launches one into the signed-in session when a session is
+// asked for (openScreen) — it only checks the files are there.
 func (a *agent) remoteReady() bool {
-	if !a.cfg.AllowScreen || a.cfg.RemoteSecretFile == "" {
+	if !a.cfg.AllowScreen || a.cfg.RemoteSecretFile == "" || a.cfg.RemoteHelperExe == "" {
 		return false
 	}
-	_, err := os.Stat(a.cfg.RemoteSecretFile)
+	if _, err := os.Stat(a.cfg.RemoteSecretFile); err != nil {
+		return false
+	}
+	_, err := os.Stat(a.cfg.RemoteHelperExe)
 	return err == nil
 }
 
@@ -465,14 +472,10 @@ func (a *agent) reader(ctx context.Context, c *websocket.Conn, ban bool, acks ch
 				return
 			}
 			if !a.remoteReady() {
-				a.cfg.Log.Warn("remote control asked for, but this machine does not allow it", "id", req.ID)
+				a.cfg.Log.Warn("screen asked for, but this machine does not allow it", "id", req.ID)
 				continue
 			}
-			go func() {
-				if err := secshell.RemoteTunnel(a.runCtx, a.dialBack, a.cfg.RemoteSecretFile, req); err != nil {
-					a.cfg.Log.Warn("remote control", "err", err)
-				}
-			}()
+			go a.openScreen(req)
 		case "error":
 			fail(fmt.Errorf("secagent: the server refused: %s", head.Code))
 			return

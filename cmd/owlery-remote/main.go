@@ -1,17 +1,15 @@
 //go:build windows
 
-// Command owlery-remote is the remote-control helper: it runs in the signed-in person's own Windows session (the
-// security agent is a system service and cannot see a desktop at all), and shows that screen, mouse and keyboard to
-// Owlery through the agent's tunnel. It is a separate program from secagent for exactly that reason: a service and a
-// session-bound program cannot be the same process on Windows.
+// Command owlery-remote is the screen-sharing helper. It shows the screen of the person at the machine, with mouse and
+// keyboard, to Owlery through the agent's tunnel. It is a separate program from secagent because of how Windows works:
+// the agent is a system service in session 0 and cannot see any desktop, so it launches this helper into the signed-in
+// person's own session (as the system account) when a session is asked for. Running as the system account, and moving
+// each capture and each click onto whichever desktop is receiving input, is what lets it reach the secure desktop too —
+// UAC prompts and the lock screen — which a tool running with the person's ordinary rights cannot.
 //
-// Known limit of this first version: it runs with the signed-in person's own standard rights, not elevated, so like
-// most such tools it cannot click into a window that was itself opened "as administrator" (Windows keeps those apart
-// on purpose). Running the helper elevated too would lift that, at the cost of needing elevation to install it.
-//
-//	owlery-remote install     registers itself to start at logon and starts it now (run as an administrator)
-//	owlery-remote uninstall   removes that and the shared secret (run as an administrator)
-//	owlery-remote run         runs the helper itself; this is what the logon task calls (no need to run this by hand)
+//	owlery-remote install     writes the shared secret the agent uses to reach it (run as an administrator)
+//	owlery-remote uninstall   removes that secret (run as an administrator)
+//	owlery-remote run         runs the helper; the agent starts this itself, there is no need to run it by hand
 package main
 
 import (
@@ -19,6 +17,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -29,8 +28,6 @@ import (
 	"github.com/Taminum/Owlery/internal/remotehelper"
 )
 
-const taskName = "OwleryRemoteHelper"
-
 func main() {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
@@ -39,14 +36,14 @@ func main() {
 				fmt.Fprintln(os.Stderr, "owlery-remote install:", err)
 				os.Exit(1)
 			}
-			fmt.Println("installed and started", taskName)
+			fmt.Println("screen sharing is set up on this machine")
 			return
 		case "uninstall":
 			if err := uninstall(); err != nil {
 				fmt.Fprintln(os.Stderr, "owlery-remote uninstall:", err)
 				os.Exit(1)
 			}
-			fmt.Println("removed", taskName)
+			fmt.Println("screen sharing is removed")
 			return
 		}
 	}
@@ -81,10 +78,10 @@ func run() {
 	}
 }
 
-// install writes a fresh secret, lets only SYSTEM, administrators and the one user the helper runs as read it (no other
-// account on the machine can, and nobody off the machine ever sees it — that boundary is what stops any other local process from driving the screen through the
-// loopback port it guards), and registers the scheduled task that starts this program, unelevated, each time
-// somebody signs in. It replaces a previous install, so the secret rotates each time this is run.
+// install makes sure the helper program sits where the agent expects it, writes a fresh secret that only the system
+// account and administrators can read — the boundary that stops any other local process from driving the screen through
+// the loopback port the secret guards — and does nothing else. The agent launches the helper itself; there is no
+// service or logon task. It replaces an earlier install, so the secret rotates each time this is run.
 func install() error {
 	d, err := ownDir()
 	if err != nil {
@@ -93,9 +90,16 @@ func install() error {
 	if err := os.MkdirAll(d, 0o755); err != nil {
 		return err
 	}
+	// Put the program at the canonical path the agent launches (copy it only when it is run from somewhere else).
 	exe, err := os.Executable()
 	if err != nil {
 		return err
+	}
+	want := filepath.Join(d, "owlery-remote.exe")
+	if !sameFile(exe, want) {
+		if err := copyFile(exe, want); err != nil {
+			return fmt.Errorf("placing the helper at %s: %w", want, err)
+		}
 	}
 	secretPath := filepath.Join(d, "remote.secret")
 	b := make([]byte, 32)
@@ -105,32 +109,38 @@ func install() error {
 	if err := os.WriteFile(secretPath, []byte(hex.EncodeToString(b)), 0o600); err != nil {
 		return err
 	}
-	if out, err := exec.Command("icacls", secretPath, "/inheritance:r", "/grant:r", "SYSTEM:F", "*S-1-5-32-544:F", os.Getenv("USERNAME")+":R").CombinedOutput(); err != nil {
+	if out, err := exec.Command("icacls", secretPath, "/inheritance:r", "/grant:r", "SYSTEM:F", "*S-1-5-32-544:F").CombinedOutput(); err != nil {
 		return fmt.Errorf("icacls: %w: %s", err, out)
-	}
-	user := os.Getenv("USERNAME")
-	if user == "" {
-		return fmt.Errorf("USERNAME is not set")
-	}
-	_ = exec.Command("schtasks", "/delete", "/tn", taskName, "/f").Run() // fine if there was no earlier install
-	create := exec.Command("schtasks", "/create", "/tn", taskName, "/tr", fmt.Sprintf("\"%s\" run", exe),
-		"/sc", "onlogon", "/ru", user, "/rl", "limited", "/f")
-	if out, err := create.CombinedOutput(); err != nil {
-		return fmt.Errorf("schtasks /create: %w: %s", err, out)
-	}
-	if out, err := exec.Command("schtasks", "/run", "/tn", taskName).CombinedOutput(); err != nil {
-		return fmt.Errorf("schtasks /run: %w: %s", err, out)
 	}
 	return nil
 }
 
 func uninstall() error {
-	_ = exec.Command("schtasks", "/end", "/tn", taskName).Run()
-	if out, err := exec.Command("schtasks", "/delete", "/tn", taskName, "/f").CombinedOutput(); err != nil {
-		return fmt.Errorf("schtasks /delete: %w: %s", err, out)
-	}
 	if d, err := ownDir(); err == nil {
 		_ = os.Remove(filepath.Join(d, "remote.secret"))
 	}
 	return nil
+}
+
+func sameFile(a, b string) bool {
+	ai, err1 := os.Stat(a)
+	bi, err2 := os.Stat(b)
+	return err1 == nil && err2 == nil && os.SameFile(ai, bi)
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
 }
