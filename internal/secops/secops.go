@@ -143,6 +143,11 @@ func (h *Hub) OpenRemote(ctx context.Context, agentID string) (c *websocket.Conn
 	return h.openBack(ctx, agentID, func(id string) any { return secproto.RemoteOpen{Type: "remote_open", ID: id} })
 }
 
+// OpenProxy asks an agent for a connection to one local web service port and waits for its connection back.
+func (h *Hub) OpenProxy(ctx context.Context, agentID string, port int) (c *websocket.Conn, release func(), err error) {
+	return h.openBack(ctx, agentID, func(id string) any { return secproto.ProxyOpen{Type: "proxy_open", ID: id, Port: port} })
+}
+
 // openBack sends the request built for a fresh session ID and waits for the agent to connect back with that ID.
 func (h *Hub) openBack(ctx context.Context, agentID string, msg func(id string) any) (c *websocket.Conn, release func(), err error) {
 	id := uuid.NewString()

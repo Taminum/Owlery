@@ -17,6 +17,7 @@ import (
 	"net/netip"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Taminum/Owlery/internal/auth"
@@ -63,43 +64,48 @@ func DefaultLimits() Limits {
 }
 
 type Server struct {
-	Store        *store.Store
-	Ring         *secrets.Keyring
-	Probe        ProbeFactory
-	Sync         *syncer.Syncer
-	Ingest       http.Handler // the agents' WebSocket endpoint; authenticates by agent credential, not by session
-	SecIngest    http.Handler // the security agents' endpoint, with its own credentials
-	SecShell     http.Handler // where an agent connects back for one terminal session
-	RecordsDir   string       // where terminal sessions are written as they happen; empty = not recorded
-	GuacdAddr    string       // guacd's address for remote desktops (host:4822); empty = desktops off
-	DesktopHost  string       // how guacd reaches this API for a desktop tunnel (the API's name on their network)
-	tickets      ticketBox
-	SecChecks    Nudger      // the external checker, woken by a manual request (nil = none)
-	SecOps       *secops.Hub // carries ban/unban to security agents that are connected (nil = commands off)
-	DNSWorker    Nudger      // the DNS Map worker, woken by a refresh (nil = none)
-	dnsLimit     *auth.Limiter
-	checkLimit   *auth.Limiter
-	cmdLimit     *auth.Limiter
-	Limits       Limits
-	Live         *live.Hub     // present-moment router snapshots (nil = none)
-	Pulse        *syncer.Pulse // the latest speed of every panel's nodes (nil = none)
-	Gemini       *gemini.Client
-	Auto         *autoclassify.Runner
-	Intel        *netintel.Tool
-	AWGOps       *awgops.Hub   // carries add/revoke to AmneziaWG agents (nil = management off)
-	intelSlots   chan struct{} // limits how many active checks run at once
-	models       modelCache
-	Hash         auth.Argon2Params
-	CookieSecure bool
-	Trusted      []netip.Prefix // proxies whose X-Real-IP we believe
-	CustomCA     bool           // an admin-managed CA bundle is configured
-	SessionTTL   time.Duration
-	IdleTTL      time.Duration
-	Log          *slog.Logger
-	Now          func() time.Time
+	Store       *store.Store
+	Ring        *secrets.Keyring
+	Probe       ProbeFactory
+	Sync        *syncer.Syncer
+	Ingest      http.Handler // the agents' WebSocket endpoint; authenticates by agent credential, not by session
+	SecIngest   http.Handler // the security agents' endpoint, with its own credentials
+	SecShell    http.Handler // where an agent connects back for one terminal session
+	RecordsDir  string       // where terminal sessions are written as they happen; empty = not recorded
+	GuacdAddr   string       // guacd's address for remote desktops (host:4822); empty = desktops off
+	DesktopHost string       // how guacd reaches this API for a desktop tunnel (the API's name on their network)
+	tickets     ticketBox
+	// ServicesDomain is the parent of the web services' subdomains (https://<slug>.<domain>); empty = web services off.
+	ServicesDomain string
+	SecChecks      Nudger      // the external checker, woken by a manual request (nil = none)
+	SecOps         *secops.Hub // carries ban/unban to security agents that are connected (nil = commands off)
+	DNSWorker      Nudger      // the DNS Map worker, woken by a refresh (nil = none)
+	dnsLimit       *auth.Limiter
+	checkLimit     *auth.Limiter
+	cmdLimit       *auth.Limiter
+	Limits         Limits
+	Live           *live.Hub     // present-moment router snapshots (nil = none)
+	Pulse          *syncer.Pulse // the latest speed of every panel's nodes (nil = none)
+	Gemini         *gemini.Client
+	Auto           *autoclassify.Runner
+	Intel          *netintel.Tool
+	AWGOps         *awgops.Hub   // carries add/revoke to AmneziaWG agents (nil = management off)
+	intelSlots     chan struct{} // limits how many active checks run at once
+	models         modelCache
+	Hash           auth.Argon2Params
+	CookieSecure   bool
+	Trusted        []netip.Prefix // proxies whose X-Real-IP we believe
+	CustomCA       bool           // an admin-managed CA bundle is configured
+	SessionTTL     time.Duration
+	IdleTTL        time.Duration
+	Log            *slog.Logger
+	Now            func() time.Time
 
 	dummyHash string
 	csrfKey   []byte
+	svcKey    []byte // signs the tickets and cookies of web services
+	proxiesMu sync.Mutex
+	proxies   map[string]http.Handler
 }
 
 func (s *Server) init() {
@@ -136,6 +142,7 @@ func (s *Server) init() {
 	s.dummyHash, _ = auth.HashPassword("remnascope-dummy-password", s.Hash)
 	if s.Ring != nil {
 		s.csrfKey = s.Ring.DeriveKey("csrf")
+		s.svcKey = s.Ring.DeriveKey("web-services")
 	}
 }
 
@@ -170,6 +177,7 @@ func (s *Server) Handler() http.Handler {
 	if s.SecShell != nil {
 		mux.Handle(secproto.ShellPath, s.SecShell)
 		mux.Handle(secproto.TunnelPath, s.SecShell)
+		mux.Handle(secproto.ProxyPath, s.SecShell)
 		mux.Handle(secproto.RemotePath, s.SecShell)
 	}
 	if s.SecIngest != nil {
@@ -207,6 +215,11 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/servers", s.session(s.serverList))
 	mux.Handle("GET /api/v1/servers/{id}", s.session(s.serverCard))
 	mux.Handle("GET /api/v1/servers/{id}/terminal", s.session(s.terminal))
+	mux.Handle("GET /api/v1/servers/{id}/services", s.session(s.listWebServices))
+	mux.Handle("POST /api/v1/servers/{id}/services", s.session(s.createWebService))
+	mux.Handle("DELETE /api/v1/servers/{id}/services/{sid}", s.session(s.deleteWebService))
+	mux.Handle("GET /api/v1/services/{slug}/enter", s.session(s.serviceEnter))
+	mux.HandleFunc("GET /internal/tls-ask", s.tlsAsk)
 	mux.Handle("GET /api/v1/servers/{id}/screen", s.session(s.screen))
 	mux.Handle("POST /api/v1/servers/{id}/desktop", s.session(s.desktopTicket))
 	mux.Handle("GET /api/v1/servers/{id}/desktop", s.session(s.desktop))
@@ -330,7 +343,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("PUT /api/v1/accounts/{id}/memberships", s.session(s.setMemberships))
 	mux.Handle("GET /api/v1/audit", s.session(s.listAudit))
 
-	return s.recoverer(s.requestID()(secure(s.accessLog(mux))))
+	return s.recoverer(s.requestID()(s.accessLog(s.serviceHosts(secure(mux)))))
 }
 
 func (s *Server) ready(w http.ResponseWriter, r *http.Request) {

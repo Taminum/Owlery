@@ -16,9 +16,10 @@ import { SecurityTabs } from './Security'
 import { TerminalView } from '../components/TerminalView'
 import { DesktopView } from '../components/DesktopView'
 import { ScreenView } from '../components/ScreenView'
+import { ServicesView } from '../components/ServicesView'
 
-type Tab = 'overview' | 'resources' | 'terminal' | 'desktop' | 'screen' | 'security' | 'network' | 'history'
-const TABS: Tab[] = ['overview', 'resources', 'terminal', 'desktop', 'screen', 'security', 'network', 'history']
+type Tab = 'overview' | 'resources' | 'terminal' | 'desktop' | 'screen' | 'services' | 'security' | 'network' | 'history'
+const TABS: Tab[] = ['overview', 'resources', 'terminal', 'desktop', 'screen', 'services', 'security', 'network', 'history']
 
 function AlertList({ items, empty }: { items: ServerAlert[]; empty: string }) {
   if (items.length === 0) return <p className="text-[13px] text-muted">{empty}</p>
@@ -118,7 +119,7 @@ export default function ServerCard() {
       <PageHead title={s.name} subtitle={[s.os || s.host?.os, s.provider, placeText(s)].filter(Boolean).join(' · ') || t('srv.subtitle')} right={<StatusChip s={s} />} />
 
       <div role="tablist" aria-label={s.name} className="flex flex-wrap gap-2">
-        {TABS.filter((x) => (x !== 'terminal' && x !== 'desktop' && x !== 'screen') || s.can_edit).map((x) => (
+        {TABS.filter((x) => (x !== 'terminal' && x !== 'desktop' && x !== 'screen' && x !== 'services') || s.can_edit).map((x) => (
           <button key={x} role="tab" type="button" aria-selected={tab === x} onClick={() => setTab(x)}
             className={`h-8 rounded-control border px-3 text-[13px] ${tab === x ? 'border-cyan bg-elevated text-fg' : 'border-line text-muted hover:text-fg'}`}>
             {t(`srv.tab.${x}` as MsgKey)}{x === 'history' && open.length > 0 && <span className="ml-1.5 text-amber">{open.length}</span>}
@@ -146,6 +147,7 @@ export default function ServerCard() {
       {tab === 'terminal' && s.can_edit && <TerminalView serverId={s.id} />}
       {tab === 'desktop' && s.can_edit && <DesktopView serverId={s.id} />}
       {tab === 'screen' && s.can_edit && <ScreenView serverId={s.id} />}
+      {tab === 'services' && s.can_edit && <ServicesView serverId={s.id} serverName={s.name} />}
       {tab === 'network' && <Network s={s} />}
       {tab === 'history' && <Card title={t('srv.history.title')}><AlertList items={s.alerts ?? []} empty={t('srv.history.empty')} /></Card>}
 

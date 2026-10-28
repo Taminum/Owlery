@@ -94,3 +94,12 @@ func dialAndRelay(ctx context.Context, dial func(ctx context.Context, path, id s
 		}
 	}
 }
+
+// Proxy carries one connection to a web service bound to 127.0.0.1 on the machine (an admin panel), for a machine
+// set up with -allow-web. Any port of the machine's own loopback may be asked for; nothing beyond it is reachable.
+func Proxy(ctx context.Context, dial func(ctx context.Context, path, id string) (*websocket.Conn, error), req secproto.ProxyOpen) error {
+	if req.Port < 1 || req.Port > 65535 {
+		return errors.New("proxy refused: bad port")
+	}
+	return dialAndRelay(ctx, dial, secproto.ProxyPath, req.ID, req.Port, nil)
+}

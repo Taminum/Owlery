@@ -29,6 +29,7 @@ type Config struct {
 	RecordsDir        string // optional: where terminal sessions are recorded; empty = not recorded
 	GuacdAddr         string // optional: guacd for remote desktops (host:port); empty = desktops off
 	DesktopHost       string // how guacd reaches the API for a desktop tunnel
+	ServicesDomain    string // optional: parent domain of web services' subdomains; empty = off
 	SyncEnabled       bool
 	SessionTTL        time.Duration
 	IdleTTL           time.Duration
@@ -49,6 +50,7 @@ func Load(get func(string) string) (Config, error) {
 		RecordsDir:        get("RECORDS_DIR"),
 		GuacdAddr:         get("GUACD_ADDR"),
 		DesktopHost:       or(get("DESKTOP_HOST"), "api"),
+		ServicesDomain:    strings.ToLower(strings.TrimSpace(get("SERVICES_DOMAIN"))),
 		SyncEnabled:       true,
 		SessionTTL:        12 * time.Hour,
 		IdleTTL:           2 * time.Hour,
