@@ -3,7 +3,9 @@ package secshell
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
+	"os"
 	"strconv"
 	"time"
 
@@ -18,12 +20,31 @@ func Tunnel(ctx context.Context, dial func(ctx context.Context, path, id string)
 	if !secproto.DesktopPorts[req.Port] {
 		return errors.New("tunnel refused: not a desktop port")
 	}
+	return dialAndRelay(ctx, dial, secproto.TunnelPath, req.ID, req.Port, nil)
+}
+
+// RemoteTunnel carries one session to the machine's remote-control helper: a second, user-session process that shows
+// the signed-in person's own screen and takes mouse and keyboard, for machines the agent's own session (a system
+// service, invisible to any desktop) cannot reach directly. secretFile holds the token the helper requires as the
+// first bytes of a connection, written when the helper was installed, so no other local process can drive it.
+func RemoteTunnel(ctx context.Context, dial func(ctx context.Context, path, id string) (*websocket.Conn, error), secretFile string, req secproto.RemoteOpen) error {
+	secret, err := os.ReadFile(secretFile)
+	if err != nil {
+		return fmt.Errorf("remote control is not set up on this machine: %w", err)
+	}
+	return dialAndRelay(ctx, dial, secproto.RemotePath, req.ID, secproto.RemoteHelperPort, secret)
+}
+
+// dialAndRelay dials 127.0.0.1:port and the matching session back to Owlery, sends `lead` first on the local
+// connection when given (the remote-control helper's shared secret), tells Owlery whether the local port answered,
+// and then carries bytes both ways until either side ends.
+func dialAndRelay(ctx context.Context, dial func(ctx context.Context, path, id string) (*websocket.Conn, error), path, id string, port int, lead []byte) error {
 	var d net.Dialer
 	lctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	local, lerr := d.DialContext(lctx, "tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(req.Port)))
+	local, lerr := d.DialContext(lctx, "tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
 	cancel()
 	dctx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	c, err := dial(dctx, secproto.TunnelPath, req.ID)
+	c, err := dial(dctx, path, id)
 	cancel()
 	if err != nil {
 		if local != nil {
@@ -40,6 +61,11 @@ func Tunnel(ctx context.Context, dial func(ctx context.Context, path, id string)
 		return lerr
 	}
 	defer local.Close()
+	if len(lead) > 0 {
+		if _, err := local.Write(lead); err != nil {
+			return err
+		}
+	}
 	if err := c.Write(ctx, websocket.MessageText, []byte(secproto.TunnelReady)); err != nil {
 		return err
 	}

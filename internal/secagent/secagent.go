@@ -72,6 +72,15 @@ type Config struct {
 	// AllowDesktop lets Owlery reach this machine's own RDP or VNC port through the agent, so that the port need not be
 	// open to the network at all.
 	AllowDesktop bool
+	// AllowScreen is the machine's explicit permission for screen sharing; without it the capability is never offered,
+	// whatever else is installed.
+	AllowScreen bool
+	// RemoteSecretFile is the screen-sharing helper's shared secret (Windows). The agent (a system service) launches the
+	// helper — this same binary, run as "screen-helper" — into the signed-in person's own session as the system account,
+	// so it can see and drive that screen including the secure desktop (UAC and the lock screen); the secret, which only
+	// the system and administrators can read, guards the loopback port the agent then relays through. Its presence,
+	// together with AllowScreen, is what turns the capability on — the same shape as ShellSocket for the Linux terminal.
+	RemoteSecretFile string
 }
 
 func (c *Config) defaults() {
@@ -258,7 +267,21 @@ func (a *agent) capabilities(ban bool) []string {
 	if a.cfg.AllowDesktop {
 		caps = append(caps, secproto.CapDesktop)
 	}
+	if a.remoteReady() {
+		caps = append(caps, secproto.CapRemote)
+	}
 	return caps
+}
+
+// remoteReady says whether screen sharing can be offered: the machine allowed it and the helper and its secret are in
+// place. The agent does not keep the helper running — it launches one into the signed-in session when a session is
+// asked for (openScreen) — it only checks the files are there.
+func (a *agent) remoteReady() bool {
+	if !a.cfg.AllowScreen || a.cfg.RemoteSecretFile == "" {
+		return false
+	}
+	_, err := os.Stat(a.cfg.RemoteSecretFile)
+	return err == nil
 }
 
 func (a *agent) session(ctx context.Context) error {
@@ -438,6 +461,17 @@ func (a *agent) reader(ctx context.Context, c *websocket.Conn, ban bool, acks ch
 					a.cfg.Log.Warn("desktop tunnel", "port", req.Port, "err", err)
 				}
 			}()
+		case "remote_open":
+			var req secproto.RemoteOpen
+			if json.Unmarshal(b, &req) != nil || req.ID == "" || len(req.ID) > 64 {
+				fail(errors.New("secagent: a bad remote-control request"))
+				return
+			}
+			if !a.remoteReady() {
+				a.cfg.Log.Warn("screen asked for, but this machine does not allow it", "id", req.ID)
+				continue
+			}
+			go a.openScreen(req)
 		case "error":
 			fail(fmt.Errorf("secagent: the server refused: %s", head.Code))
 			return

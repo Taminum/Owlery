@@ -28,12 +28,13 @@ func platformCommand(cmd string, args []string) bool {
 		probe := fs.Bool("probe", false, "act as a checker for the other servers")
 		shell := fs.Bool("allow-shell", false, "let Owlery open a terminal on this machine")
 		desktop := fs.Bool("allow-desktop", false, "let Owlery reach this machine's remote desktop through the agent")
+		screen := fs.Bool("allow-screen", false, "let Owlery show this machine's screen to an administrator")
 		_ = fs.Parse(args)
 		if *server == "" || *tokenFile == "" {
 			fmt.Fprintln(os.Stderr, "secagent install: -server and -token-file are required")
 			os.Exit(2)
 		}
-		if err := install(*server, *tokenFile, *probe, *shell, *desktop); err != nil {
+		if err := install(*server, *tokenFile, *probe, *shell, *desktop, *screen); err != nil {
 			fmt.Fprintln(os.Stderr, "secagent install:", err)
 			os.Exit(1)
 		}
@@ -44,13 +45,16 @@ func platformCommand(cmd string, args []string) bool {
 			os.Exit(1)
 		}
 		fmt.Println("removed the service", serviceName)
+	case "screen-helper":
+		// The screen-sharing helper, this same binary run in the signed-in session by the agent. Not for hand use.
+		runScreenHelper(args)
 	default:
 		return false
 	}
 	return true
 }
 
-func install(server, tokenFile string, probe, shell, desktop bool) error {
+func install(server, tokenFile string, probe, shell, desktop, screen bool) error {
 	exe, err := os.Executable()
 	if err != nil {
 		return err
@@ -83,6 +87,13 @@ func install(server, tokenFile string, probe, shell, desktop bool) error {
 	}
 	if desktop {
 		args = append(args, "-allow-desktop")
+	}
+	if screen {
+		args = append(args, "-allow-screen")
+		// Write the shared secret and fetch ffmpeg now, while we have the administrator who is installing the agent.
+		if err := setupScreen(); err != nil {
+			return fmt.Errorf("setting up screen sharing: %w", err)
+		}
 	}
 	s, err := m.CreateService(serviceName, exe, mgr.Config{
 		DisplayName: "Owlery security agent",

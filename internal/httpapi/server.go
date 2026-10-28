@@ -170,6 +170,7 @@ func (s *Server) Handler() http.Handler {
 	if s.SecShell != nil {
 		mux.Handle(secproto.ShellPath, s.SecShell)
 		mux.Handle(secproto.TunnelPath, s.SecShell)
+		mux.Handle(secproto.RemotePath, s.SecShell)
 	}
 	if s.SecIngest != nil {
 		mux.Handle(secproto.Path, s.SecIngest)
@@ -206,6 +207,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/servers", s.session(s.serverList))
 	mux.Handle("GET /api/v1/servers/{id}", s.session(s.serverCard))
 	mux.Handle("GET /api/v1/servers/{id}/terminal", s.session(s.terminal))
+	mux.Handle("GET /api/v1/servers/{id}/screen", s.session(s.screen))
 	mux.Handle("POST /api/v1/servers/{id}/desktop", s.session(s.desktopTicket))
 	mux.Handle("GET /api/v1/servers/{id}/desktop", s.session(s.desktop))
 	mux.Handle("GET /api/v1/hosts", s.session(s.hostList))

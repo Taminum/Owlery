@@ -171,3 +171,30 @@ In Owlery the stream goes through guacd (the `guacd` service of the stack, `GUAC
 through a one-off port on the API that accepts only guacd. The Windows login is typed for each connection and never
 stored: the page trades it for a ticket that is good for one connection within a minute. Opening and closing go to
 the audit log; the picture itself is not recorded.
+
+## Screen sharing (optional, Windows)
+
+Tab "Экран" of the server card shows the screen of the person at the machine, live, and takes the administrator's mouse
+and keyboard, like a remote assistant; it is not a replacement for the RDP tab. It is on only when the machine says so:
+`secagent.exe install ... -allow-screen` (the box "Разрешить показ экрана" in the install dialog). That install writes a
+secret and downloads ffmpeg; there is nothing else to put on the machine.
+
+The helper is not a separate program — it is the agent binary run as `secagent screen-helper`, the same way the Linux
+terminal helper is `secagent shell-helper`. The agent is a system service in session 0 and cannot see any desktop, so
+when a session is asked for it launches itself as the helper into the signed-in person's own session, as the system
+account (`WTSGetActiveConsoleSessionId` + a session-stamped copy of its token + `CreateProcessAsUser`). Running as the
+system account, and moving each screen grab and each click onto whichever desktop is receiving input (`OpenInputDesktop`
++ `SetThreadDesktop`), is what lets it reach the secure desktop as well — UAC prompts and the lock screen — and drive
+windows opened "as administrator", which a tool running with the person's ordinary rights cannot. If nobody is signed
+in, there is no session to launch into and Owlery says so.
+
+The helper listens on 127.0.0.1 only and accepts a connection only after the shared secret written at install, readable
+by the system account and administrators alone — the boundary that stops any other local process from driving the screen.
+The agent dials out to Owlery for each session and relays bytes to the helper; Owlery relays them to the browser. The
+picture is H.264: this process captures each frame (GDI, so it can follow onto the secure desktop, which DXGI Desktop
+Duplication cannot) and feeds it to `ffmpeg.exe` installed next to the helper, which encodes it; the browser decodes with
+WebCodecs. Without ffmpeg it falls back to JPEG pictures.
+
+While a session is open the helper shows an icon in the person's notification area; its menu has "Прекратить показ",
+which ends the session at once. Opening and closing go to the audit log (`screen.open`, `screen.close`); the screen is
+never recorded.
