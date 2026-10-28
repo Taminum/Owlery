@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/subtle"
+	"encoding/json"
 	"fmt"
 	"image/jpeg"
 	"io"
@@ -132,6 +133,8 @@ func (h *helper) handle(ctx context.Context, c net.Conn) {
 	}()
 
 	stoppedByPerson.Store(false)
+	curMonitor.Store(0)
+	quality.Store(0)
 	h.tray.show("Owlery: ваш экран смотрят")
 	h.log.Info("remote session started")
 	runSession(sessCtx, c, h.ffmpeg, h.log)
@@ -178,6 +181,8 @@ func runSession(ctx context.Context, conn net.Conn, ffmpeg string, log *slog.Log
 		go stillPictures(ctx, stop, c)
 	}
 
+	_ = writeMonitors(c)
+
 	// Input is injected from this one thread, locked and kept on the desktop that is receiving input, so a click lands
 	// on a UAC prompt or the lock screen as readily as on an ordinary window.
 	runtime.LockOSThread()
@@ -202,11 +207,61 @@ func runSession(ctx context.Context, conn net.Conn, ffmpeg string, log *slog.Log
 			if ev, ok := parseKey(payload); ok {
 				applyKey(ev)
 			}
+		case msgQuality:
+			if len(payload) == 1 && payload[0] <= 3 {
+				quality.Store(int32(payload[0]))
+			}
+		case msgCombo:
+			if len(payload) == 1 {
+				applyCombo(payload[0])
+			}
+		case msgText:
+			if len(payload) > 0 && len(payload) <= 8192 {
+				typeText(string(payload))
+			}
+		case msgSelect:
+			if len(payload) == 1 && int(payload[0]) < len(monitors()) {
+				curMonitor.Store(int32(payload[0]))
+			}
 		}
 		if ctx.Err() != nil {
 			return
 		}
 	}
+}
+
+// quality is the level the browser chose: 0 auto, 1 high, 2 medium, 3 low. The encoder restarts when it changes.
+var quality atomic.Int32
+
+// crfFor turns a quality level into the encoder's constant-rate-factor: lower is sharper and heavier.
+func crfFor(level int) int {
+	switch level {
+	case 1:
+		return 20
+	case 2:
+		return 29
+	case 3:
+		return 35
+	}
+	return 25
+}
+
+// writeMonitors tells the browser which monitors there are, so it can offer a button for each.
+func writeMonitors(c net.Conn) error {
+	type mon struct {
+		W       int  `json:"w"`
+		H       int  `json:"h"`
+		Primary bool `json:"primary"`
+	}
+	var list []mon
+	for _, m := range monitors() {
+		list = append(list, mon{m.W, m.H, m.Primary})
+	}
+	b, err := json.Marshal(map[string]any{"list": list, "current": 0})
+	if err != nil {
+		return err
+	}
+	return writeMsg(c, msgMonitors, b)
 }
 
 // stillPictures is the fallback without a video encoder: JPEG pictures, only when the screen changed. It too follows
@@ -257,7 +312,7 @@ func streamVideo(ctx context.Context, c net.Conn, ffmpeg string) error {
 
 	var cmd *exec.Cmd
 	var stdin io.WriteCloser
-	var curW, curH int
+	var curW, curH, curQ int
 	stopEncoder := func() {
 		if cmd != nil {
 			_ = stdin.Close()
@@ -281,14 +336,14 @@ func streamVideo(ctx context.Context, c net.Conn, ffmpeg string) error {
 		if err != nil || w == 0 || h == 0 {
 			continue // a single failed capture is not worth ending the session over
 		}
-		if cmd == nil || w != curW || h != curH {
+		if q := int(quality.Load()); cmd == nil || w != curW || h != curH || q != curQ {
 			stopEncoder()
 			var stdout io.ReadCloser
-			cmd, stdin, stdout, err = startEncoder(ctx, ffmpeg, w, h, videoFPS)
+			cmd, stdin, stdout, err = startEncoder(ctx, ffmpeg, w, h, videoFPS, crfFor(int(quality.Load())))
 			if err != nil {
 				return err
 			}
-			curW, curH = w, h
+			curW, curH, curQ = w, h, int(quality.Load())
 			go pumpEncoder(ctx, c, stdout)
 		}
 		if _, err := stdin.Write(raw); err != nil {

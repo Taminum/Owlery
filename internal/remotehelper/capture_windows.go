@@ -5,6 +5,10 @@ package remotehelper
 import (
 	"fmt"
 	"image"
+	"sort"
+	"sync"
+	"sync/atomic"
+	"syscall"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -64,7 +68,68 @@ func screenBounds() (x, y, w, h int) {
 	return int(int32(gx)), int(int32(gy)), int(int32(gw)), int(int32(gh))
 }
 
-// captureRaw takes one screenshot of the whole virtual screen (every monitor, as one image) through plain GDI and
+// monRect is one monitor in virtual-desktop pixels.
+type monRect struct {
+	X, Y, W, H int
+	Primary    bool
+}
+
+type rect32 struct{ Left, Top, Right, Bottom int32 }
+
+var (
+	procEnumDisplayMonitors = user32.NewProc("EnumDisplayMonitors")
+	procGetMonitorInfo      = user32.NewProc("GetMonitorInfoW")
+	enumMu                  sync.Mutex
+	enumOut                 []monRect
+	enumCb                  = syscall.NewCallback(enumProc)
+	// curMonitor is the monitor the session shows, an index into monitors(); 0 is the primary.
+	curMonitor atomic.Int32
+)
+
+func enumProc(hm, _, _, _ uintptr) uintptr {
+	var mi struct {
+		Size          uint32
+		Monitor, Work rect32
+		Flags         uint32
+	}
+	mi.Size = uint32(unsafe.Sizeof(mi))
+	if r, _, _ := procGetMonitorInfo.Call(hm, uintptr(unsafe.Pointer(&mi))); r != 0 {
+		enumOut = append(enumOut, monRect{int(mi.Monitor.Left), int(mi.Monitor.Top), int(mi.Monitor.Right - mi.Monitor.Left), int(mi.Monitor.Bottom - mi.Monitor.Top), mi.Flags&1 != 0})
+	}
+	return 1
+}
+
+// monitors lists the monitors, the primary first and the rest left to right: the order the browser's buttons use.
+func monitors() []monRect {
+	enumMu.Lock()
+	defer enumMu.Unlock()
+	enumOut = nil
+	procEnumDisplayMonitors.Call(0, 0, enumCb, 0)
+	out := append([]monRect(nil), enumOut...)
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Primary != out[j].Primary {
+			return out[i].Primary
+		}
+		return out[i].X < out[j].X
+	})
+	return out
+}
+
+// selectedMonitor is the monitor being shown; with no monitor information, the whole virtual screen.
+func selectedMonitor() monRect {
+	ms := monitors()
+	if len(ms) == 0 {
+		x, y, w, h := screenBounds()
+		return monRect{x, y, w, h, true}
+	}
+	i := int(curMonitor.Load())
+	if i < 0 || i >= len(ms) {
+		i = 0
+	}
+	return ms[i]
+}
+
+// captureRaw takes one screenshot of the selected monitor (every monitor, as one image) through plain GDI and
 // returns it as top-down BGRA bytes — the order Windows gives and the order ffmpeg's "bgra" input wants, so the video
 // path feeds this straight to the encoder with no conversion. The thread the caller runs on decides which desktop is
 // read: bind it to the input desktop first (see follower) so the secure desktop is captured like any other.
@@ -73,7 +138,8 @@ func screenBounds() (x, y, w, h int) {
 // DXGI Desktop Duplication, a sizeable addition of its own), but it can follow onto the secure desktop, which Desktop
 // Duplication cannot — the deciding reason to use it here.
 func captureRaw() (pix []byte, w, h int, err error) {
-	x, y, w, h := screenBounds()
+	m := selectedMonitor()
+	x, y, w, h := m.X, m.Y, m.W, m.H
 	if w <= 0 || h <= 0 {
 		return nil, 0, 0, fmt.Errorf("remotehelper: no screen (metrics %dx%d)", w, h)
 	}

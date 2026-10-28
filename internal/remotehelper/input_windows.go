@@ -4,7 +4,10 @@ package remotehelper
 
 import (
 	"encoding/binary"
+	"unicode/utf16"
 	"unsafe"
+
+	"golang.org/x/sys/windows"
 )
 
 var (
@@ -78,7 +81,17 @@ func scanCodeFor(vk uint16) uint16 {
 // last event. The caller (server.go) tracks the previous button state and passes only the buttons now held, so a
 // button already down is not pressed again.
 func applyMouse(ev mouseEvent, prevButtons uint8) {
-	sendInput(mouseInputRaw(int32(ev.X), int32(ev.Y), 0, mouseMoveAbs|mouseVirtualDesk))
+	// ev.X and ev.Y are positions within the monitor that is shown; Windows wants them within the whole virtual desktop.
+	m := selectedMonitor()
+	vx, vy, vw, vh := screenBounds()
+	px := m.X + int(ev.X)*(m.W-1)/65535
+	py := m.Y + int(ev.Y)*(m.H-1)/65535
+	ax, ay := 0, 0
+	if vw > 1 && vh > 1 {
+		ax = (px - vx) * 65535 / (vw - 1)
+		ay = (py - vy) * 65535 / (vh - 1)
+	}
+	sendInput(mouseInputRaw(int32(ax), int32(ay), 0, mouseMoveAbs|mouseVirtualDesk))
 	changed := ev.Buttons ^ prevButtons
 	if changed&1 != 0 {
 		flag := uint32(mouseLeftUp)
@@ -122,3 +135,53 @@ func applyKey(ev keyEvent) {
 	}
 	sendInput(keybdInputRaw(scanCodeFor(vk), flags))
 }
+
+// Key combinations the browser cannot produce itself, because the page never sees them.
+const (
+	comboWin    = 1 // a tap of the Windows key
+	comboAltTab = 2
+	comboSAS    = 3 // Ctrl+Alt+Delete
+)
+
+var procSendSAS = windows.NewLazySystemDLL("sas.dll").NewProc("SendSAS")
+
+func tap(codes ...string) {
+	for _, c := range codes {
+		applyKey(keyEvent{Down: true, Code: c})
+	}
+	for i := len(codes) - 1; i >= 0; i-- {
+		applyKey(keyEvent{Down: false, Code: codes[i]})
+	}
+}
+
+func applyCombo(id byte) {
+	switch id {
+	case comboWin:
+		tap("MetaLeft")
+	case comboAltTab:
+		tap("AltLeft", "Tab")
+	case comboSAS:
+		// The secure attention sequence cannot be sent as keystrokes; Windows has a call for it.
+		procSendSAS.Call(0)
+	}
+}
+
+// typeText types text as Unicode characters, whatever the machine's keyboard layout is.
+func typeText(text string) {
+	var ins []input
+	for _, u := range utf16.Encode([]rune(text)) {
+		ins = append(ins, keybdUnicode(u, 0), keybdUnicode(u, keyKeyUp))
+		if len(ins) >= 64 {
+			sendInput(ins...)
+			ins = ins[:0]
+		}
+	}
+	sendInput(ins...)
+}
+
+func keybdUnicode(u uint16, up uint32) input {
+	in := keybdInputRaw(u, keyUnicode|up)
+	return in
+}
+
+const keyUnicode = 0x0004
