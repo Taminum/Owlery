@@ -367,3 +367,21 @@ type TunnelOpen struct {
 	ID   string `json:"id"`
 	Port int    `json:"port"`
 }
+
+// CapRemote is announced by an agent whose machine has the remote-control helper set up (Windows, for now): full
+// interactive control through a second, user-session process (screen, mouse, keyboard), not a server reached through
+// RDP/VNC. It is a different thing from CapDesktop: that one dials the machine's own RDP/VNC server; this one is the
+// agent's own picture of the screen the signed-in person actually sees.
+const CapRemote = "remote"
+
+const RemotePath = Path + "/remote"
+
+// RemoteHelperPort is the fixed loopback port the remote-control helper listens on. Nothing but the agent itself may
+// speak to it: the first bytes of a connection must be the shared secret written when the helper was installed.
+const RemoteHelperPort = 47821
+
+// RemoteOpen asks the agent to relay a session to its remote-control helper.
+type RemoteOpen struct {
+	Type string `json:"type"` // "remote_open"
+	ID   string `json:"id"`
+}

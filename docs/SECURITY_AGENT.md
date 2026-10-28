@@ -171,3 +171,21 @@ In Owlery the stream goes through guacd (the `guacd` service of the stack, `GUAC
 through a one-off port on the API that accepts only guacd. The Windows login is typed for each connection and never
 stored: the page trades it for a ticket that is good for one connection within a minute. Opening and closing go to
 the audit log; the picture itself is not recorded.
+
+## Screen sharing (optional, Windows)
+
+Tab "Экран" of the server card shows the screen of the person at the machine, live, and takes the administrator's mouse
+and keyboard, like a remote assistant; it is not a replacement for the RDP tab. It is on only when the machine says so:
+`secagent.exe install ... -allow-screen` (the box "Разрешить показ экрана" in the install dialog) **and** the helper
+`owlery-remote.exe` is installed. Without either, the machine cannot be shown from Owlery.
+
+The agent is a system service and cannot see a desktop, so the helper runs in the signed-in person's own session (a
+scheduled task at logon, with that person's rights). It listens on 127.0.0.1 only and accepts a connection only after the
+shared secret written at install, readable by SYSTEM, administrators and that one user. The agent dials out to Owlery for
+each session and relays bytes to the helper; Owlery relays them to the browser. The picture is H.264 from `ffmpeg.exe`
+(installed next to the helper), decoded by the browser (WebCodecs); without ffmpeg it falls back to JPEG pictures.
+
+While a session is open the helper shows an icon in the person's notification area; its menu has "Прекратить показ",
+which ends the session at once. Opening and closing go to the audit log (`screen.open`, `screen.close`); the screen is
+never recorded. Limits: the helper runs with the person's ordinary rights, so it cannot click into windows opened as
+administrator, and the lock screen and UAC prompts are not visible to it.

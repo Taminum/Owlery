@@ -138,6 +138,11 @@ func (h *Hub) OpenTunnel(ctx context.Context, agentID string, port int) (c *webs
 	return h.openBack(ctx, agentID, func(id string) any { return secproto.TunnelOpen{Type: "tunnel_open", ID: id, Port: port} })
 }
 
+// OpenRemote asks an agent for a session with its remote-control helper and waits for its connection back.
+func (h *Hub) OpenRemote(ctx context.Context, agentID string) (c *websocket.Conn, release func(), err error) {
+	return h.openBack(ctx, agentID, func(id string) any { return secproto.RemoteOpen{Type: "remote_open", ID: id} })
+}
+
 // openBack sends the request built for a fresh session ID and waits for the agent to connect back with that ID.
 func (h *Hub) openBack(ctx context.Context, agentID string, msg func(id string) any) (c *websocket.Conn, release func(), err error) {
 	id := uuid.NewString()

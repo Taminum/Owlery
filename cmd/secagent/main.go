@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
@@ -57,6 +58,8 @@ func main() {
 		allowDesk = flag.Bool("allow-desktop", false, "let Owlery reach this machine's own RDP or VNC port (127.0.0.1:3389 or :5900) through the agent")
 		allowSh   = flag.Bool("allow-shell", false, "let Owlery open a terminal here with the agent's own rights (Windows; on Linux install the shell helper instead)")
 		shellSock = flag.String("shell-socket", defaultShellSocket(), "Unix socket of the terminal helper; a terminal is offered only when it is there")
+		allowScr  = flag.Bool("allow-screen", false, "let Owlery show this machine's screen to an administrator, with a notice on it for the person at the machine (Windows; needs owlery-remote installed)")
+		remoteSec = flag.String("remote-secret-file", defaultRemoteSecretFile(), "shared secret of the remote-control helper (Windows); remote control is offered only when the file is there")
 		logFile   = flag.String("log-file", "", "write the log to this file instead of the standard error (a Windows service has no console)")
 	)
 	flag.Parse()
@@ -79,7 +82,7 @@ func main() {
 		*noF2B, *noSock, *noFW = true, true, true
 	}
 	cfg := secagent.Config{ServerURL: *server, TokenFile: *tokenFile, CAFile: *caFile, AllowInsecure: *insecure,
-		Interval: *interval, Version: version, Log: log, HelperSocket: *helper, StateDir: *stateDir, NoFail2ban: *noF2B, NoSockets: *noSock, NoFirewall: *noFW, NoHost: *noHost, ContainersFile: *contFile, Probe: *probe, AllowShell: *allowSh, ShellSocket: *shellSock, AllowDesktop: *allowDesk}
+		Interval: *interval, Version: version, Log: log, HelperSocket: *helper, StateDir: *stateDir, NoFail2ban: *noF2B, NoSockets: *noSock, NoFirewall: *noFW, NoHost: *noHost, ContainersFile: *contFile, Probe: *probe, AllowShell: *allowSh, ShellSocket: *shellSock, AllowDesktop: *allowDesk, AllowScreen: *allowScr, RemoteSecretFile: *remoteSec}
 	run := func(ctx context.Context) error { return secagent.Run(ctx, cfg) }
 	if handled, err := runAsService(run); handled {
 		if err != nil {
@@ -135,6 +138,17 @@ func openLog(path string) (*os.File, error) {
 func defaultShellSocket() string {
 	if runtime.GOOS == "linux" {
 		return "/run/remnascope-shell/shell.sock"
+	}
+	return ""
+}
+
+// defaultRemoteSecretFile is where the remote-control helper's own installer writes its secret (Windows only, for
+// now). The agent only ever reads this file; it never starts or manages the helper.
+func defaultRemoteSecretFile() string {
+	if runtime.GOOS == "windows" {
+		if pd := os.Getenv("ProgramData"); pd != "" {
+			return filepath.Join(pd, "Owlery", "remote.secret")
+		}
 	}
 	return ""
 }

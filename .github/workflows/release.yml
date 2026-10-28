@@ -63,6 +63,8 @@ jobs:
           # The security agent also runs on Windows, as a service: it reports the machine's resources there.
           for arch in amd64 arm64; do
             CGO_ENABLED=0 GOOS=windows GOARCH=$arch go build -trimpath -ldflags="-s -w -X main.version=${GITHUB_REF_NAME}" -o "dist/remnascope-secagent-windows-$arch.exe" ./cmd/secagent
+            # The screen-sharing helper runs in the signed-in person's session; windowsgui so that no console window opens at logon.
+            CGO_ENABLED=0 GOOS=windows GOARCH=$arch go build -trimpath -ldflags="-s -w -H=windowsgui" -o "dist/owlery-remote-windows-$arch.exe" ./cmd/owlery-remote
           done
           tar -czf dist/remnascope-deploy-files.tar.gz deploy/agent deploy/router deploy/secagent
           (cd dist && sha256sum * > SHA256SUMS)

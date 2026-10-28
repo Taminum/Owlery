@@ -72,6 +72,13 @@ type Config struct {
 	// AllowDesktop lets Owlery reach this machine's own RDP or VNC port through the agent, so that the port need not be
 	// open to the network at all.
 	AllowDesktop bool
+	// AllowScreen is the machine's explicit permission for screen sharing; without it the capability is never offered,
+	// whatever else is installed.
+	AllowScreen bool
+	// RemoteSecretFile, when set and readable, is the shared secret of the remote-control helper (Windows): a second,
+	// user-session process started at logon that shows the signed-in person's own screen. Its presence is what makes
+	// the capability on, same as ShellSocket for the Linux terminal helper.
+	RemoteSecretFile string
 }
 
 func (c *Config) defaults() {
@@ -258,7 +265,20 @@ func (a *agent) capabilities(ban bool) []string {
 	if a.cfg.AllowDesktop {
 		caps = append(caps, secproto.CapDesktop)
 	}
+	if a.remoteReady() {
+		caps = append(caps, secproto.CapRemote)
+	}
 	return caps
+}
+
+// remoteReady says whether the remote-control helper is installed and its secret is readable right now; the agent
+// does not start or watch the helper itself, only checks for it.
+func (a *agent) remoteReady() bool {
+	if !a.cfg.AllowScreen || a.cfg.RemoteSecretFile == "" {
+		return false
+	}
+	_, err := os.Stat(a.cfg.RemoteSecretFile)
+	return err == nil
 }
 
 func (a *agent) session(ctx context.Context) error {
@@ -436,6 +456,21 @@ func (a *agent) reader(ctx context.Context, c *websocket.Conn, ban bool, acks ch
 			go func() {
 				if err := secshell.Tunnel(a.runCtx, a.dialBack, req); err != nil {
 					a.cfg.Log.Warn("desktop tunnel", "port", req.Port, "err", err)
+				}
+			}()
+		case "remote_open":
+			var req secproto.RemoteOpen
+			if json.Unmarshal(b, &req) != nil || req.ID == "" || len(req.ID) > 64 {
+				fail(errors.New("secagent: a bad remote-control request"))
+				return
+			}
+			if !a.remoteReady() {
+				a.cfg.Log.Warn("remote control asked for, but this machine does not allow it", "id", req.ID)
+				continue
+			}
+			go func() {
+				if err := secshell.RemoteTunnel(a.runCtx, a.dialBack, a.cfg.RemoteSecretFile, req); err != nil {
+					a.cfg.Log.Warn("remote control", "err", err)
 				}
 			}()
 		case "error":
