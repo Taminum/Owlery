@@ -92,6 +92,7 @@ services:
     image: caddy:2.9-alpine
     environment:
       SCOPE_HOST: ${SCOPE_HOST:?set SCOPE_HOST in .env}
+      SCOPE_ALIASES: ${SCOPE_ALIASES:-}
     ports:
       - "80:80"
       - "443:443"
