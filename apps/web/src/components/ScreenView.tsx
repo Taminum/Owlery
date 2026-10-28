@@ -3,6 +3,8 @@ import { Maximize2, X } from 'lucide-react'
 import { t, type MsgKey } from '../i18n'
 import { Card } from './ui'
 import { PrimaryButton } from './Modal'
+import { ScreenFiles, sendFile } from './ScreenFiles'
+import { FsClient, joinPath } from '../lib/screenfs'
 
 type State = 'idle' | 'connecting' | 'open' | 'closed'
 type Monitor = { w: number; h: number; primary: boolean }
@@ -48,6 +50,11 @@ export function ScreenView({ serverId }: { serverId: string }) {
   const [session, setSession] = useState(0)
   const [monitors, setMonitors] = useState<Monitor[]>([])
   const [monitor, setMonitor] = useState(0)
+  const fs = useRef<FsClient | null>(null)
+  const pickFile = useRef<HTMLInputElement>(null)
+  const [client, setClient] = useState<FsClient | null>(null) // the same client as fs, for rendering
+  const [files, setFiles] = useState(false)
+  const [transfer, setTransfer] = useState('')
 
   useEffect(() => {
     const cv = canvas.current
@@ -92,6 +99,7 @@ export function ScreenView({ serverId }: { serverId: string }) {
       try { decoder.decode(new EncodedVideoChunk({ type: key ? 'key' : 'delta', timestamp: performance.now() * 1000, data: p.subarray(1) })) } catch { needKey = true }
     }
     const handle = (type: number, p: Uint8Array) => {
+      if (fs.current?.handle(type, p)) return
       if (type === MSG_VIDEO && p.length > 1) {
         video(p)
       } else if (type === MSG_MONITORS) {
@@ -140,6 +148,9 @@ export function ScreenView({ serverId }: { serverId: string }) {
 
     const send = (type: number, payload: Uint8Array) => { if (ws.readyState === WebSocket.OPEN) ws.send(message(type, payload)) }
     sender.current = send
+    const fsc = new FsClient(send, () => ws.bufferedAmount)
+    fs.current = fsc
+    ws.onopen = () => setClient(fsc)
     let buttons = 0
     const mouse = (e: PointerEvent | WheelEvent, wheel: number) => {
       const r = cv.getBoundingClientRect()
@@ -186,6 +197,11 @@ export function ScreenView({ serverId }: { serverId: string }) {
     return () => {
       disposed = true
       sender.current = () => {}
+      fs.current?.close()
+      fs.current = null
+      setClient(null)
+      setFiles(false)
+      setTransfer('')
       cv.removeEventListener('pointermove', onMove)
       cv.removeEventListener('pointerdown', onDown)
       cv.removeEventListener('pointerup', onUp)
@@ -205,6 +221,20 @@ export function ScreenView({ serverId }: { serverId: string }) {
     const text = await navigator.clipboard.readText().catch(() => window.prompt(t('scr.pasteAsk')) ?? '')
     if (text) sender.current(MSG_TEXT, new TextEncoder().encode(text.slice(0, 4000)))
     box.current?.focus()
+  }
+  // "Файл": the page sends one file into the person's Downloads folder, without opening the file browser.
+  const sendOne = async (f: File) => {
+    const client = fs.current
+    if (!client) return
+    setTransfer(t('scr.progress', { n: f.name, p: '0' }))
+    try {
+      const home = (await client.list('')).home
+      if (!home) throw new Error(t('scr.noHome'))
+      await sendFile(client, f, joinPath(home, f.name), (p) => setTransfer(t('scr.progress', { n: f.name, p: String(p) })))
+      setTransfer(t('scr.sent', { n: f.name }))
+    } catch (e) {
+      setTransfer(e instanceof Error ? e.message : String(e))
+    }
   }
   return (
     <>
@@ -233,11 +263,15 @@ export function ScreenView({ serverId }: { serverId: string }) {
             <button type="button" className={btn} onClick={() => combo(1)}>Win</button>
             <button type="button" className={btn} onClick={() => combo(2)}>Alt+Tab</button>
             <button type="button" className={btn} onClick={() => void pasteText()}>{t('scr.paste')}</button>
+            <button type="button" className={btn} onClick={() => pickFile.current?.click()}>{t('scr.file')}</button>
+            <input ref={pickFile} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void sendOne(f) }} />
+            <button type="button" className={btn} onClick={() => setFiles((v) => !v)}>{t('scr.files')}</button>
             <button type="button" className={btn} aria-label={t('desk.full')} onClick={() => void (document.fullscreenElement ? document.exitFullscreen() : view.current?.requestFullscreen())}><Maximize2 size={13} aria-hidden /></button>
-            <span className="ml-auto text-xs text-muted" role="status">{state === 'connecting' ? t('scr.connecting') : ''}</span>
+            <span className="ml-auto text-xs text-muted" role="status">{state === 'connecting' ? t('scr.connecting') : transfer}</span>
             <button type="button" className="h-7 rounded-control border border-line px-2 text-fg hover:border-red" aria-label={t('scr.close')} onClick={stop}><X size={14} aria-hidden /></button>
           </div>
-          <div ref={box} tabIndex={0} className="flex min-h-0 flex-1 items-center justify-center overflow-hidden outline-none">
+          <div ref={box} tabIndex={0} className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden outline-none">
+            {files && client && <ScreenFiles fs={client} onClose={() => setFiles(false)} />}
             <canvas ref={canvas} className="max-h-full max-w-full cursor-default object-contain" />
           </div>
         </div>
