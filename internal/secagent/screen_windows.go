@@ -28,6 +28,11 @@ func (a *agent) openScreen(req secproto.RemoteOpen) {
 		a.cfg.Log.Warn("screen: cannot find own path", "err", err)
 		return
 	}
+	// The helper stays alive after a session, so a second launch would only fail to take the port: start one only when
+	// none is listening.
+	if portOpen(secproto.RemoteHelperPort) {
+		goto relay
+	}
 	// The helper is this same binary, run as "screen-helper" inside the signed-in session.
 	if err := startInConsoleSession(exe, "screen-helper", "-secret-file", a.cfg.RemoteSecretFile); err != nil {
 		// A helper may already be running from an earlier session; only say something when there is also no one to talk
@@ -35,9 +40,20 @@ func (a *agent) openScreen(req secproto.RemoteOpen) {
 		a.cfg.Log.Warn("screen: launching the helper in the signed-in session", "err", err)
 	}
 	waitForPort(a.runCtx, secproto.RemoteHelperPort, 8*time.Second)
+relay:
 	if err := secshell.RemoteTunnel(a.runCtx, a.dialBack, a.cfg.RemoteSecretFile, req); err != nil {
 		a.cfg.Log.Warn("screen", "err", err)
 	}
+}
+
+// portOpen says whether something is already listening on the loopback port.
+func portOpen(port int) bool {
+	c, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), 300*time.Millisecond)
+	if err != nil {
+		return false
+	}
+	_ = c.Close()
+	return true
 }
 
 // waitForPort returns once something is listening on the loopback port, or after the timeout. The freshly launched

@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { Maximize2 } from 'lucide-react'
+import { Maximize2, X } from 'lucide-react'
 import { t, type MsgKey } from '../i18n'
 import { Card } from './ui'
-import { GhostButton, PrimaryButton } from './Modal'
+import { PrimaryButton } from './Modal'
 
 type State = 'idle' | 'connecting' | 'open' | 'closed'
+type Monitor = { w: number; h: number; primary: boolean }
 
 // Why the server closed the connection, in the person's words.
 const REASON: Record<number, MsgKey> = { 4001: 'scr.noAgent', 4002: 'scr.notAllowed', 4003: 'scr.noAnswer', 4004: 'scr.noHelper', 1008: 'scr.forbidden' }
@@ -16,6 +17,11 @@ const MSG_KEY = 3
 const MSG_ERROR = 4
 const MSG_END = 5
 const MSG_VIDEO = 6 // [flag: 1 = a picture a decoder can start from][one H.264 picture, Annex B]
+const MSG_MONITORS = 7 // JSON {list: [{w, h, primary}], current}
+const MSG_SELECT = 8 // one byte: the monitor to show
+const MSG_QUALITY = 9 // one byte: 0 auto, 1 high, 2 medium, 3 low
+const MSG_COMBO = 10 // one byte: 1 Win, 2 Alt+Tab, 3 Ctrl+Alt+Del
+const MSG_TEXT = 11 // UTF-8 text to type
 
 function message(type: number, payload: Uint8Array): Uint8Array<ArrayBuffer> {
   const out = new Uint8Array(5 + payload.length)
@@ -25,17 +31,23 @@ function message(type: number, payload: Uint8Array): Uint8Array<ArrayBuffer> {
   return out
 }
 
+const btn = 'h-7 shrink-0 rounded-control border border-line bg-elevated px-2.5 text-xs text-fg hover:border-cyan'
+
 /**
- * The screen of the person at the machine, live, with mouse and keyboard. The person sees an icon in their tray for
- * as long as this is open and can end it from its menu; opening and closing are in the audit log, the picture is not
- * recorded.
+ * The screen of the person at the machine, live, with mouse and keyboard, filling the window with a bar of controls on
+ * top. The person sees an icon in their tray for as long as this is open and can end it from its menu; opening and
+ * closing are in the audit log, the picture is not recorded.
  */
 export function ScreenView({ serverId }: { serverId: string }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const box = useRef<HTMLDivElement>(null)
+  const view = useRef<HTMLDivElement>(null)
+  const sender = useRef<(type: number, payload: Uint8Array) => void>(() => {})
   const [state, setState] = useState<State>('idle')
   const [reason, setReason] = useState('')
   const [session, setSession] = useState(0)
+  const [monitors, setMonitors] = useState<Monitor[]>([])
+  const [monitor, setMonitor] = useState(0)
 
   useEffect(() => {
     const cv = canvas.current
@@ -48,7 +60,7 @@ export function ScreenView({ serverId }: { serverId: string }) {
     let buf = new Uint8Array(0)
     let told = '' // the helper's own explanation, shown when the connection ends
     let drawing = Promise.resolve()
-    const finish = (key: string) => { if (!disposed) { setState('closed'); setReason(told || key) } }
+    const finish = (key: string) => { if (!disposed) { setState('closed'); setReason(told || key); setSession(0) } }
 
     // H.264 goes through the browser's own decoder (hardware where there is one); the still pictures are the fallback of
     // a machine without a video encoder.
@@ -82,6 +94,12 @@ export function ScreenView({ serverId }: { serverId: string }) {
     const handle = (type: number, p: Uint8Array) => {
       if (type === MSG_VIDEO && p.length > 1) {
         video(p)
+      } else if (type === MSG_MONITORS) {
+        try {
+          const m = JSON.parse(new TextDecoder().decode(p)) as { list: Monitor[]; current: number }
+          setMonitors(m.list ?? [])
+          setMonitor(m.current ?? 0)
+        } catch { /* a list the page cannot read is left out */ }
       } else if (type === MSG_FRAME && p.length > 4) {
         const dv = new DataView(p.buffer, p.byteOffset, p.byteLength)
         const w = dv.getUint16(0)
@@ -121,6 +139,7 @@ export function ScreenView({ serverId }: { serverId: string }) {
     ws.onclose = (e) => finish(e.code in REASON ? t(REASON[e.code]) : e.code === 1000 ? t('scr.ended') : t('scr.lost'))
 
     const send = (type: number, payload: Uint8Array) => { if (ws.readyState === WebSocket.OPEN) ws.send(message(type, payload)) }
+    sender.current = send
     let buttons = 0
     const mouse = (e: PointerEvent | WheelEvent, wheel: number) => {
       const r = cv.getBoundingClientRect()
@@ -166,6 +185,7 @@ export function ScreenView({ serverId }: { serverId: string }) {
 
     return () => {
       disposed = true
+      sender.current = () => {}
       cv.removeEventListener('pointermove', onMove)
       cv.removeEventListener('pointerdown', onDown)
       cv.removeEventListener('pointerup', onUp)
@@ -178,28 +198,50 @@ export function ScreenView({ serverId }: { serverId: string }) {
     }
   }, [session, serverId])
 
-  const start = () => { setReason(''); setState('connecting'); setSession((n) => n + 1) }
+  const start = () => { setReason(''); setState('connecting'); setMonitors([]); setMonitor(0); setSession((n) => n + 1) }
   const stop = () => { setState('closed'); setReason(t('scr.ended')); setSession(0) }
+  const combo = (id: number) => { sender.current(MSG_COMBO, new Uint8Array([id])); box.current?.focus() }
+  const pasteText = async () => {
+    const text = await navigator.clipboard.readText().catch(() => window.prompt(t('scr.pasteAsk')) ?? '')
+    if (text) sender.current(MSG_TEXT, new TextEncoder().encode(text.slice(0, 4000)))
+    box.current?.focus()
+  }
   return (
-    <Card title={t('scr.title')} note={t('scr.note')}
-      right={state !== 'idle' && state !== 'closed' ? (
-        <div className="flex gap-2">
-          <GhostButton onClick={() => void box.current?.requestFullscreen()}><Maximize2 size={14} aria-hidden /> {t('desk.full')}</GhostButton>
-          <GhostButton onClick={stop}>{t('scr.close')}</GhostButton>
-        </div>) : undefined}>
-      {state === 'idle' && <PrimaryButton onClick={start}>{t('scr.open')}</PrimaryButton>}
-      {state === 'connecting' && <p className="mb-2 text-[13px] text-muted" role="status">{t('scr.connecting')}</p>}
-      {state === 'closed' && (
-        <div className="mb-3 flex flex-wrap items-center gap-3">
-          {reason && <p className="text-[13px] text-muted" role="status">{reason}</p>}
-          <PrimaryButton onClick={start}>{t('scr.reopen')}</PrimaryButton>
-        </div>
-      )}
+    <>
+      <Card title={t('scr.title')} note={t('scr.note')}>
+        {state === 'closed' && reason && <p className="mb-3 text-[13px] text-muted" role="status">{reason}</p>}
+        <PrimaryButton onClick={start}>{state === 'closed' ? t('scr.reopen') : t('scr.open')}</PrimaryButton>
+      </Card>
       {session > 0 && (
-        <div ref={box} tabIndex={0} className="flex min-h-[320px] items-center justify-center overflow-hidden rounded-control border border-line bg-black outline-none focus:border-cyan">
-          <canvas ref={canvas} className="max-h-[75vh] max-w-full cursor-default" />
+        <div ref={view} className="fixed inset-0 z-50 flex flex-col bg-black">
+          <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-surface px-2 py-1.5">
+            <span className="text-xs font-semibold text-cyan">{t('scr.title')}</span>
+            {monitors.length > 0 && (
+              <select aria-label={t('scr.monitor')} className={btn} value={monitor}
+                onChange={(e) => { const i = Number(e.target.value); setMonitor(i); sender.current(MSG_SELECT, new Uint8Array([i])); box.current?.focus() }}>
+                {monitors.map((m, i) => <option key={i} value={i}>{t('scr.monitorN', { n: String(i + 1), w: String(m.w), h: String(m.h) })}</option>)}
+              </select>
+            )}
+            <select aria-label={t('scr.quality')} className={btn} defaultValue="0"
+              onChange={(e) => { sender.current(MSG_QUALITY, new Uint8Array([Number(e.target.value)])); box.current?.focus() }}>
+              <option value="0">{t('scr.q.auto')}</option>
+              <option value="1">{t('scr.q.high')}</option>
+              <option value="2">{t('scr.q.mid')}</option>
+              <option value="3">{t('scr.q.low')}</option>
+            </select>
+            <button type="button" className={btn} onClick={() => combo(3)}>Ctrl+Alt+Del</button>
+            <button type="button" className={btn} onClick={() => combo(1)}>Win</button>
+            <button type="button" className={btn} onClick={() => combo(2)}>Alt+Tab</button>
+            <button type="button" className={btn} onClick={() => void pasteText()}>{t('scr.paste')}</button>
+            <button type="button" className={btn} aria-label={t('desk.full')} onClick={() => void (document.fullscreenElement ? document.exitFullscreen() : view.current?.requestFullscreen())}><Maximize2 size={13} aria-hidden /></button>
+            <span className="ml-auto text-xs text-muted" role="status">{state === 'connecting' ? t('scr.connecting') : ''}</span>
+            <button type="button" className="h-7 rounded-control border border-line px-2 text-fg hover:border-red" aria-label={t('scr.close')} onClick={stop}><X size={14} aria-hidden /></button>
+          </div>
+          <div ref={box} tabIndex={0} className="flex min-h-0 flex-1 items-center justify-center overflow-hidden outline-none">
+            <canvas ref={canvas} className="max-h-full max-w-full cursor-default object-contain" />
+          </div>
         </div>
       )}
-    </Card>
+    </>
   )
 }

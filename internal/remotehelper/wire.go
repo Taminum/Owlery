@@ -19,11 +19,16 @@ import (
 )
 
 const (
-	msgFrame = 0x01 // helper -> browser: one screen update
-	msgMouse = 0x02 // browser -> helper: pointer position, buttons, wheel
-	msgKey   = 0x03 // browser -> helper: one key press or release
-	msgError = 0x04 // helper -> browser: the session could not start, with why, in Russian
-	msgEnd   = 0x05 // helper -> browser: the person at the machine pressed "Прекратить"
+	msgFrame    = 0x01 // helper -> browser: one screen update
+	msgMouse    = 0x02 // browser -> helper: pointer position, buttons, wheel
+	msgKey      = 0x03 // browser -> helper: one key press or release
+	msgError    = 0x04 // helper -> browser: the session could not start, with why, in Russian
+	msgMonitors = 0x07 // helper -> browser: JSON {"list":[{"w":..,"h":..,"primary":..}],"current":0}
+	msgSelect   = 0x08 // browser -> helper: one byte, the index of the monitor to show
+	msgQuality  = 0x09 // browser -> helper: one byte, 0 auto, 1 high, 2 medium, 3 low
+	msgCombo    = 0x0A // browser -> helper: one byte, a key combination the browser cannot send itself (see comboWin...)
+	msgText     = 0x0B // browser -> helper: UTF-8 text to type on the machine
+	msgEnd      = 0x05 // helper -> browser: the person at the machine pressed "Прекратить"
 )
 
 // maxMsg bounds one message. A screen frame is the only message expected to be large.
