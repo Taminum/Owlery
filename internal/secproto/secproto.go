@@ -385,3 +385,19 @@ type RemoteOpen struct {
 	Type string `json:"type"` // "remote_open"
 	ID   string `json:"id"`
 }
+
+// CapWeb is announced by an agent whose machine lets Owlery reach web services bound to 127.0.0.1 on it (an admin
+// panel such as Komodo or Portainer), so that their ports need not be open to the network. Off unless the machine
+// was set up with -allow-web.
+const CapWeb = "web"
+
+// ProxyPath is where an agent connects back for one connection to a local web service.
+const ProxyPath = Path + "/proxy"
+
+// ProxyOpen asks the agent to connect to 127.0.0.1:Port and back to ProxyPath with the session ID. The first frame on
+// that connection is TunnelReady or TunnelPortClosed, as for a desktop tunnel.
+type ProxyOpen struct {
+	Type string `json:"type"` // "proxy_open"
+	ID   string `json:"id"`
+	Port int    `json:"port"`
+}

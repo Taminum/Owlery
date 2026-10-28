@@ -140,7 +140,7 @@ func serve(log *slog.Logger) error {
 
 	srv := &httpapi.Server{Store: st, Ring: ring, Probe: httpapi.NewProbeFactory(policy), Sync: sy, Log: log,
 		CookieSecure: c.CookieSecure, Trusted: c.TrustedProxies, CustomCA: len(policy.ExtraCAPEM) > 0,
-		SessionTTL: c.SessionTTL, IdleTTL: c.IdleTTL, RecordsDir: c.RecordsDir, GuacdAddr: c.GuacdAddr, DesktopHost: c.DesktopHost}
+		SessionTTL: c.SessionTTL, IdleTTL: c.IdleTTL, RecordsDir: c.RecordsDir, GuacdAddr: c.GuacdAddr, DesktopHost: c.DesktopHost, ServicesDomain: c.ServicesDomain}
 
 	srv.Live = live.New()
 	srv.Gemini = &gemini.Client{KeyFile: c.GeminiKeyFile}

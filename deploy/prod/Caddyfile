@@ -1,14 +1,14 @@
-# TLS terminates here; Caddy gets and renews the Let's Encrypt certificate by itself.
-# SCOPE_ALIASES are further names of the same site, space-separated (an old name that agents still connect to).
-{$SCOPE_HOST} {$SCOPE_ALIASES} {
-	encode gzip
-	header Strict-Transport-Security "max-age=31536000"
-	# Everything goes to the bundled nginx, which serves the UI, proxies /api and the agents'
-	# WebSocket (/ingest/), and sets the security headers. Caddy adds X-Forwarded-For with the real client.
-	reverse_proxy web:8080 {
-		header_up X-Forwarded-For {remote_host}
+# TLS terminates here; Caddy gets and renews the Let's Encrypt certificates by itself.
+{
+	# Web services get a certificate for their own name when it is first opened, and only if Owlery says the name
+	# belongs to a published service, so nobody can make this server collect certificates for made-up names.
+	on_demand_tls {
+		ask http://api:8080/internal/tls-ask
 	}
-	# Access log without request or response headers: they can carry cookies and tokens.
+}
+
+# Access log without request or response headers: they can carry cookies and tokens.
+(quiet_log) {
 	log {
 		output stdout
 		format filter {
@@ -19,4 +19,29 @@
 			}
 		}
 	}
+}
+
+# SCOPE_ALIASES are further names of the same site, space-separated (an old name that agents still connect to).
+{$SCOPE_HOST} {$SCOPE_ALIASES} {
+	encode gzip
+	header Strict-Transport-Security "max-age=31536000"
+	# Everything goes to the bundled nginx, which serves the UI, proxies /api and the agents'
+	# WebSocket (/ingest/), and sets the security headers. Caddy adds X-Forwarded-For with the real client.
+	reverse_proxy web:8080 {
+		header_up X-Forwarded-For {remote_host}
+	}
+	import quiet_log
+}
+
+# Web services published from the machines: https://<slug>.<SERVICES_DOMAIN>. Each goes straight to the API, which
+# signs the person in and carries the request to the machine through its agent. The service's own headers are left
+# as they are: Owlery's security headers would break panels that frame or cache their own pages.
+*.{$SERVICES_DOMAIN} {
+	tls {
+		on_demand
+	}
+	reverse_proxy api:8080 {
+		header_up X-Forwarded-For {remote_host}
+	}
+	import quiet_log
 }

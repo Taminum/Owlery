@@ -198,3 +198,19 @@ WebCodecs. Without ffmpeg it falls back to JPEG pictures.
 While a session is open the helper shows an icon in the person's notification area; its menu has "Прекратить показ",
 which ends the session at once. Opening and closing go to the audit log (`screen.open`, `screen.close`); the screen is
 never recorded.
+
+## Web services (optional)
+
+`-allow-web` (on Linux in the unit's `ExecStart`, on Windows `secagent.exe install ... -allow-web`) lets Owlery open
+web services bound to 127.0.0.1 on the machine, such as an admin panel, at an address of their own:
+`https://<name>.<SERVICES_DOMAIN>` (tab "Службы" of the server card). Only the machine's own loopback is reachable,
+not its local network. The agent dials out to Owlery and to `127.0.0.1:<port>` for each connection
+(`/ingest/security/v1/proxy`) and listens on nothing.
+
+Each service has an origin of its own, so its pages cannot read Owlery's cookies or call its API. Owlery's session
+cookie never reaches a service: a visit without the service's own cookie is sent to Owlery, which checks the person
+(owner or administrator of a linked panel) and returns them with a one-minute ticket; the service host trades it for
+an 8-hour cookie of its own, which is removed from every request before it reaches the panel. Opening a service is
+in the audit log (`web.open`). Caddy gets a certificate for a service's name when it is first opened, and only after
+Owlery confirms the name is a published service; this needs a wildcard DNS record `*.<SERVICES_DOMAIN>` pointing at
+the server. A name is never reused, even after the service is removed, so an old link cannot lead to another panel.

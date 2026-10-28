@@ -407,6 +407,7 @@ export function AgentCard({ vpsId, canEdit }: { vpsId: string; canEdit: boolean 
   const [shell, setShell] = useState(true)
   const [desk, setDesk] = useState(true)
   const [scr, setScr] = useState(false)
+  const [web, setWeb] = useState(true)
   const [err, setErr] = useState('')
   const [confirm, setConfirm] = useState(false)
   const agent = data?.agent ?? null
@@ -463,6 +464,11 @@ export function AgentCard({ vpsId, canEdit }: { vpsId: string; canEdit: boolean 
               <span>{t('sec.onb.shell')}</span>
             </label>
             <p className="-mt-2 text-xs text-muted">{t('sec.onb.shellHint')}</p>
+            <label className="flex items-center gap-2 text-[13px]">
+              <input type="checkbox" checked={web} onChange={(e) => setWeb(e.target.checked)} />
+              <span>{t('sec.onb.web')}</span>
+            </label>
+            <p className="-mt-2 text-xs text-muted">{t('sec.onb.webHint')}</p>
             {os === 'windows' ? (
               <>
                 <label className="flex items-center gap-2 text-[13px]">
@@ -486,7 +492,7 @@ icacls "$d\\secagent.token" /inheritance:r /grant:r "*S-1-5-18:R" "*S-1-5-32-544
 $a = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'amd64' }
 [Net.ServicePointManager]::SecurityProtocol = 'Tls12'
 Invoke-WebRequest "https://github.com/Taminum/Owlery/releases/latest/download/remnascope-secagent-windows-$a.exe" -OutFile "$d\\secagent.exe" -UseBasicParsing
-& "$d\\secagent.exe" install -server "wss://${window.location.host}" -token-file "$d\\secagent.token"${shell ? ' -allow-shell' : ''}${desk ? ' -allow-desktop' : ''}${scr ? ' -allow-screen' : ''}`}</Code>
+& "$d\\secagent.exe" install -server "wss://${window.location.host}" -token-file "$d\\secagent.token"${shell ? ' -allow-shell' : ''}${desk ? ' -allow-desktop' : ''}${scr ? ' -allow-screen' : ''}${web ? ' -allow-web' : ''}`}</Code>
                 <p>{t('sec.onb.win.s2')}</p>
                 <Code>{`Get-Service OwlerySecAgent
 Get-Content "$env:ProgramData\\Owlery\\secagent.log" -Tail 5`}</Code>
@@ -506,7 +512,7 @@ curl -fLO https://github.com/Taminum/Owlery/releases/latest/download/remnascope-
 tar -xzf remnascope-deploy-files.tar.gz`}</Code>
             <p>{t('sec.onb.s4')}</p>
             <Code>{`install -m 0755 remnascope-secagent-linux-$A /usr/local/bin/remnascope-secagent
-sed 's#wss://SCOPE_HOST#wss://${window.location.host}#' deploy/secagent/remnascope-secagent.service > /etc/systemd/system/remnascope-secagent.service
+sed 's#wss://SCOPE_HOST#wss://${window.location.host}${web ? ' -allow-web' : ''}#' deploy/secagent/remnascope-secagent.service > /etc/systemd/system/remnascope-secagent.service
 cp deploy/secagent/remnascope-secagent-f2b.service /etc/systemd/system/`}</Code>
             <p>{t('sec.onb.s5')}</p>
             <Code>{`mkdir -p /etc/systemd/system/fail2ban.service.d

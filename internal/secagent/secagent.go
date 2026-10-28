@@ -72,6 +72,8 @@ type Config struct {
 	// AllowDesktop lets Owlery reach this machine's own RDP or VNC port through the agent, so that the port need not be
 	// open to the network at all.
 	AllowDesktop bool
+	// AllowWeb lets Owlery reach web services bound to 127.0.0.1 on this machine (admin panels) through the agent.
+	AllowWeb bool
 	// AllowScreen is the machine's explicit permission for screen sharing; without it the capability is never offered,
 	// whatever else is installed.
 	AllowScreen bool
@@ -267,6 +269,9 @@ func (a *agent) capabilities(ban bool) []string {
 	if a.cfg.AllowDesktop {
 		caps = append(caps, secproto.CapDesktop)
 	}
+	if a.cfg.AllowWeb {
+		caps = append(caps, secproto.CapWeb)
+	}
 	if a.remoteReady() {
 		caps = append(caps, secproto.CapRemote)
 	}
@@ -459,6 +464,21 @@ func (a *agent) reader(ctx context.Context, c *websocket.Conn, ban bool, acks ch
 			go func() {
 				if err := secshell.Tunnel(a.runCtx, a.dialBack, req); err != nil {
 					a.cfg.Log.Warn("desktop tunnel", "port", req.Port, "err", err)
+				}
+			}()
+		case "proxy_open":
+			var req secproto.ProxyOpen
+			if json.Unmarshal(b, &req) != nil || req.ID == "" || len(req.ID) > 64 {
+				fail(errors.New("secagent: a bad web service request"))
+				return
+			}
+			if !a.cfg.AllowWeb {
+				a.cfg.Log.Warn("web service asked for, but this machine does not allow it", "id", req.ID)
+				continue
+			}
+			go func() {
+				if err := secshell.Proxy(a.runCtx, a.dialBack, req); err != nil {
+					a.cfg.Log.Warn("web service", "port", req.Port, "err", err)
 				}
 			}()
 		case "remote_open":

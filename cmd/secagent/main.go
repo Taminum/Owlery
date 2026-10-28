@@ -55,6 +55,7 @@ func main() {
 		contFile  = flag.String("containers-file", "/run/remnascope-sec/containers.tsv", "the list of running containers written by remnascope-containers-list (optional)")
 		probe     = flag.Bool("probe", false, "act as a checker: let the server ask this host to connect to a public TCP port or read a TLS certificate")
 		showVer   = flag.Bool("version", false, "print the version and exit")
+		allowWeb  = flag.Bool("allow-web", false, "let Owlery open web services bound to 127.0.0.1 here (admin panels) through the agent")
 		allowDesk = flag.Bool("allow-desktop", false, "let Owlery reach this machine's own RDP or VNC port (127.0.0.1:3389 or :5900) through the agent")
 		allowSh   = flag.Bool("allow-shell", false, "let Owlery open a terminal here with the agent's own rights (Windows; on Linux install the shell helper instead)")
 		shellSock = flag.String("shell-socket", defaultShellSocket(), "Unix socket of the terminal helper; a terminal is offered only when it is there")
@@ -82,7 +83,7 @@ func main() {
 		*noF2B, *noSock, *noFW = true, true, true
 	}
 	cfg := secagent.Config{ServerURL: *server, TokenFile: *tokenFile, CAFile: *caFile, AllowInsecure: *insecure,
-		Interval: *interval, Version: version, Log: log, HelperSocket: *helper, StateDir: *stateDir, NoFail2ban: *noF2B, NoSockets: *noSock, NoFirewall: *noFW, NoHost: *noHost, ContainersFile: *contFile, Probe: *probe, AllowShell: *allowSh, ShellSocket: *shellSock, AllowDesktop: *allowDesk, AllowScreen: *allowScr, RemoteSecretFile: *remoteSec}
+		Interval: *interval, Version: version, Log: log, HelperSocket: *helper, StateDir: *stateDir, NoFail2ban: *noF2B, NoSockets: *noSock, NoFirewall: *noFW, NoHost: *noHost, ContainersFile: *contFile, Probe: *probe, AllowShell: *allowSh, ShellSocket: *shellSock, AllowDesktop: *allowDesk, AllowWeb: *allowWeb, AllowScreen: *allowScr, RemoteSecretFile: *remoteSec}
 	run := func(ctx context.Context) error { return secagent.Run(ctx, cfg) }
 	if handled, err := runAsService(run); handled {
 		if err != nil {
