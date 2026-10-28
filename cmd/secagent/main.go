@@ -59,8 +59,7 @@ func main() {
 		allowSh   = flag.Bool("allow-shell", false, "let Owlery open a terminal here with the agent's own rights (Windows; on Linux install the shell helper instead)")
 		shellSock = flag.String("shell-socket", defaultShellSocket(), "Unix socket of the terminal helper; a terminal is offered only when it is there")
 		allowScr  = flag.Bool("allow-screen", false, "let Owlery show this machine's screen to an administrator, with a notice on it for the person at the machine (Windows; needs owlery-remote installed)")
-		remoteSec = flag.String("remote-secret-file", defaultRemoteSecretFile(), "shared secret of the screen-sharing helper (Windows); screen sharing is offered only when it and the helper are there")
-		remoteExe = flag.String("remote-helper", defaultRemoteHelperExe(), "the screen-sharing helper program the agent launches into the signed-in session (Windows)")
+		remoteSec = flag.String("remote-secret-file", defaultRemoteSecretFile(), "shared secret of the screen-sharing helper (Windows); screen sharing is offered only when it is there")
 		logFile   = flag.String("log-file", "", "write the log to this file instead of the standard error (a Windows service has no console)")
 	)
 	flag.Parse()
@@ -83,7 +82,7 @@ func main() {
 		*noF2B, *noSock, *noFW = true, true, true
 	}
 	cfg := secagent.Config{ServerURL: *server, TokenFile: *tokenFile, CAFile: *caFile, AllowInsecure: *insecure,
-		Interval: *interval, Version: version, Log: log, HelperSocket: *helper, StateDir: *stateDir, NoFail2ban: *noF2B, NoSockets: *noSock, NoFirewall: *noFW, NoHost: *noHost, ContainersFile: *contFile, Probe: *probe, AllowShell: *allowSh, ShellSocket: *shellSock, AllowDesktop: *allowDesk, AllowScreen: *allowScr, RemoteSecretFile: *remoteSec, RemoteHelperExe: *remoteExe}
+		Interval: *interval, Version: version, Log: log, HelperSocket: *helper, StateDir: *stateDir, NoFail2ban: *noF2B, NoSockets: *noSock, NoFirewall: *noFW, NoHost: *noHost, ContainersFile: *contFile, Probe: *probe, AllowShell: *allowSh, ShellSocket: *shellSock, AllowDesktop: *allowDesk, AllowScreen: *allowScr, RemoteSecretFile: *remoteSec}
 	run := func(ctx context.Context) error { return secagent.Run(ctx, cfg) }
 	if handled, err := runAsService(run); handled {
 		if err != nil {
@@ -143,17 +142,13 @@ func defaultShellSocket() string {
 	return ""
 }
 
-// defaultRemoteSecretFile and defaultRemoteHelperExe are where owlery-remote's installer puts the screen-sharing
-// helper and its secret (Windows only). The agent reads the secret and launches the helper from here when a screen
-// session is asked for.
-func defaultRemoteSecretFile() string { return remoteFile("remote.secret") }
-
-func defaultRemoteHelperExe() string { return remoteFile("owlery-remote.exe") }
-
-func remoteFile(name string) string {
+// defaultRemoteSecretFile is where "secagent install -allow-screen" writes the screen-sharing secret (Windows only).
+// The agent reads it and, when a screen session is asked for, launches itself as "screen-helper" in the signed-in
+// session; that helper reads the same secret.
+func defaultRemoteSecretFile() string {
 	if runtime.GOOS == "windows" {
 		if pd := os.Getenv("ProgramData"); pd != "" {
-			return filepath.Join(pd, "Owlery", name)
+			return filepath.Join(pd, "Owlery", "remote.secret")
 		}
 	}
 	return ""

@@ -5,7 +5,9 @@ package secagent
 import (
 	"fmt"
 	"net"
+	"os"
 	"strconv"
+	"strings"
 	"time"
 	"unsafe"
 
@@ -21,7 +23,13 @@ import (
 // lets it reach the secure desktop, where UAC prompts and the lock screen are drawn. If nobody is signed in there is no
 // session to launch into: the agent says so by not connecting back, and Owlery tells the person.
 func (a *agent) openScreen(req secproto.RemoteOpen) {
-	if err := startInConsoleSession(a.cfg.RemoteHelperExe, "run"); err != nil {
+	exe, err := os.Executable()
+	if err != nil {
+		a.cfg.Log.Warn("screen: cannot find own path", "err", err)
+		return
+	}
+	// The helper is this same binary, run as "screen-helper" inside the signed-in session.
+	if err := startInConsoleSession(exe, "screen-helper", "-secret-file", a.cfg.RemoteSecretFile); err != nil {
 		// A helper may already be running from an earlier session; only say something when there is also no one to talk
 		// to, which the dial below will find out.
 		a.cfg.Log.Warn("screen: launching the helper in the signed-in session", "err", err)
@@ -51,10 +59,10 @@ func waitForPort(ctx interface{ Done() <-chan struct{} }, port int, timeout time
 	}
 }
 
-// startInConsoleSession launches exe (with one argument) as the system account inside the active console session, on
-// its interactive desktop. It duplicates the agent's own system token, stamps it with the console session's id, and
-// creates the process with it — the standard way for a session-0 service to put a process on the user's desktop.
-func startInConsoleSession(exe, arg string) error {
+// startInConsoleSession launches exe (with the given arguments) as the system account inside the active console
+// session, on its interactive desktop. It duplicates the agent's own system token, stamps it with the console session's
+// id, and creates the process with it — the standard way for a session-0 service to put a process on the user's desktop.
+func startInConsoleSession(exe string, args ...string) error {
 	sid := windows.WTSGetActiveConsoleSessionId()
 	if sid == 0xFFFFFFFF {
 		return fmt.Errorf("no interactive session (nobody is signed in)")
@@ -78,7 +86,14 @@ func startInConsoleSession(exe, arg string) error {
 	if err != nil {
 		return err
 	}
-	cmdLine, err := windows.UTF16PtrFromString(`"` + exe + `" ` + arg)
+	parts := []string{`"` + exe + `"`}
+	for _, a := range args {
+		if strings.ContainsAny(a, " \t") {
+			a = `"` + a + `"`
+		}
+		parts = append(parts, a)
+	}
+	cmdLine, err := windows.UTF16PtrFromString(strings.Join(parts, " "))
 	if err != nil {
 		return err
 	}

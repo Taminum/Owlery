@@ -176,16 +176,17 @@ the audit log; the picture itself is not recorded.
 
 Tab "Экран" of the server card shows the screen of the person at the machine, live, and takes the administrator's mouse
 and keyboard, like a remote assistant; it is not a replacement for the RDP tab. It is on only when the machine says so:
-`secagent.exe install ... -allow-screen` (the box "Разрешить показ экрана" in the install dialog) **and** the helper
-`owlery-remote.exe` is installed. Without either, the machine cannot be shown from Owlery.
+`secagent.exe install ... -allow-screen` (the box "Разрешить показ экрана" in the install dialog). That install writes a
+secret and downloads ffmpeg; there is nothing else to put on the machine.
 
-The agent is a system service in session 0 and cannot see any desktop, so when a session is asked for it launches the
-helper into the signed-in person's own session, as the system account (`WTSGetActiveConsoleSessionId` + a session-stamped
-copy of the agent's token + `CreateProcessAsUser`). Running as the system account, and moving each screen grab and each
-click onto whichever desktop is receiving input (`OpenInputDesktop` + `SetThreadDesktop`), is what lets it reach the
-secure desktop as well — UAC prompts and the lock screen — and drive windows opened "as administrator", which a tool
-running with the person's ordinary rights cannot. If nobody is signed in, there is no session to launch into and Owlery
-says so.
+The helper is not a separate program — it is the agent binary run as `secagent screen-helper`, the same way the Linux
+terminal helper is `secagent shell-helper`. The agent is a system service in session 0 and cannot see any desktop, so
+when a session is asked for it launches itself as the helper into the signed-in person's own session, as the system
+account (`WTSGetActiveConsoleSessionId` + a session-stamped copy of its token + `CreateProcessAsUser`). Running as the
+system account, and moving each screen grab and each click onto whichever desktop is receiving input (`OpenInputDesktop`
++ `SetThreadDesktop`), is what lets it reach the secure desktop as well — UAC prompts and the lock screen — and drive
+windows opened "as administrator", which a tool running with the person's ordinary rights cannot. If nobody is signed
+in, there is no session to launch into and Owlery says so.
 
 The helper listens on 127.0.0.1 only and accepts a connection only after the shared secret written at install, readable
 by the system account and administrators alone — the boundary that stops any other local process from driving the screen.

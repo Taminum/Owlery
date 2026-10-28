@@ -45,6 +45,9 @@ func platformCommand(cmd string, args []string) bool {
 			os.Exit(1)
 		}
 		fmt.Println("removed the service", serviceName)
+	case "screen-helper":
+		// The screen-sharing helper, this same binary run in the signed-in session by the agent. Not for hand use.
+		runScreenHelper(args)
 	default:
 		return false
 	}
@@ -87,6 +90,10 @@ func install(server, tokenFile string, probe, shell, desktop, screen bool) error
 	}
 	if screen {
 		args = append(args, "-allow-screen")
+		// Write the shared secret and fetch ffmpeg now, while we have the administrator who is installing the agent.
+		if err := setupScreen(); err != nil {
+			return fmt.Errorf("setting up screen sharing: %w", err)
+		}
 	}
 	s, err := m.CreateService(serviceName, exe, mgr.Config{
 		DisplayName: "Owlery security agent",

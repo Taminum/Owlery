@@ -486,13 +486,7 @@ icacls "$d\\secagent.token" /inheritance:r /grant:r "*S-1-5-18:R" "*S-1-5-32-544
 $a = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'amd64' }
 [Net.ServicePointManager]::SecurityProtocol = 'Tls12'
 Invoke-WebRequest "https://github.com/Taminum/Owlery/releases/latest/download/remnascope-secagent-windows-$a.exe" -OutFile "$d\\secagent.exe" -UseBasicParsing
-& "$d\\secagent.exe" install -server "wss://${window.location.host}" -token-file "$d\\secagent.token"${shell ? ' -allow-shell' : ''}${desk ? ' -allow-desktop' : ''}${scr ? ' -allow-screen' : ''}${scr ? `
-Invoke-WebRequest "https://github.com/Taminum/Owlery/releases/latest/download/owlery-remote-windows-$a.exe" -OutFile "$d\\owlery-remote.exe" -UseBasicParsing
-Invoke-WebRequest "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip" -OutFile "$d\\ffmpeg.zip" -UseBasicParsing
-Expand-Archive "$d\\ffmpeg.zip" -DestinationPath "$d\\ffmpeg-tmp" -Force
-Copy-Item (Get-ChildItem "$d\\ffmpeg-tmp" -Recurse -Filter ffmpeg.exe | Select-Object -First 1).FullName "$d\\ffmpeg.exe" -Force
-Remove-Item "$d\\ffmpeg.zip", "$d\\ffmpeg-tmp" -Recurse -Force
-& "$d\\owlery-remote.exe" install` : ''}`}</Code>
+& "$d\\secagent.exe" install -server "wss://${window.location.host}" -token-file "$d\\secagent.token"${shell ? ' -allow-shell' : ''}${desk ? ' -allow-desktop' : ''}${scr ? ' -allow-screen' : ''}`}</Code>
                 <p>{t('sec.onb.win.s2')}</p>
                 <Code>{`Get-Service OwlerySecAgent
 Get-Content "$env:ProgramData\\Owlery\\secagent.log" -Tail 5`}</Code>
