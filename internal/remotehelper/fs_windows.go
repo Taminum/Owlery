@@ -146,11 +146,15 @@ func (s *fsSession) handle(typ byte, payload []byte) {
 	}
 }
 
-// userDownloads is the signed-in person's Downloads folder, found through the console session's own token because the
+// userDownloads is the signed-in person's Downloads folder, found through the token of the session this helper runs in, because the
 // helper's profile is the system account's.
 func userDownloads() string {
+	var sid uint32
+	if err := windows.ProcessIdToSessionId(windows.GetCurrentProcessId(), &sid); err != nil {
+		return ""
+	}
 	var tok windows.Token
-	if err := windows.WTSQueryUserToken(windows.WTSGetActiveConsoleSessionId(), &tok); err != nil {
+	if err := windows.WTSQueryUserToken(sid, &tok); err != nil {
 		return ""
 	}
 	defer tok.Close()

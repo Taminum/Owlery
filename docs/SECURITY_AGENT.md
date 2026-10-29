@@ -188,6 +188,12 @@ system account, and moving each screen grab and each click onto whichever deskto
 windows opened "as administrator", which a tool running with the person's ordinary rights cannot. If nobody is signed
 in, there is no session to launch into and Owlery says so.
 
+Which session is shown: the one of a person signed in at the physical console; otherwise the first session with somebody
+signed in and connected, which is where an administrator working over remote desktop sits (on a server that is the usual
+case, and the console is empty); with nobody signed in anywhere, the console's sign-in screen. Each session has its own
+helper on its own loopback port (47821 plus the session number). A session whose screen cannot be read at all is
+reported to the page after about two seconds rather than left "connecting".
+
 The helper listens on 127.0.0.1 only and accepts a connection only after the shared secret written at install, readable
 by the system account and administrators alone — the boundary that stops any other local process from driving the screen.
 The agent dials out to Owlery for each session and relays bytes to the helper; Owlery relays them to the browser. The

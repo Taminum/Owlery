@@ -28,20 +28,23 @@ func (a *agent) openScreen(req secproto.RemoteOpen) {
 		a.cfg.Log.Warn("screen: cannot find own path", "err", err)
 		return
 	}
+	sid, why := pickSession()
+	port := secproto.RemoteHelperPortFor(sid)
+	a.cfg.Log.Info("screen: session chosen", "session", sid, "why", why)
 	// The helper stays alive after a session, so a second launch would only fail to take the port: start one only when
-	// none is listening.
-	if portOpen(secproto.RemoteHelperPort) {
+	// none is listening for this session.
+	if portOpen(port) {
 		goto relay
 	}
-	// The helper is this same binary, run as "screen-helper" inside the signed-in session.
-	if err := startInConsoleSession(exe, "screen-helper", "-secret-file", a.cfg.RemoteSecretFile); err != nil {
+	// The helper is this same binary, run as "screen-helper" inside that session.
+	if err := startInSession(exe, sid, "screen-helper", "-secret-file", a.cfg.RemoteSecretFile, "-port", strconv.Itoa(port)); err != nil {
 		// A helper may already be running from an earlier session; only say something when there is also no one to talk
 		// to, which the dial below will find out.
-		a.cfg.Log.Warn("screen: launching the helper in the signed-in session", "err", err)
+		a.cfg.Log.Warn("screen: launching the helper in the session", "session", sid, "err", err)
 	}
-	waitForPort(a.runCtx, secproto.RemoteHelperPort, 8*time.Second)
+	waitForPort(a.runCtx, port, 8*time.Second)
 relay:
-	if err := secshell.RemoteTunnel(a.runCtx, a.dialBack, a.cfg.RemoteSecretFile, req); err != nil {
+	if err := secshell.RemoteTunnel(a.runCtx, a.dialBack, a.cfg.RemoteSecretFile, port, req); err != nil {
 		a.cfg.Log.Warn("screen", "err", err)
 	}
 }
@@ -75,14 +78,44 @@ func waitForPort(ctx interface{ Done() <-chan struct{} }, port int, timeout time
 	}
 }
 
-// startInConsoleSession launches exe (with the given arguments) as the system account inside the active console
-// session, on its interactive desktop. It duplicates the agent's own system token, stamps it with the console session's
-// id, and creates the process with it — the standard way for a session-0 service to put a process on the user's desktop.
-func startInConsoleSession(exe string, args ...string) error {
-	sid := windows.WTSGetActiveConsoleSessionId()
-	if sid == 0xFFFFFFFF {
-		return fmt.Errorf("no interactive session (nobody is signed in)")
+// pickSession chooses the Windows session whose screen is shown, and says why. The administrator may be signed in at the
+// physical console or over remote desktop (the usual way to work on a server), so the console is not always the answer:
+// a person at the console comes first; otherwise the first session with somebody signed in and connected, which is where
+// a remote-desktop administrator is; with nobody signed in anywhere, the console, whose sign-in screen is then shown.
+func pickSession() (uint32, string) {
+	console := windows.WTSGetActiveConsoleSessionId()
+	signedIn := func(id uint32) bool {
+		var tok windows.Token
+		if windows.WTSQueryUserToken(id, &tok) != nil {
+			return false
+		}
+		tok.Close()
+		return true
 	}
+	if console != 0xFFFFFFFF && signedIn(console) {
+		return console, "somebody is signed in at the console"
+	}
+	var info *windows.WTS_SESSION_INFO
+	var count uint32
+	if windows.WTSEnumerateSessions(0, 0, 1, &info, &count) == nil && info != nil {
+		defer windows.WTSFreeMemory(uintptr(unsafe.Pointer(info)))
+		for _, s := range unsafe.Slice(info, count) {
+			// State 0 is active and 1 connected: a disconnected session has no screen to show.
+			if s.SessionID != 0 && s.State <= 1 && signedIn(s.SessionID) {
+				return s.SessionID, "somebody is signed in over remote desktop"
+			}
+		}
+	}
+	if console == 0xFFFFFFFF {
+		return 1, "no session found"
+	}
+	return console, "nobody is signed in: the console's sign-in screen"
+}
+
+// startInSession launches exe (with the given arguments) as the system account inside one Windows session, on its
+// interactive desktop. It duplicates the agent's own system token, stamps it with the session's id, and creates the
+// process with it — the standard way for a session-0 service to put a process on a user's desktop.
+func startInSession(exe string, sid uint32, args ...string) error {
 	var self windows.Token
 	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_DUPLICATE|windows.TOKEN_QUERY|windows.TOKEN_ASSIGN_PRIMARY|windows.TOKEN_ADJUST_DEFAULT|windows.TOKEN_ADJUST_SESSIONID, &self); err != nil {
 		return fmt.Errorf("opening the agent's token: %w", err)

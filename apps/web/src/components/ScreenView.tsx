@@ -73,7 +73,10 @@ export function ScreenView({ serverId }: { serverId: string }) {
     // a machine without a video encoder.
     let decoder: VideoDecoder | null = null
     let needKey = true
-    const shown = () => setState((s) => (s === 'connecting' ? 'open' : s))
+    let got = false
+    const shown = () => { got = true; setState((s) => (s === 'connecting' ? 'open' : s)) }
+    // A machine that connects but sends no picture (nobody to show, a hung helper) should say so, not wait for ever.
+    const quiet = setTimeout(() => { if (!got) { told = told || t('scr.noPicture'); ws.close() } }, 15_000)
     const video = (p: Uint8Array) => {
       if (typeof VideoDecoder === 'undefined') { told = t('scr.noCodec'); ws.close(); return }
       const key = p[0] === 1
@@ -196,6 +199,7 @@ export function ScreenView({ serverId }: { serverId: string }) {
 
     return () => {
       disposed = true
+      clearTimeout(quiet)
       sender.current = () => {}
       fs.current?.close()
       fs.current = null
