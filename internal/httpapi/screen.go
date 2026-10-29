@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"slices"
 	"sync/atomic"
@@ -44,7 +45,7 @@ func (s *Server) screen(w http.ResponseWriter, r *http.Request, a auth.Actor, _ 
 		return
 	}
 	defer b.CloseNow()
-	b.SetReadLimit(16 << 10)
+	b.SetReadLimit(256 << 10) // a chunk of an uploaded file is the largest thing the page sends
 	ctx := r.Context()
 
 	agent, err := s.Store.SecAgentOf(ctx, v.ID)
@@ -102,6 +103,7 @@ func (s *Server) screen(w http.ResponseWriter, r *http.Request, a auth.Actor, _ 
 			break
 		}
 		in.Add(int64(len(data)))
+		s.auditFile(r, a, v, typ, data)
 		if m.Write(ctx, typ, data) != nil {
 			break
 		}
@@ -111,4 +113,33 @@ func (s *Server) screen(w http.ResponseWriter, r *http.Request, a auth.Actor, _ 
 	b.Close(websocket.StatusNormalClosure, "")
 	s.audit(r, a, "", "screen.close", "server", v.ID, map[string]any{"name": v.Name,
 		"seconds": int(s.Now().UTC().Sub(started).Seconds()), "bytes_out": out.Load(), "bytes_in": in.Load()})
+}
+
+// Message types of the helper's own protocol that start a file transfer (see package remotehelper, fs_windows.go). The
+// page sends each message as one WebSocket message: [1 byte type][4 bytes length][JSON], so what a transfer is for can
+// be read here and written to the audit log before it is passed on.
+const (
+	fsGetMsg      = 0x0D
+	fsPutBeginMsg = 0x0E
+)
+
+// auditFile records the start of a file download or upload with its path, the one thing the relay otherwise could not
+// know. Listing a folder is not recorded: it moves no file.
+func (s *Server) auditFile(r *http.Request, a auth.Actor, v store.VPS, typ websocket.MessageType, data []byte) {
+	if typ != websocket.MessageBinary || len(data) < 6 || (data[0] != fsGetMsg && data[0] != fsPutBeginMsg) {
+		return
+	}
+	var req struct {
+		Path      string `json:"path"`
+		Size      int64  `json:"size"`
+		Overwrite bool   `json:"overwrite"`
+	}
+	if json.Unmarshal(data[5:], &req) != nil {
+		return
+	}
+	if data[0] == fsGetMsg {
+		s.audit(r, a, "", "screen.file.download", "server", v.ID, map[string]any{"name": v.Name, "path": req.Path})
+		return
+	}
+	s.audit(r, a, "", "screen.file.upload", "server", v.ID, map[string]any{"name": v.Name, "path": req.Path, "size": req.Size, "overwrite": req.Overwrite})
 }

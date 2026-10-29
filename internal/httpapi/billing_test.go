@@ -67,7 +67,7 @@ func TestBillsBelongToTheOwnerMoveOnWhenPaidAndRaiseAnAlertWhenDue(t *testing.T)
 
 	// Paying moves the date on by a period from the date that was due, and the alert closes.
 	st, pb := w.owner.do("POST", "/api/v1/billing/"+created.ID+"/paid", nil)
-	want := now.AddDate(0, 0, 2).AddDate(0, 1, 0).Format("2006-01-02")
+	want := addMonth(now.AddDate(0, 0, 2)).Format("2006-01-02")
 	if st != 200 || !strings.Contains(string(pb), want) {
 		t.Fatalf("%d %s, want next due %s", st, pb, want)
 	}
@@ -90,4 +90,13 @@ func TestBillsBelongToTheOwnerMoveOnWhenPaidAndRaiseAnAlertWhenDue(t *testing.T)
 	if st, _ := w.owner.do("DELETE", "/api/v1/billing/"+created.ID, nil); st != 404 {
 		t.Fatalf("a removed payment: %d", st)
 	}
+}
+
+// addMonth adds one calendar month the way the database does: a day that the next month does not have (the 31st into
+// a 30-day month) becomes that month's last day. Go's AddDate would spill into the month after, and the test would
+// fail on the 29th to the 31st of some months for no reason of the code's.
+func addMonth(t time.Time) time.Time {
+	y, m, d := t.Date()
+	last := time.Date(y, m+2, 0, 0, 0, 0, 0, time.UTC).Day() // day 0 of the month after next is the last of the next
+	return time.Date(y, m+1, min(d, last), 0, 0, 0, 0, time.UTC)
 }
