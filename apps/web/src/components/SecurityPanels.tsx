@@ -5,10 +5,11 @@ import { api } from '../lib/api'
 import { errorText } from '../lib/errors'
 import { formatDateTime } from '../lib/format'
 import { useLoad } from '../hooks/useLoad'
-import type { SecAgent, SecCategory, SecEvent, SecEventDetail, SecFwDiff, SecFwModel, SecFwSnapshot, SecJail, SecListener, SecOverview } from '../lib/types'
+import type { SecCategory, SecEvent, SecEventDetail, SecFwDiff, SecFwModel, SecFwSnapshot, SecJail, SecListener, SecOverview } from '../lib/types'
 import { Card, Chip } from './ui'
 import { CommandHistory, useBanControls } from './SecurityBan'
-import { DangerButton, GhostButton, Modal, PrimaryButton } from './Modal'
+import { GhostButton, Modal } from './Modal'
+import { AgentBlock } from './AgentSetup'
 
 type Tone = 'muted' | 'amber' | 'green' | 'red' | 'cyan'
 const STATE_TONE: Record<string, Tone> = { ok: 'green', stale: 'amber', waiting: 'muted', agent_required: 'muted', not_installed: 'muted', stopped: 'amber', permission_denied: 'amber', unsupported: 'muted', error: 'red' }
@@ -400,157 +401,7 @@ export function EventsTab({ vpsId }: { vpsId: string }) {
   )
 }
 
+/** The agent card of the security pages; the same block as on a server's overview. */
 export function AgentCard({ vpsId, canEdit }: { vpsId: string; canEdit: boolean }) {
-  const { data, error, reload } = useLoad((s) => api.get<{ agent: SecAgent | null }>(`/api/v1/security/vps/${vpsId}/agent`, s), [vpsId], 15_000)
-  const [token, setToken] = useState('')
-  const [os, setOS] = useState<'linux' | 'windows'>('linux')
-  const [shell, setShell] = useState(true)
-  const [desk, setDesk] = useState(true)
-  const [scr, setScr] = useState(false)
-  const [web, setWeb] = useState(true)
-  const [err, setErr] = useState('')
-  const [confirm, setConfirm] = useState(false)
-  const agent = data?.agent ?? null
-  async function create() {
-    setErr('')
-    try {
-      const r = await api.post<{ token: string }>(`/api/v1/security/vps/${vpsId}/agent`)
-      setToken(r.token)
-      reload()
-    } catch (e) {
-      setErr(errorText(e))
-    }
-  }
-  async function revoke() {
-    setConfirm(false)
-    setErr('')
-    try {
-      await api.del(`/api/v1/security/vps/${vpsId}/agent`)
-      reload()
-    } catch (e) {
-      setErr(errorText(e))
-    }
-  }
-  return (
-    <Card title={t('sec.agent')} note={t('sec.agent.onlyConn')}>
-      {(error || err) && <p role="alert" className="mb-2 text-[13px] text-red">{error || err}</p>}
-      {data && !agent && <p className="text-[13px] text-muted">{t('sec.agent.none')}</p>}
-      {agent && (
-        <div className="space-y-1 text-[13px]">
-          <div className="flex flex-wrap items-center gap-3">
-            <Chip tone={agent.online ? 'green' : 'muted'}>{agent.last_seen ? (agent.online ? t('sec.agent.online') : t('sec.agent.offline')) : t('sec.agent.waiting')}</Chip>
-            {agent.agent_version && <span className="text-muted">v{agent.agent_version}{agent.hostname ? ` · ${agent.hostname}` : ''}</span>}
-          </div>
-          {agent.last_seen && <p className="tnum text-muted">{t('sec.agent.lastSeen')}: {formatDateTime(agent.last_seen, 'local')}</p>}
-        </div>
-      )}
-      {canEdit && data && (
-        <div className="mt-3 flex gap-3">
-          {!agent && <PrimaryButton onClick={() => void create()}>{t('sec.agent.create')}</PrimaryButton>}
-          {agent && <GhostButton onClick={() => setConfirm(true)}>{t('sec.agent.revoke')}</GhostButton>}
-        </div>
-      )}
-      {token && (
-        <Modal title={t('sec.onb.title')} onClose={() => setToken('')} wide>
-          <div className="space-y-3 text-[13px]">
-            <div role="tablist" aria-label={t('sec.onb.os')} className="flex gap-2">
-              {(['linux', 'windows'] as const).map((x) => (
-                <button key={x} role="tab" type="button" aria-selected={os === x} onClick={() => setOS(x)}
-                  className={`h-8 rounded-control border px-3 text-[13px] ${os === x ? 'border-cyan bg-elevated text-fg' : 'border-line text-muted hover:text-fg'}`}>{x === 'linux' ? 'Linux' : 'Windows'}</button>
-              ))}
-            </div>
-            <label className="flex items-center gap-2 text-[13px]">
-              <input type="checkbox" checked={shell} onChange={(e) => setShell(e.target.checked)} />
-              <span>{t('sec.onb.shell')}</span>
-            </label>
-            <p className="-mt-2 text-xs text-muted">{t('sec.onb.shellHint')}</p>
-            <label className="flex items-center gap-2 text-[13px]">
-              <input type="checkbox" checked={web} onChange={(e) => setWeb(e.target.checked)} />
-              <span>{t('sec.onb.web')}</span>
-            </label>
-            <p className="-mt-2 text-xs text-muted">{t('sec.onb.webHint')}</p>
-            {os === 'windows' ? (
-              <>
-                <label className="flex items-center gap-2 text-[13px]">
-                  <input type="checkbox" checked={desk} onChange={(e) => setDesk(e.target.checked)} />
-                  <span>{t('sec.onb.desk')}</span>
-                </label>
-                <p className="-mt-2 text-xs text-muted">{t('sec.onb.deskHint')}</p>
-                <label className="flex items-center gap-2 text-[13px]">
-                  <input type="checkbox" checked={scr} onChange={(e) => setScr(e.target.checked)} />
-                  <span>{t('sec.onb.screen')}</span>
-                </label>
-                <p className="-mt-2 text-xs text-muted">{t('sec.onb.screenHint')}</p>
-                <p className="text-muted">{t('sec.onb.win.intro')}</p>
-                <p>{t('sec.onb.win.s1')}</p>
-                <Code>{`$ErrorActionPreference = 'Stop'
-$d = "$env:ProgramData\\Owlery"
-New-Item -ItemType Directory -Force $d | Out-Null
-if (Get-Service OwlerySecAgent -ErrorAction SilentlyContinue) { & "$d\\secagent.exe" uninstall | Out-Null }
-Set-Content -Path "$d\\secagent.token" -Value '${token}' -NoNewline -Encoding ascii
-icacls "$d\\secagent.token" /inheritance:r /grant:r "*S-1-5-18:R" "*S-1-5-32-544:F" | Out-Null
-$a = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'amd64' }
-[Net.ServicePointManager]::SecurityProtocol = 'Tls12'
-Invoke-WebRequest "https://github.com/Taminum/Owlery/releases/latest/download/remnascope-secagent-windows-$a.exe" -OutFile "$d\\secagent.exe" -UseBasicParsing
-& "$d\\secagent.exe" install -server "wss://${window.location.host}" -token-file "$d\\secagent.token"${shell ? ' -allow-shell' : ''}${desk ? ' -allow-desktop' : ''}${scr ? ' -allow-screen' : ''}${web ? ' -allow-web' : ''}`}</Code>
-                <p>{t('sec.onb.win.s2')}</p>
-                <Code>{`Get-Service OwlerySecAgent
-Get-Content "$env:ProgramData\\Owlery\\secagent.log" -Tail 5`}</Code>
-                <p className="text-muted">{t('sec.onb.win.done')}</p>
-              </>
-            ) : (<>
-            <p className="text-muted">{t('sec.onb.intro')}</p>
-            <p>{t('sec.onb.s1')}</p>
-            <Code>{'useradd --system --no-create-home --shell /usr/sbin/nologin remnascope-sec\nuseradd --system --no-create-home --shell /usr/sbin/nologin remnascope-f2b'}</Code>
-            <p>{t('sec.onb.s2')}</p>
-            <Code>{`install -d -m 0755 /etc/remnascope && umask 077 && echo '${token}' > /etc/remnascope/secagent.token && chown root:remnascope-sec /etc/remnascope/secagent.token && chmod 0640 /etc/remnascope/secagent.token`}</Code>
-            <p>{t('sec.onb.s3')}</p>
-            <Code>{`cd /tmp
-case "$(uname -m)" in x86_64) A=amd64 ;; aarch64) A=arm64 ;; *) echo "unsupported processor"; exit 1 ;; esac
-curl -fLO https://github.com/Taminum/Owlery/releases/latest/download/remnascope-secagent-linux-$A
-curl -fLO https://github.com/Taminum/Owlery/releases/latest/download/remnascope-deploy-files.tar.gz
-tar -xzf remnascope-deploy-files.tar.gz`}</Code>
-            <p>{t('sec.onb.s4')}</p>
-            <Code>{`install -m 0755 remnascope-secagent-linux-$A /usr/local/bin/remnascope-secagent
-sed 's#wss://SCOPE_HOST#wss://${window.location.host}${web ? ' -allow-web' : ''}#' deploy/secagent/remnascope-secagent.service > /etc/systemd/system/remnascope-secagent.service
-cp deploy/secagent/remnascope-secagent-f2b.service /etc/systemd/system/`}</Code>
-            <p>{t('sec.onb.s5')}</p>
-            <Code>{`mkdir -p /etc/systemd/system/fail2ban.service.d
-cat > /etc/systemd/system/fail2ban.service.d/remnascope.conf <<'EOF'
-[Service]
-ExecStartPost=/bin/sh -c "for i in 1 2 3 4 5 6 7 8 9 10; do [ -S /run/fail2ban/fail2ban.sock ] && break; sleep 1; done; chgrp remnascope-f2b /run/fail2ban/fail2ban.sock && chmod 0660 /run/fail2ban/fail2ban.sock"
-EOF
-systemctl daemon-reload && systemctl restart fail2ban
-systemctl enable --now remnascope-secagent-f2b remnascope-secagent`}</Code>
-            <p className="text-muted">{t('sec.onb.s5hint')}</p>
-            {shell && (
-              <>
-                <p>{t('sec.onb.shellStep')}</p>
-                <Code>{`sed 's#wss://SCOPE_HOST#wss://${window.location.host}#' deploy/secagent/remnascope-shell.service > /etc/systemd/system/remnascope-shell.service
-systemctl daemon-reload && systemctl enable --now remnascope-shell && systemctl restart remnascope-secagent`}</Code>
-              </>
-            )}
-            <p>{t('sec.onb.s6')}</p>
-            <Code>{`install -m 0755 deploy/secagent/remnascope-containers-list /usr/local/sbin/
-cp deploy/secagent/remnascope-containers-list.service deploy/secagent/remnascope-containers-list.timer /etc/systemd/system/
-systemctl daemon-reload && systemctl enable --now remnascope-containers-list.timer`}</Code>
-            <p>{t('sec.onb.s7')}</p>
-            <Code>{`systemctl is-active remnascope-secagent
-journalctl -u remnascope-secagent -n 5 --no-pager`}</Code>
-            <p className="text-muted">{t('sec.onb.done')}</p>
-            </>)}
-          </div>
-          <div className="mt-4 flex justify-end"><PrimaryButton onClick={() => setToken('')}>{t('sec.agent.tokenSaved')}</PrimaryButton></div>
-        </Modal>
-      )}
-      {confirm && (
-        <Modal title={t('sec.agent.revoke')} onClose={() => setConfirm(false)}>
-          <div className="flex justify-end gap-3">
-            <GhostButton onClick={() => setConfirm(false)}>{t('common.cancel')}</GhostButton>
-            <DangerButton onClick={() => void revoke()}>{t('sec.agent.revoke')}</DangerButton>
-          </div>
-        </Modal>
-      )}
-    </Card>
-  )
+  return <AgentBlock vpsId={vpsId} canEdit={canEdit} />
 }

@@ -222,4 +222,28 @@ func (h *HostReader) containerNames() map[string]string {
 	return out
 }
 
+// ContainerPorts reads the same list for the host ports each container publishes: port to container name.
+func ContainerPorts(file string) map[int]string {
+	out := map[int]string{}
+	if file == "" {
+		return out
+	}
+	b, err := os.ReadFile(file)
+	if err != nil || len(b) > 256<<10 {
+		return out
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		f := strings.Split(strings.TrimRight(line, "\r"), "\t")
+		if len(f) < 3 || !containerName.MatchString(f[1]) {
+			continue
+		}
+		for _, p := range strings.Split(f[2], ",") {
+			if n, err := strconv.Atoi(p); err == nil && n > 0 && n < 65536 {
+				out[n] = f[1]
+			}
+		}
+	}
+	return out
+}
+
 var containerName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$`)

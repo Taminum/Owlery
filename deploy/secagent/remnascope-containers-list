@@ -1,5 +1,5 @@
 #!/bin/sh
-# remnascope-containers-list: writes the list of running Docker containers (short id, name, image) for the
+# remnascope-containers-list: writes the list of running Docker containers (short id, name, published ports) for the
 # security agent, which has no access to Docker itself. It runs as root from a timer and reads only.
 # The names are checked and nothing else is written.
 set -u
@@ -9,8 +9,13 @@ DOCKER="${DOCKER:-/usr/bin/docker}"
 [ -x "$DOCKER" ] || exit 0
 tmp="$OUT.tmp"
 umask 0027
-"$DOCKER" ps --no-trunc --format '{{.ID}}	{{.Names}}	{{.Image}}' 2>/dev/null \
-  | awk -F'\t' 'length($1) >= 12 && $1 ~ /^[0-9a-f]+$/ && $2 ~ /^[A-Za-z0-9][A-Za-z0-9_.-]*$/ && length($2) <= 80 { print substr($1, 1, 12) "\t" $2 }' > "$tmp" || exit 0
+"$DOCKER" ps --no-trunc --format '{{.ID}}	{{.Names}}	{{.Image}}	{{.Ports}}' 2>/dev/null \
+  | awk -F'\t' 'length($1) >= 12 && $1 ~ /^[0-9a-f]+$/ && $2 ~ /^[A-Za-z0-9][A-Za-z0-9_.-]*$/ && length($2) <= 80 {
+      # The host ports a container publishes ("127.0.0.1:8081->80/tcp, :::9120->9120/tcp"), digits only.
+      n = split($4, parts, ", "); ports = ""
+      for (i = 1; i <= n; i++) if (match(parts[i], /:[0-9]+->/)) ports = ports (ports == "" ? "" : ",") substr(parts[i], RSTART + 1, RLENGTH - 3)
+      print substr($1, 1, 12) "\t" $2 "\t" ports
+    }' > "$tmp" || exit 0
 chgrp remnascope-sec "$tmp" 2>/dev/null
 chmod 0640 "$tmp"
 mv -f "$tmp" "$OUT"

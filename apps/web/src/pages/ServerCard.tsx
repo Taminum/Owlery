@@ -10,7 +10,7 @@ import { Card, Chip } from '../components/ui'
 import { PageHead, TableSkeleton } from '../components/Analyzer'
 import { GhostButton } from '../components/Modal'
 import { HostDetail, Meter, uptimeText } from '../components/HostView'
-import { AgentCard } from '../components/SecurityPanels'
+import { AgentBlock } from '../components/AgentSetup'
 import { InventoryDialog, RoleChips, StatusChip, durationText, placeText, type Server } from '../components/ServerParts'
 import { SecurityTabs } from './Security'
 import { TerminalView } from '../components/TerminalView'
@@ -132,6 +132,7 @@ export default function ServerCard() {
           <Inventory s={s} onEdit={() => setEditing(true)} />
           <div className="space-y-4">
             <Now s={s} />
+            <AgentBlock vpsId={s.id} canEdit={s.can_edit} hostOS={s.os || s.host?.os} />
             <Card title={t('srv.openAlerts')}><AlertList items={open} empty={t('srv.noAlerts')} /></Card>
           </div>
         </div>
@@ -139,7 +140,7 @@ export default function ServerCard() {
       {tab === 'resources' && (s.host?.has_data ? <HostDetail host={s.host} /> : <p className="text-[13px] text-muted">{t('srv.noData')}</p>)}
       {tab === 'security' && (
         <div className="space-y-4">
-          <AgentCard vpsId={s.id} canEdit={s.can_edit} />
+          <AgentBlock vpsId={s.id} canEdit={s.can_edit} hostOS={s.os || s.host?.os} />
           <SecurityTabs v={s} />
           <p className="text-[13px] text-muted">{t('srv.security.full')}: <Link to={`/security/${s.id}`} className="text-cyan underline-offset-2 hover:underline">{t('srv.security.open')}</Link></p>
         </div>
