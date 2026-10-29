@@ -4,11 +4,13 @@ import { t } from '../i18n'
 import { api } from '../lib/api'
 import { errorText } from '../lib/errors'
 import { useLoad } from '../hooks/useLoad'
+import type { SecListener } from '../lib/types'
 import { Card, Chip } from './ui'
 import { Field, PrimaryButton, inputCls } from './Modal'
 
 interface WebService { id: string; slug: string; title: string; port: number }
 interface ServicesResponse { services: WebService[]; domain: string; allowed: boolean; online: boolean }
+interface PortsResponse { state: string; data: { listeners: SecListener[] } | null }
 
 // What the address may hold: Latin letters, digits and inner hyphens, as the server checks.
 const slugOf = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40)
@@ -16,6 +18,7 @@ const slugOf = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replac
 /** Web services of the machine (admin panels on 127.0.0.1), each opened at its own address through the agent. */
 export function ServicesView({ serverId, serverName }: { serverId: string; serverName: string }) {
   const q = useLoad((sig) => api.get<ServicesResponse>(`/api/v1/servers/${serverId}/services`, sig), [serverId])
+  const found = useLoad((sig) => api.get<PortsResponse>(`/api/v1/security/vps/${serverId}/ports`, sig).catch(() => null), [serverId], 60_000)
   const [title, setTitle] = useState('')
   const [slug, setSlug] = useState('')
   const [slugTouched, setSlugTouched] = useState(false)
@@ -39,6 +42,21 @@ export function ServicesView({ serverId, serverName }: { serverId: string; serve
       setBusy(false)
     }
   }
+  // What listens on the machine: containers by name, other programs by their process. Published ports are found
+  // once; SSH and DNS are left out because nobody opens them in a browser.
+  const published = new Set((d?.services ?? []).map((s) => s.port))
+  const seen = new Set<number>()
+  const listening = (found.data?.data?.listeners ?? []).filter((l) => {
+    if (l.proto !== 'tcp' || published.has(l.port) || seen.has(l.port) || [22, 53].includes(l.port)) return false
+    seen.add(l.port)
+    return true
+  })
+  const pick = (l: SecListener) => {
+    const name = l.container || l.process || `port-${l.port}`
+    setTitle(name); setSlug(slugOf(`${name}-${serverName}`)); setSlugTouched(true); setPort(String(l.port))
+    document.getElementById('web-title')?.scrollIntoView({ block: 'center' })
+  }
+
   async function remove(id: string) {
     setError('')
     try {
@@ -80,6 +98,26 @@ export function ServicesView({ serverId, serverName }: { serverId: string; serve
               })}
             </ul>
           )}
+          {found.data?.data && (
+            <div className="border-t border-line pt-4">
+              <h3 className="mb-1 text-[13px] font-medium text-fg">{t('web.found')}</h3>
+              <p className="mb-2 text-xs text-muted">{t('web.foundHint')}</p>
+              {listening.length === 0 ? <p className="text-xs text-muted">{t('web.foundNone')}</p> : (
+                <ul className="divide-y divide-line">
+                  {listening.map((l) => (
+                    <li key={l.port} className="flex items-center justify-between gap-3 py-1.5 text-[13px]">
+                      <span className="min-w-0">
+                        <span className="tnum font-mono">{l.addr}:{l.port}</span>
+                        <span className="ml-2 text-muted">{l.container ? `${t('web.container')} ${l.container}` : l.process ? l.process : ''}</span>
+                      </span>
+                      <button type="button" onClick={() => pick(l)} className="h-7 shrink-0 rounded-control border border-line px-2.5 text-xs text-muted hover:border-cyan hover:text-fg">{t('web.publish')}</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+          {found.data && !found.data.data && <p className="border-t border-line pt-4 text-xs text-muted">{t('web.foundNoData')}</p>}
           <form className="grid gap-3 border-t border-line pt-4 sm:grid-cols-[1fr_1fr_120px_auto] sm:items-end" onSubmit={(e) => { e.preventDefault(); if (!busy) void add() }}>
             <Field label={t('web.name')} htmlFor="web-title"><input id="web-title" className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={64} placeholder="Komodo" /></Field>
             <Field label={t('web.address')} htmlFor="web-slug">

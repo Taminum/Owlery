@@ -278,7 +278,10 @@ func localPortRange() (int, int) {
 type SocketWatch struct {
 	MinAge   time.Duration
 	From, To int // the dynamic port range; UDP sockets in it are held back
-	seen     map[string]time.Time
+	// Containers says which container publishes a host port (nil: not known); Docker's own proxy process is then
+	// named by the container behind it.
+	Containers func() map[int]string
+	seen       map[string]time.Time
 }
 
 func NewSocketWatch(minAge time.Duration) *SocketWatch {
@@ -298,6 +301,15 @@ func (w *SocketWatch) Collect(ctx context.Context, r Runner, bin string, now tim
 		return snap
 	}
 	data := ParseSS(res.Stdout)
+	if w.Containers != nil {
+		if names := w.Containers(); len(names) > 0 {
+			for i, l := range data.Listeners {
+				if c, ok := names[l.Port]; ok && (l.Process == "docker-proxy" || l.Process == "") {
+					data.Listeners[i].Container = c
+				}
+			}
+		}
+	}
 	if w.MinAge > 0 {
 		now2 := map[string]time.Time{}
 		kept := data.Listeners[:0]

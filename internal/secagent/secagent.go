@@ -156,6 +156,7 @@ func Run(ctx context.Context, cfg Config) error {
 		return err
 	}
 	a := &agent{cfg: cfg, url: url, hc: hc, epoch: newEpoch(), probes: make(chan struct{}, maxProbes), admins: make(chan struct{}, 4), socks: seccollect.NewSocketWatch(10 * time.Minute), host: newHostReader(cfg), runCtx: ctx}
+	a.socks.Containers = func() map[int]string { return seccollect.ContainerPorts(cfg.ContainersFile) }
 	back := secshell.Dialer{BaseURL: strings.TrimRight(cfg.ServerURL, "/"), Token: a.token, Client: hc}
 	a.shells, a.dialBack = &secshell.Runner{Log: cfg.Log, Dial: back.Dial}, back.DialPath
 	if cfg.HelperSocket != "" {
