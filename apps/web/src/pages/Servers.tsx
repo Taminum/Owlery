@@ -1,12 +1,16 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { t } from '../i18n'
 import { api } from '../lib/api'
 import { formatBytes, formatRate } from '../lib/format'
 import { useLoad } from '../hooks/useLoad'
+import { useAuth } from '../lib/auth'
 import { Card } from '../components/ui'
 import { PageHead, TableSkeleton } from '../components/Analyzer'
 import { Meter, uptimeText } from '../components/HostView'
 import { RoleChips, StatusChip, placeText, type Server } from '../components/ServerParts'
+import { AddServer } from '../components/AddServer'
+import { PrimaryButton } from '../components/Modal'
 
 function Tile({ s }: { s: Server }) {
   const h = s.host
@@ -38,6 +42,9 @@ function Tile({ s }: { s: Server }) {
 
 export default function Servers() {
   const q = useLoad((sig) => api.get<{ servers: Server[] }>('/api/v1/servers', sig), [], 30_000)
+  const { state } = useAuth()
+  const owner = state.status === 'authed' && state.me.account.is_owner
+  const [adding, setAdding] = useState(false)
   const list = q.data?.servers ?? []
   // Machines of one group stand together; groups go by name, machines without a group last.
   const groups = new Map<string, Server[]>()
@@ -46,10 +53,11 @@ export default function Servers() {
   return (
     <div className="space-y-5">
       <PageHead title={t('srv.title')} subtitle={t('srv.subtitle')}
-        right={<Link to="/security" className="inline-flex h-9 items-center rounded-control border border-line px-3 text-[13px] text-muted hover:text-fg">{t('srv.add')}</Link>} />
+        right={owner ? <PrimaryButton onClick={() => setAdding(true)}>{t('srv.add')}</PrimaryButton> : undefined} />
       {q.error && <p role="alert" className="text-[13px] text-red">{q.error}</p>}
       {!q.data && !q.error && <TableSkeleton />}
       {q.data && list.length === 0 && <p className="py-10 text-center text-[13px] text-muted">{t('srv.empty')}</p>}
+      {adding && <AddServer onClose={() => { setAdding(false); q.reload() }} />}
       {order.map((g) => (
         <section key={g || '-'} className="space-y-3" aria-label={g || t('srv.noGroup')}>
           {(order.length > 1 || g) && <h2 className="text-[13px] font-semibold uppercase tracking-wide text-muted">{g || t('srv.noGroup')} <span className="font-normal">· {groups.get(g)!.length}</span></h2>}
