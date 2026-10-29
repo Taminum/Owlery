@@ -7,6 +7,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -108,6 +109,8 @@ func install(server, tokenFile string, probe, shell, desktop, screen, web bool) 
 		return err
 	}
 	defer s.Close()
+	// Recovery also on a failure that is not a crash: the service ending by itself with an error code is one.
+	_ = s.SetRecoveryActionsOnNonCrashFailures(true)
 	_ = s.SetRecoveryActions([]mgr.RecoveryAction{{Type: mgr.ServiceRestart, Delay: 10 * time.Second}, {Type: mgr.ServiceRestart, Delay: 30 * time.Second}, {Type: mgr.ServiceRestart, Delay: time.Minute}}, 86400)
 	return s.Start()
 }
@@ -140,15 +143,18 @@ func stopService(s *mgr.Service) {
 }
 
 // runAsService runs the agent under the service manager when Windows started it as a service.
-func runAsService(run func(context.Context) error) (bool, error) {
+func runAsService(run func(context.Context) error, log *slog.Logger) (bool, error) {
 	isSvc, err := svc.IsWindowsService()
 	if err != nil || !isSvc {
 		return false, nil
 	}
-	return true, svc.Run(serviceName, &handler{run: run})
+	return true, svc.Run(serviceName, &handler{run: run, log: log})
 }
 
-type handler struct{ run func(context.Context) error }
+type handler struct {
+	run func(context.Context) error
+	log *slog.Logger
+}
 
 func (h *handler) Execute(_ []string, req <-chan svc.ChangeRequest, status chan<- svc.Status) (bool, uint32) {
 	status <- svc.Status{State: svc.StartPending}
@@ -156,19 +162,21 @@ func (h *handler) Execute(_ []string, req <-chan svc.ChangeRequest, status chan<
 	done := make(chan error, 1)
 	go func() { done <- h.run(ctx) }()
 	status <- svc.Status{State: svc.Running, Accepts: svc.AcceptStop | svc.AcceptShutdown}
+	h.log.Info("service started")
 	for {
 		select {
 		case err := <-done:
 			cancel()
-			if err != nil {
-				return true, 1
-			}
-			return false, 0
+			// The agent runs until it is told to stop, so ending on its own is a failure whatever the reason: a nonzero
+			// exit code is what lets the recovery actions restart it. A clean exit code would leave it stopped for good.
+			h.log.Error("the agent ended by itself", "err", err)
+			return true, 1
 		case c := <-req:
 			switch c.Cmd {
 			case svc.Interrogate:
 				status <- c.CurrentStatus
 			case svc.Stop, svc.Shutdown:
+				h.log.Info("the service manager asked it to stop", "control", int(c.Cmd))
 				status <- svc.Status{State: svc.StopPending}
 				cancel()
 				select {
