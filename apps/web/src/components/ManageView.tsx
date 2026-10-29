@@ -128,7 +128,7 @@ function Procs({ serverId }: { serverId: string }) {
             <td className={`${td} text-muted`}>{p.user}</td>
             <td className={`${td} tnum`}>{p.cpu.toFixed(1)}%</td>
             <td className={`${td} tnum`}>{formatBytes(p.rss)}</td>
-            <td className={`${td} tnum text-muted`}>{p.started ? formatDateTime(p.started * 1000, 'local') : ''}</td>
+            <td className={`${td} tnum text-muted`}>{p.started ? formatDateTime(p.started, 'local') : ''}</td>
             <td className={td}><DangerButton onClick={() => void l.act(t('mng.killAsk', { n: p.name, p: String(p.pid) }), 'proc_kill', { pid: p.pid })}>{t('mng.kill')}</DangerButton></td>
           </tr>
         ))}
