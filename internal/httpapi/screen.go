@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"slices"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -58,7 +59,12 @@ func (s *Server) screen(w http.ResponseWriter, r *http.Request, a auth.Actor, _ 
 		return
 	}
 	octx, cancel := context.WithTimeout(ctx, 20*time.Second)
-	m, release, err := s.SecOps.OpenRemote(octx, agent.ID)
+	// The session the administrator chose in the page; none or an unreadable value means the agent chooses.
+	var session uint32
+	if n, err := strconv.ParseUint(r.URL.Query().Get("session"), 10, 32); err == nil {
+		session = uint32(n)
+	}
+	m, release, err := s.SecOps.OpenRemote(octx, agent.ID, session)
 	cancel()
 	if err != nil {
 		b.Close(screenNoAnswer, "the machine did not open a screen session")
@@ -142,4 +148,38 @@ func (s *Server) auditFile(r *http.Request, a auth.Actor, v store.VPS, typ webso
 		return
 	}
 	s.audit(r, a, "", "screen.file.upload", "server", v.ID, map[string]any{"name": v.Name, "path": req.Path, "size": req.Size, "overwrite": req.Overwrite})
+}
+
+// screenSessions lists the Windows sessions of a machine, so that the page can offer a choice of which one to show. It
+// asks the agent for the same list the management tab uses, which a machine that only allows screens may also give.
+func (s *Server) screenSessions(w http.ResponseWriter, r *http.Request, a auth.Actor, _ store.Session) {
+	v, err := s.Store.GetVPS(r.Context(), a.Scope(), r.PathValue("id"))
+	if err != nil {
+		s.vpsNotFound(w, r)
+		return
+	}
+	if !vpsCanEdit(a, v) {
+		s.writeErr(w, r, http.StatusForbidden, "forbidden", "an administrator of a linked panel is required")
+		return
+	}
+	agent, err := s.Store.SecAgentOf(r.Context(), v.ID)
+	if err != nil || s.SecOps == nil || !s.SecOps.Online(agent.ID) {
+		s.writeErr(w, r, http.StatusConflict, "agent_offline", "the machine's agent is not connected")
+		return
+	}
+	if !slices.Contains(agent.Capabilities, secproto.CapRemote) {
+		s.writeErr(w, r, http.StatusConflict, "screen_not_allowed", "this machine does not allow screen sharing")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	res, err := s.SecOps.Admin(ctx, agent.ID, secproto.AdminReq{Op: secproto.AdminSessions})
+	switch {
+	case err != nil:
+		s.writeErr(w, r, http.StatusGatewayTimeout, "no_answer", "the machine did not answer in time")
+	case !res.OK:
+		s.writeErr(w, r, http.StatusConflict, "sessions_failed", res.Error)
+	default:
+		writeJSON(w, http.StatusOK, map[string]any{"data": res.Data})
+	}
 }

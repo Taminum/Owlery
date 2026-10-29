@@ -28,7 +28,7 @@ func (a *agent) openScreen(req secproto.RemoteOpen) {
 		a.cfg.Log.Warn("screen: cannot find own path", "err", err)
 		return
 	}
-	sid, why := pickSession()
+	sid, why := pickSession(req.Session)
 	port := secproto.RemoteHelperPortFor(sid)
 	a.cfg.Log.Info("screen: session chosen", "session", sid, "why", why)
 	// The helper stays alive after a session, so a second launch would only fail to take the port: start one only when
@@ -82,7 +82,7 @@ func waitForPort(ctx interface{ Done() <-chan struct{} }, port int, timeout time
 // physical console or over remote desktop (the usual way to work on a server), so the console is not always the answer:
 // a person at the console comes first; otherwise the first session with somebody signed in and connected, which is where
 // a remote-desktop administrator is; with nobody signed in anywhere, the console, whose sign-in screen is then shown.
-func pickSession() (uint32, string) {
+func pickSession(wanted uint32) (uint32, string) {
 	console := windows.WTSGetActiveConsoleSessionId()
 	signedIn := func(id uint32) bool {
 		var tok windows.Token
@@ -92,13 +92,24 @@ func pickSession() (uint32, string) {
 		tok.Close()
 		return true
 	}
+	var info *windows.WTS_SESSION_INFO
+	var count uint32
+	listed := windows.WTSEnumerateSessions(0, 0, 1, &info, &count) == nil && info != nil
+	if listed {
+		defer windows.WTSFreeMemory(uintptr(unsafe.Pointer(info)))
+	}
+	// The administrator chose one in the page: honoured only if it is a session that exists, never an arbitrary number.
+	if wanted != 0 && listed {
+		for _, s := range unsafe.Slice(info, count) {
+			if s.SessionID == wanted {
+				return wanted, "chosen in the page"
+			}
+		}
+	}
 	if console != 0xFFFFFFFF && signedIn(console) {
 		return console, "somebody is signed in at the console"
 	}
-	var info *windows.WTS_SESSION_INFO
-	var count uint32
-	if windows.WTSEnumerateSessions(0, 0, 1, &info, &count) == nil && info != nil {
-		defer windows.WTSFreeMemory(uintptr(unsafe.Pointer(info)))
+	if listed {
 		for _, s := range unsafe.Slice(info, count) {
 			// State 0 is active and 1 connected: a disconnected session has no screen to show.
 			if s.SessionID != 0 && s.State <= 1 && signedIn(s.SessionID) {

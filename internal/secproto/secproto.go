@@ -390,6 +390,8 @@ func RemoteHelperPortFor(session uint32) int { return RemoteHelperPort + int(ses
 type RemoteOpen struct {
 	Type string `json:"type"` // "remote_open"
 	ID   string `json:"id"`
+	// Session is the Windows session to show; 0 (never a real one: that is where services run) lets the agent choose.
+	Session uint32 `json:"session,omitempty"`
 }
 
 // CapWeb is announced by an agent whose machine lets Owlery reach web services bound to 127.0.0.1 on it (an admin

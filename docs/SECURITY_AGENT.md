@@ -194,6 +194,11 @@ case, and the console is empty); with nobody signed in anywhere, the console's s
 helper on its own loopback port (47821 plus the session number). A session whose screen cannot be read at all is
 reported to the page after about two seconds rather than left "connecting".
 
+The page also offers the choice: a drop-down "Сеанс" in the bar lists the machine's sessions (user, number, state), and
+choosing one reconnects the screen to it. The list comes from the same agent call as the sessions section of the
+management tab, which a machine that only allows screens may answer too (it only reads). An agent honours a chosen
+session only if it exists; any other number falls back to its own choice.
+
 The helper listens on 127.0.0.1 only and accepts a connection only after the shared secret written at install, readable
 by the system account and administrators alone — the boundary that stops any other local process from driving the screen.
 The agent dials out to Owlery for each session and relays bytes to the helper; Owlery relays them to the browser. The
