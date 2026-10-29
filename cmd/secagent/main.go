@@ -16,6 +16,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"syscall"
 	"time"
@@ -78,6 +79,10 @@ func main() {
 		os.Exit(1)
 	}
 	log := slog.New(slog.NewTextHandler(logOut, nil))
+	if *logFile != "" {
+		// A panic or fatal error in any goroutine leaves its stack in the log file, where a service has no console to show it.
+		_ = debug.SetCrashOutput(logOut, debug.CrashOptions{})
+	}
 	// Fail2ban, ss and the Linux firewall do not exist on Windows; the agent reports resources there.
 	if runtime.GOOS == "windows" {
 		*noF2B, *noSock, *noFW = true, true, true
@@ -85,7 +90,7 @@ func main() {
 	cfg := secagent.Config{ServerURL: *server, TokenFile: *tokenFile, CAFile: *caFile, AllowInsecure: *insecure,
 		Interval: *interval, Version: version, Log: log, HelperSocket: *helper, StateDir: *stateDir, NoFail2ban: *noF2B, NoSockets: *noSock, NoFirewall: *noFW, NoHost: *noHost, ContainersFile: *contFile, Probe: *probe, AllowShell: *allowSh, ShellSocket: *shellSock, AllowDesktop: *allowDesk, AllowWeb: *allowWeb, AllowScreen: *allowScr, RemoteSecretFile: *remoteSec}
 	run := func(ctx context.Context) error { return secagent.Run(ctx, cfg) }
-	if handled, err := runAsService(run); handled {
+	if handled, err := runAsService(run, log); handled {
 		if err != nil {
 			log.Error("service", "err", err)
 			os.Exit(1)
