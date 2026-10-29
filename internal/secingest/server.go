@@ -164,7 +164,7 @@ func closeWith(c *websocket.Conn, code int, reason string) {
 	_ = c.Close(websocket.StatusCode(code), reason)
 }
 
-var knownCaps = map[string]bool{"fail2ban_read": true, "socket_read": true, "firewall_read": true, secproto.CapFail2banBan: true, secproto.CapProbe: true, secproto.CapShell: true, secproto.CapDesktop: true, secproto.CapWeb: true, secproto.CapRemote: true}
+var knownCaps = map[string]bool{"fail2ban_read": true, "socket_read": true, "firewall_read": true, secproto.CapFail2banBan: true, secproto.CapProbe: true, secproto.CapShell: true, secproto.CapDesktop: true, secproto.CapAdmin: true, secproto.CapWeb: true, secproto.CapRemote: true}
 
 func (s *Server) session(ctx context.Context, c *websocket.Conn, agent store.SecAgent) {
 	hctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -246,6 +246,11 @@ func (s *Server) session(ctx context.Context, c *websocket.Conn, agent store.Sec
 				if err := s.Store.SaveHost(ctx, agent.VPSID, h, time.Now().UTC()); err != nil {
 					s.log().Error("saving host reading", "agent", agent.ID)
 				}
+			}
+		case "admin_result":
+			var r secproto.AdminResult
+			if json.Unmarshal(data, &r) == nil && len(r.ID) <= 64 && s.Ops != nil {
+				s.Ops.DeliverAdmin(agent.ID, r)
 			}
 		case "probe_result":
 			var r secproto.ProbeResult

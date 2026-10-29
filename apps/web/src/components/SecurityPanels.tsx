@@ -407,6 +407,7 @@ export function AgentCard({ vpsId, canEdit }: { vpsId: string; canEdit: boolean 
   const [shell, setShell] = useState(true)
   const [desk, setDesk] = useState(true)
   const [scr, setScr] = useState(false)
+  const [adm, setAdm] = useState(false)
   const [web, setWeb] = useState(true)
   const [err, setErr] = useState('')
   const [confirm, setConfirm] = useState(false)
@@ -481,6 +482,11 @@ export function AgentCard({ vpsId, canEdit }: { vpsId: string; canEdit: boolean 
                   <span>{t('sec.onb.screen')}</span>
                 </label>
                 <p className="-mt-2 text-xs text-muted">{t('sec.onb.screenHint')}</p>
+                <label className="flex items-center gap-2 text-[13px]">
+                  <input type="checkbox" checked={adm} onChange={(e) => setAdm(e.target.checked)} />
+                  <span>{t('sec.onb.admin')}</span>
+                </label>
+                <p className="-mt-2 text-xs text-muted">{t('sec.onb.adminHint')}</p>
                 <p className="text-muted">{t('sec.onb.win.intro')}</p>
                 <p>{t('sec.onb.win.s1')}</p>
                 <Code>{`$ErrorActionPreference = 'Stop'
@@ -492,7 +498,7 @@ icacls "$d\\secagent.token" /inheritance:r /grant:r "*S-1-5-18:R" "*S-1-5-32-544
 $a = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'amd64' }
 [Net.ServicePointManager]::SecurityProtocol = 'Tls12'
 Invoke-WebRequest "https://github.com/Taminum/Owlery/releases/latest/download/remnascope-secagent-windows-$a.exe" -OutFile "$d\\secagent.exe" -UseBasicParsing
-& "$d\\secagent.exe" install -server "wss://${window.location.host}" -token-file "$d\\secagent.token"${shell ? ' -allow-shell' : ''}${desk ? ' -allow-desktop' : ''}${scr ? ' -allow-screen' : ''}${web ? ' -allow-web' : ''}`}</Code>
+& "$d\\secagent.exe" install -server "wss://${window.location.host}" -token-file "$d\\secagent.token"${shell ? ' -allow-shell' : ''}${desk ? ' -allow-desktop' : ''}${scr ? ' -allow-screen' : ''}${adm ? ' -allow-admin' : ''}${web ? ' -allow-web' : ''}`}</Code>
                 <p>{t('sec.onb.win.s2')}</p>
                 <Code>{`Get-Service OwlerySecAgent
 Get-Content "$env:ProgramData\\Owlery\\secagent.log" -Tail 5`}</Code>

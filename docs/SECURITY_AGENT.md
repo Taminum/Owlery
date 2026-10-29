@@ -214,3 +214,19 @@ an 8-hour cookie of its own, which is removed from every request before it reach
 in the audit log (`web.open`). Caddy gets a certificate for a service's name when it is first opened, and only after
 Owlery confirms the name is a published service; this needs a wildcard DNS record `*.<SERVICES_DOMAIN>` pointing at
 the server. A name is never reused, even after the service is removed, so an old link cannot lead to another panel.
+
+## Management of a Windows machine (optional)
+
+Tab "Управление" of the server card looks at the machine and changes it without showing anything on its screen: the
+agent does the work, as the system account. Sections: processes (end one), services (start, stop, restart, change how
+it starts), startup entries (the Run keys and the Startup folders: remove, add), user sessions (disconnect, sign out),
+the event log (System, Application, Security, by level) and network connections with the process that owns each.
+
+It is on only when the machine was installed with `secagent.exe install ... -allow-admin` (the box "Разрешить
+управление"), because it is as strong as the terminal. Each change asks for a confirmation in the page and is written to
+the audit log as `manage.<operation>` with what was asked, before the machine is told. Looking is not recorded.
+
+Refused by the agent whatever the page asks: ending the system's own processes (csrss, lsass and the like), stopping or
+disabling the agent's own service, removing anything that is not a Run-key value or a file in a Startup folder, and
+reading event logs other than System, Application and Security. A request goes over the agent's existing connection and
+is answered on it (not a new connection); an answer is capped at 900 KB.
