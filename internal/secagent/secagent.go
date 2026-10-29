@@ -759,7 +759,9 @@ func newHostReader(cfg Config) *seccollect.HostReader {
 // processes takes a moment, and a page that is refreshed over and over should not pile them up.
 func (a *agent) admin(ctx context.Context, req secproto.AdminReq) secproto.AdminResult {
 	res := secproto.AdminResult{Type: "admin_result", ID: req.ID}
-	if !a.cfg.AllowAdmin {
+	// Listing the sessions is also allowed to a machine that only allows its screen to be shown: the page needs it to
+	// offer a choice of session, and it changes nothing.
+	if !a.cfg.AllowAdmin && !(a.cfg.AllowScreen && req.Op == secproto.AdminSessions) {
 		res.Error = "на этой машине управление не разрешено"
 		return res
 	}

@@ -5,9 +5,13 @@ import { Card } from './ui'
 import { PrimaryButton } from './Modal'
 import { ScreenFiles, sendFile } from './ScreenFiles'
 import { FsClient, joinPath } from '../lib/screenfs'
+import { request } from '../lib/api'
 
 type State = 'idle' | 'connecting' | 'open' | 'closed'
 type Monitor = { w: number; h: number; primary: boolean }
+type WinSession = { id: number; user?: string; state: string; client?: string }
+
+const SESSION_STATES = ['active', 'connected', 'connecting', 'shadow', 'disconnected', 'idle', 'reset', 'down', 'init']
 
 // Why the server closed the connection, in the person's words.
 const REASON: Record<number, MsgKey> = { 4001: 'scr.noAgent', 4002: 'scr.notAllowed', 4003: 'scr.noAnswer', 4004: 'scr.noHelper', 1008: 'scr.forbidden' }
@@ -50,6 +54,9 @@ export function ScreenView({ serverId }: { serverId: string }) {
   const [session, setSession] = useState(0)
   const [monitors, setMonitors] = useState<Monitor[]>([])
   const [monitor, setMonitor] = useState(0)
+  const [winSessions, setWinSessions] = useState<WinSession[]>([])
+  const [chosen, setChosen] = useState(0) // the Windows session shown; 0 lets the agent choose
+  const chosenRef = useRef(0)
   const fs = useRef<FsClient | null>(null)
   const pickFile = useRef<HTMLInputElement>(null)
   const [client, setClient] = useState<FsClient | null>(null) // the same client as fs, for rendering
@@ -62,7 +69,7 @@ export function ScreenView({ serverId }: { serverId: string }) {
     let disposed = false
     const ctx = cv.getContext('2d')
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-    const ws = new WebSocket(`${proto}://${location.host}/api/v1/servers/${serverId}/screen`)
+    const ws = new WebSocket(`${proto}://${location.host}/api/v1/servers/${serverId}/screen${chosenRef.current ? `?session=${chosenRef.current}` : ''}`)
     ws.binaryType = 'arraybuffer'
     let buf = new Uint8Array(0)
     let told = '' // the helper's own explanation, shown when the connection ends
@@ -73,7 +80,10 @@ export function ScreenView({ serverId }: { serverId: string }) {
     // a machine without a video encoder.
     let decoder: VideoDecoder | null = null
     let needKey = true
-    const shown = () => setState((s) => (s === 'connecting' ? 'open' : s))
+    let got = false
+    const shown = () => { got = true; setState((s) => (s === 'connecting' ? 'open' : s)) }
+    // A machine that connects but sends no picture (nobody to show, a hung helper) should say so, not wait for ever.
+    const quiet = setTimeout(() => { if (!got) { told = told || t('scr.noPicture'); ws.close() } }, 15_000)
     const video = (p: Uint8Array) => {
       if (typeof VideoDecoder === 'undefined') { told = t('scr.noCodec'); ws.close(); return }
       const key = p[0] === 1
@@ -196,6 +206,7 @@ export function ScreenView({ serverId }: { serverId: string }) {
 
     return () => {
       disposed = true
+      clearTimeout(quiet)
       sender.current = () => {}
       fs.current?.close()
       fs.current = null
@@ -214,7 +225,22 @@ export function ScreenView({ serverId }: { serverId: string }) {
     }
   }, [session, serverId])
 
-  const start = () => { setReason(''); setState('connecting'); setMonitors([]); setMonitor(0); setSession((n) => n + 1) }
+  // Asks the machine which Windows sessions it has, so that one can be picked: a server is usually worked on over remote
+  // desktop, in a session that is not the console's.
+  const loadSessions = () => {
+    request<{ data: WinSession[] }>('GET', `/api/v1/servers/${serverId}/screen/sessions`)
+      .then((r) => setWinSessions(r.data ?? []))
+      .catch(() => setWinSessions([]))
+  }
+  const start = () => { setReason(''); setState('connecting'); setMonitors([]); setMonitor(0); setSession((n) => n + 1); loadSessions() }
+  const pickSession = (id: number) => {
+    chosenRef.current = id
+    setChosen(id)
+    setState('connecting')
+    setMonitors([])
+    setMonitor(0)
+    setSession((n) => n + 1) // a new connection, to the chosen session
+  }
   const stop = () => { setState('closed'); setReason(t('scr.ended')); setSession(0) }
   const combo = (id: number) => { sender.current(MSG_COMBO, new Uint8Array([id])); box.current?.focus() }
   const pasteText = async () => {
@@ -246,6 +272,16 @@ export function ScreenView({ serverId }: { serverId: string }) {
         <div ref={view} className="fixed inset-0 z-50 flex flex-col bg-black">
           <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-surface px-2 py-1.5">
             <span className="text-xs font-semibold text-cyan">{t('scr.title')}</span>
+            {winSessions.length > 0 && (
+              <select aria-label={t('scr.session')} className={btn} value={chosen} onChange={(e) => pickSession(Number(e.target.value))}>
+                <option value={0}>{t('scr.sessionAuto')}</option>
+                {winSessions.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {t('scr.sessionN', { u: s.user || '—', id: String(s.id), s: SESSION_STATES.includes(s.state) ? t(`mng.sess.${s.state}` as MsgKey) : s.state })}
+                  </option>
+                ))}
+              </select>
+            )}
             {monitors.length > 0 && (
               <select aria-label={t('scr.monitor')} className={btn} value={monitor}
                 onChange={(e) => { const i = Number(e.target.value); setMonitor(i); sender.current(MSG_SELECT, new Uint8Array([i])); box.current?.focus() }}>

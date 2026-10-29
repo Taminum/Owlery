@@ -19,8 +19,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/Taminum/Owlery/internal/secproto"
 )
 
 // videoFPS is how often the screen is captured and handed to the encoder. Full uncompressed frames are copied to
@@ -33,7 +31,7 @@ const frameInterval = 140 * time.Millisecond
 const jpegQuality = 55
 
 // Run starts the helper: the tray icon and the local server the agent hands sessions to. It blocks until ctx ends.
-func Run(ctx context.Context, secretFile string, log *slog.Logger) error {
+func Run(ctx context.Context, secretFile string, port int, log *slog.Logger) error {
 	makeDPIAware()
 	secret, err := os.ReadFile(secretFile)
 	if err != nil {
@@ -49,7 +47,7 @@ func Run(ctx context.Context, secretFile string, log *slog.Logger) error {
 	}
 	defer h.tray.close()
 
-	l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", secproto.RemoteHelperPort))
+	l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
 		return fmt.Errorf("remotehelper: listening: %w", err)
 	}
@@ -276,6 +274,7 @@ func stillPictures(ctx context.Context, stop context.CancelFunc, c net.Conn) {
 	defer runtime.UnlockOSThread()
 	var foll follower
 	defer foll.close()
+	failures := 0
 	tick := time.NewTicker(frameInterval)
 	defer tick.Stop()
 	var prev []byte
@@ -288,8 +287,12 @@ func stillPictures(ctx context.Context, stop context.CancelFunc, c net.Conn) {
 		foll.bindCapture()
 		img, err := captureScreen()
 		if err != nil {
+			if tooManyFailures(c, &failures, err) {
+				return
+			}
 			continue // a single failed capture is not worth ending the session over
 		}
+		failures = 0
 		if bytes.Equal(prev, img.Pix) {
 			continue // nothing moved on the screen: nothing to send
 		}
@@ -314,6 +317,7 @@ func streamVideo(ctx context.Context, c net.Conn, ffmpeg string) error {
 	var foll follower
 	defer foll.close()
 
+	failures := 0
 	var cmd *exec.Cmd
 	var stdin io.WriteCloser
 	var curW, curH, curQ int
@@ -338,8 +342,12 @@ func streamVideo(ctx context.Context, c net.Conn, ffmpeg string) error {
 		foll.bindCapture()
 		raw, w, h, err := captureRaw()
 		if err != nil || w == 0 || h == 0 {
+			if tooManyFailures(c, &failures, err) {
+				return nil
+			}
 			continue // a single failed capture is not worth ending the session over
 		}
+		failures = 0
 		if q := int(quality.Load()); cmd == nil || w != curW || h != curH || q != curQ {
 			stopEncoder()
 			var stdout io.ReadCloser
@@ -395,4 +403,20 @@ func pumpEncoder(ctx context.Context, c net.Conn, stdout io.ReadCloser) {
 			return
 		}
 	}
+}
+
+// tooManyFailures counts captures that failed one after another. A session whose screen cannot be read at all (nobody
+// is signed in and there is no desktop to show, or the remote-desktop session is disconnected) would otherwise send
+// nothing for ever and leave the page saying it is connecting; after about two seconds the browser is told why instead.
+func tooManyFailures(c net.Conn, failures *int, err error) bool {
+	*failures++
+	if *failures < 30 {
+		return false
+	}
+	reason := "экран этого сеанса не читается"
+	if err != nil {
+		reason += " (" + err.Error() + ")"
+	}
+	_ = writeError(c, reason+". Войдите на машине или выберите другой сеанс.")
+	return true
 }
