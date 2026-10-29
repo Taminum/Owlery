@@ -187,6 +187,30 @@ describe('Security page', () => {
     expect(await screen.findByText('ожидает первого подключения')).toBeInTheDocument()
   })
 
+  it('shows what the machine allows and updates the agent without a new secret', async () => {
+    const agent = { id: 'a1', status: 'active', agent_version: '0.3.30', hostname: 'box', capabilities: ['shell', 'web'], last_seen: '2026-10-28T10:00:00Z', online: true }
+    mockApi({ me: owner, handler: (r: Req) => {
+      if (r.path === '/api/v1/security/vps/v1') return { status: 200, body: vps() }
+      if (r.path === '/api/v1/security/vps/v1/agent' && r.method === 'GET') return { status: 200, body: { agent } }
+      if (r.path === '/api/v1/security/vps/v1/fail2ban') return { status: 200, body: { category: 'fail2ban', state: 'agent_required', observed_at: null, received_at: null, clock_skew_ms: 0, data: null, agent: null } }
+    } })
+    renderSec('/security/v1?tab=fail2ban')
+    // What the machine allows: ticked for what its agent announces, crossed for the rest.
+    expect(await screen.findByText(/✓ терминал/)).toBeInTheDocument()
+    expect(screen.getByText(/✓ веб-службы/)).toBeInTheDocument()
+    expect(screen.getByText(/✕ экран/)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Обновить или изменить разрешения' }))
+    // The update keeps the secret: no token anywhere, the permissions go into a drop-in that wins over older ones.
+    expect(await screen.findByText(/zz-owlery\.conf <<'EOF'/)).toBeInTheDocument()
+    expect(screen.getByText(/-state-dir \/var\/lib\/remnascope-secagent -allow-web/)).toBeInTheDocument()
+    expect(screen.queryByText(/useradd|chown root:remnascope-sec/)).toBeNull()
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Разрешить веб-службы' }))
+    expect(screen.queryByText(/state-dir \/var\/lib\/remnascope-secagent -allow-web/)).toBeNull()
+    await userEvent.click(screen.getByRole('tab', { name: 'Windows' }))
+    expect(screen.getByText(/secagent\.exe" install -server/)).toBeInTheDocument()
+    expect(screen.queryByText(/Set-Content/)).toBeNull()
+  })
+
   describe('ban and unban', () => {
     const f2b = (manage: object) => ({
       category: 'fail2ban', state: 'ok', status: 'ok', observed_at: '2026-10-15T12:00:00Z', received_at: '2026-10-15T12:00:00Z', clock_skew_ms: 0, agent: null, manage,

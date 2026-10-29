@@ -133,6 +133,8 @@ type Listener struct {
 	State   string `json:"state,omitempty"`
 	Process string `json:"process,omitempty"` // only when the agent was allowed to see it
 	PID     int    `json:"pid,omitempty"`
+	// Container is the Docker container that publishes this port, when the machine told the agent which ones do.
+	Container string `json:"container,omitempty"`
 }
 
 type Sockets struct {
