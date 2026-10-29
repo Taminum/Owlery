@@ -182,6 +182,8 @@ func runSession(ctx context.Context, conn net.Conn, ffmpeg string, log *slog.Log
 	}
 
 	_ = writeMonitors(c)
+	files := newFS(c)
+	defer files.close()
 
 	// Input is injected from this one thread, locked and kept on the desktop that is receiving input, so a click lands
 	// on a UAC prompt or the lock screen as readily as on an ordinary window.
@@ -219,6 +221,8 @@ func runSession(ctx context.Context, conn net.Conn, ffmpeg string, log *slog.Log
 			if len(payload) > 0 && len(payload) <= 8192 {
 				typeText(string(payload))
 			}
+		case msgFsList, msgFsGet, msgFsPutBegin, msgFsPutData, msgFsPutEnd, msgFsCancel:
+			files.handle(typ, payload)
 		case msgSelect:
 			if len(payload) == 1 && int(payload[0]) < len(monitors()) {
 				curMonitor.Store(int32(payload[0]))
