@@ -10,13 +10,13 @@ import { DangerButton, GhostButton, Modal, PrimaryButton } from './Modal'
 
 // The permissions a machine gives Owlery, by the capability its agent announces. They are switched on the machine
 // itself, by the command this dialog builds: Owlery can never give them to itself.
-export interface AgentOpts { shell: boolean; web: boolean; desk: boolean; scr: boolean; probe: boolean }
+export interface AgentOpts { shell: boolean; web: boolean; desk: boolean; scr: boolean; adm: boolean; probe: boolean }
 type OS = 'linux' | 'windows'
 
-const CAP: Record<keyof AgentOpts, string> = { shell: 'shell', web: 'web', desk: 'desktop', scr: 'remote', probe: 'probe' }
+const CAP: Record<keyof AgentOpts, string> = { shell: 'shell', web: 'web', desk: 'desktop', scr: 'remote', adm: 'admin', probe: 'probe' }
 
 export function optsFromCaps(caps: string[]): AgentOpts {
-  return { shell: caps.includes(CAP.shell), web: caps.includes(CAP.web), desk: caps.includes(CAP.desk), scr: caps.includes(CAP.scr), probe: caps.includes(CAP.probe) }
+  return { shell: caps.includes(CAP.shell), web: caps.includes(CAP.web), desk: caps.includes(CAP.desk), scr: caps.includes(CAP.scr), adm: caps.includes(CAP.adm), probe: caps.includes(CAP.probe) }
 }
 
 const RELEASES = 'https://github.com/Taminum/Owlery/releases/latest/download'
@@ -26,7 +26,7 @@ export function Code({ children }: { children: string }) {
 }
 
 function winFlags(o: AgentOpts): string {
-  return `${o.shell ? ' -allow-shell' : ''}${o.desk ? ' -allow-desktop' : ''}${o.scr ? ' -allow-screen' : ''}${o.web ? ' -allow-web' : ''}${o.probe ? ' -probe' : ''}`
+  return `${o.shell ? ' -allow-shell' : ''}${o.desk ? ' -allow-desktop' : ''}${o.scr ? ' -allow-screen' : ''}${o.adm ? ' -allow-admin' : ''}${o.web ? ' -allow-web' : ''}${o.probe ? ' -probe' : ''}`
 }
 
 // The Linux unit gets its flags from a drop-in of its own. Its name sorts last, so it wins over older drop-ins
@@ -84,6 +84,7 @@ export function AgentSetupDialog({ mode, token, initial, initialOS, onClose }: {
           <Check on={o.web} set={set('web')} label="sec.onb.web" hint="sec.onb.webHint" />
           {os === 'windows' && <Check on={o.desk} set={set('desk')} label="sec.onb.desk" hint="sec.onb.deskHint" />}
           {os === 'windows' && <Check on={o.scr} set={set('scr')} label="sec.onb.screen" hint="sec.onb.screenHint" />}
+          {os === 'windows' && <Check on={o.adm} set={set('adm')} label="sec.onb.admin" hint="sec.onb.adminHint" />}
           {mode === 'update' && <Check on={o.probe} set={set('probe')} label="agent.probe" hint="agent.probeHint" />}
         </div>
 
@@ -190,7 +191,7 @@ journalctl -u remnascope-secagent -n 5 --no-pager`}</Code>
 
 const PERMS: { key: keyof AgentOpts; label: MsgKey }[] = [
   { key: 'shell', label: 'agent.perm.shell' }, { key: 'web', label: 'agent.perm.web' }, { key: 'desk', label: 'agent.perm.desk' },
-  { key: 'scr', label: 'agent.perm.scr' }, { key: 'probe', label: 'agent.perm.probe' },
+  { key: 'scr', label: 'agent.perm.scr' }, { key: 'adm', label: 'agent.perm.adm' }, { key: 'probe', label: 'agent.perm.probe' },
 ]
 
 /**
@@ -256,7 +257,7 @@ export function AgentBlock({ vpsId, canEdit, hostOS }: { vpsId: string; canEdit:
           {agent && <GhostButton onClick={() => setConfirm(true)}>{t('sec.agent.revoke')}</GhostButton>}
         </div>
       )}
-      {token && <AgentSetupDialog mode="install" token={token} initial={{ shell: true, web: true, desk: true, scr: false, probe: false }} initialOS={os} onClose={() => setToken('')} />}
+      {token && <AgentSetupDialog mode="install" token={token} initial={{ shell: true, web: true, desk: true, scr: false, adm: false, probe: false }} initialOS={os} onClose={() => setToken('')} />}
       {updating && <AgentSetupDialog mode="update" initial={opts} initialOS={os} onClose={() => setUpdating(false)} />}
       {confirm && (
         <Modal title={t('sec.agent.revoke')} onClose={() => setConfirm(false)}>

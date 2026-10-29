@@ -21,6 +21,7 @@ type Hub struct {
 	conns  map[string]*link
 	next   uint64
 	probes map[string]*probeWait
+	admins map[string]*adminWait
 	shells map[string]*shellWait
 }
 
@@ -34,7 +35,9 @@ type link struct {
 	send func(context.Context, any) error
 }
 
-func New() *Hub { return &Hub{conns: map[string]*link{}, probes: map[string]*probeWait{}} }
+func New() *Hub {
+	return &Hub{conns: map[string]*link{}, probes: map[string]*probeWait{}, admins: map[string]*adminWait{}}
+}
 
 // Register makes an agent's connection available. The returned function removes it, and only it: a newer
 // connection of the same agent stays.
@@ -105,6 +108,52 @@ func (h *Hub) Probe(ctx context.Context, agentID string, p secproto.Probe) (secp
 func (h *Hub) Deliver(agentID string, r secproto.ProbeResult) bool {
 	h.mu.Lock()
 	w := h.probes[r.ID]
+	h.mu.Unlock()
+	if w == nil || w.agent != agentID {
+		return false
+	}
+	select {
+	case w.ch <- r:
+		return true
+	default:
+		return false
+	}
+}
+
+type adminWait struct {
+	agent string
+	ch    chan secproto.AdminResult
+}
+
+// Admin sends one management request to an agent and waits for its answer (or ctx). The ID is set here. Only the agent
+// the request was sent to can answer it.
+func (h *Hub) Admin(ctx context.Context, agentID string, req secproto.AdminReq) (secproto.AdminResult, error) {
+	req.Type, req.ID = "admin_req", uuid.NewString()
+	w := &adminWait{agent: agentID, ch: make(chan secproto.AdminResult, 1)}
+	h.mu.Lock()
+	h.admins[req.ID] = w
+	h.mu.Unlock()
+	defer func() {
+		h.mu.Lock()
+		delete(h.admins, req.ID)
+		h.mu.Unlock()
+	}()
+	if err := h.Send(ctx, agentID, req); err != nil {
+		return secproto.AdminResult{}, err
+	}
+	select {
+	case r := <-w.ch:
+		return r, nil
+	case <-ctx.Done():
+		return secproto.AdminResult{}, ErrNoAnswer
+	}
+}
+
+// DeliverAdmin hands an agent's answer to whoever is waiting for it; one nobody asked for, or from a different agent
+// than the one asked, is dropped.
+func (h *Hub) DeliverAdmin(agentID string, r secproto.AdminResult) bool {
+	h.mu.Lock()
+	w := h.admins[r.ID]
 	h.mu.Unlock()
 	if w == nil || w.agent != agentID {
 		return false

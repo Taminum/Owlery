@@ -61,6 +61,7 @@ func main() {
 		allowSh   = flag.Bool("allow-shell", false, "let Owlery open a terminal here with the agent's own rights (Windows; on Linux install the shell helper instead)")
 		shellSock = flag.String("shell-socket", defaultShellSocket(), "Unix socket of the terminal helper; a terminal is offered only when it is there")
 		allowScr  = flag.Bool("allow-screen", false, "let Owlery show this machine's screen to an administrator, with a notice on it for the person at the machine (Windows; needs owlery-remote installed)")
+		allowAdm  = flag.Bool("allow-admin", false, "let Owlery manage this machine from the server card: processes, services, startup, sessions, event log, connections (Windows; as strong as a terminal)")
 		remoteSec = flag.String("remote-secret-file", defaultRemoteSecretFile(), "shared secret of the screen-sharing helper (Windows); screen sharing is offered only when it is there")
 		logFile   = flag.String("log-file", "", "write the log to this file instead of the standard error (a Windows service has no console)")
 	)
@@ -88,7 +89,7 @@ func main() {
 		*noF2B, *noSock, *noFW = true, true, true
 	}
 	cfg := secagent.Config{ServerURL: *server, TokenFile: *tokenFile, CAFile: *caFile, AllowInsecure: *insecure,
-		Interval: *interval, Version: version, Log: log, HelperSocket: *helper, StateDir: *stateDir, NoFail2ban: *noF2B, NoSockets: *noSock, NoFirewall: *noFW, NoHost: *noHost, ContainersFile: *contFile, Probe: *probe, AllowShell: *allowSh, ShellSocket: *shellSock, AllowDesktop: *allowDesk, AllowWeb: *allowWeb, AllowScreen: *allowScr, RemoteSecretFile: *remoteSec}
+		Interval: *interval, Version: version, Log: log, HelperSocket: *helper, StateDir: *stateDir, NoFail2ban: *noF2B, NoSockets: *noSock, NoFirewall: *noFW, NoHost: *noHost, ContainersFile: *contFile, Probe: *probe, AllowShell: *allowSh, ShellSocket: *shellSock, AllowDesktop: *allowDesk, AllowWeb: *allowWeb, AllowScreen: *allowScr, AllowAdmin: *allowAdm, RemoteSecretFile: *remoteSec}
 	run := func(ctx context.Context) error { return secagent.Run(ctx, cfg) }
 	if handled, err := runAsService(run, log); handled {
 		if err != nil {

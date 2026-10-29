@@ -403,3 +403,58 @@ type ProxyOpen struct {
 	ID   string `json:"id"`
 	Port int    `json:"port"`
 }
+
+// CapAdmin is announced by an agent whose machine lets Owlery manage it from the server card (processes, services,
+// startup entries, sessions, event log, connections). Windows only, and off unless the machine was set up with
+// -allow-admin: the agent runs as the system account there, so this is as strong as the terminal.
+const CapAdmin = "admin"
+
+// Admin operations. The first group only reads; the second changes the machine and is written to the audit log.
+const (
+	AdminProcs    = "procs"
+	AdminServices = "services"
+	AdminStartup  = "startup"
+	AdminSessions = "sessions"
+	AdminEvents   = "events"
+	AdminConns    = "conns"
+
+	AdminProcKill       = "proc_kill"
+	AdminSvcStart       = "svc_start"
+	AdminSvcStop        = "svc_stop"
+	AdminSvcRestart     = "svc_restart"
+	AdminSvcStartup     = "svc_startup"
+	AdminStartupRemove  = "startup_remove"
+	AdminStartupAdd     = "startup_add"
+	AdminSessionLogoff  = "session_logoff"
+	AdminSessionDisconn = "session_disconnect"
+)
+
+// AdminWrites are the operations that change the machine.
+var AdminWrites = map[string]bool{
+	AdminProcKill: true, AdminSvcStart: true, AdminSvcStop: true, AdminSvcRestart: true, AdminSvcStartup: true,
+	AdminStartupRemove: true, AdminStartupAdd: true, AdminSessionLogoff: true, AdminSessionDisconn: true,
+}
+
+// AdminReads are the operations that only look.
+var AdminReads = map[string]bool{AdminProcs: true, AdminServices: true, AdminStartup: true, AdminSessions: true, AdminEvents: true, AdminConns: true}
+
+// AdminReq asks the agent for one operation. It is delivered over the live connection or not at all, and the answer
+// comes back on the same connection, matched by ID; one for any other ID, or from another agent, is dropped.
+type AdminReq struct {
+	Type string          `json:"type"` // "admin_req"
+	ID   string          `json:"id"`
+	Op   string          `json:"op"`
+	Args json.RawMessage `json:"args,omitempty"`
+}
+
+// AdminResult is the answer. Data is the operation's own JSON and is kept under MaxAdminData so the whole message fits
+// MaxMessageBytes.
+type AdminResult struct {
+	Type  string          `json:"type"` // "admin_result"
+	ID    string          `json:"id"`
+	OK    bool            `json:"ok"`
+	Error string          `json:"error,omitempty"`
+	Data  json.RawMessage `json:"data,omitempty"`
+}
+
+const MaxAdminData = 900 << 10

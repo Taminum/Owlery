@@ -43,7 +43,7 @@ export function AddServer({ onClose }: { onClose: () => void }) {
   }
 
   if (made) {
-    return <AgentSetupDialog mode="install" token={made.token} initial={{ shell: true, web: true, desk: os === 'windows', scr: false, probe: false }} initialOS={os}
+    return <AgentSetupDialog mode="install" token={made.token} initial={{ shell: true, web: true, desk: os === 'windows', scr: false, adm: false, probe: false }} initialOS={os}
       onClose={() => { onClose(); nav(`/servers/${made.id}`) }} />
   }
   return (

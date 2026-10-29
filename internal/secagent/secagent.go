@@ -20,12 +20,14 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/coder/websocket"
 
+	"github.com/Taminum/Owlery/internal/adminops"
 	"github.com/Taminum/Owlery/internal/f2bhelper"
 	"github.com/Taminum/Owlery/internal/seccollect"
 	"github.com/Taminum/Owlery/internal/secproto"
@@ -77,6 +79,10 @@ type Config struct {
 	// AllowScreen is the machine's explicit permission for screen sharing; without it the capability is never offered,
 	// whatever else is installed.
 	AllowScreen bool
+	// AllowAdmin is the machine's explicit permission for management from the server card (Windows): processes,
+	// services, startup entries, sessions, the event log and connections. The agent is the system account there, so this
+	// is as strong as a terminal and is off unless the machine was set up for it.
+	AllowAdmin bool
 	// RemoteSecretFile is the screen-sharing helper's shared secret (Windows). The agent (a system service) launches the
 	// helper — this same binary, run as "screen-helper" — into the signed-in person's own session as the system account,
 	// so it can see and drive that screen including the secure desktop (UAC and the lock screen); the secret, which only
@@ -149,7 +155,7 @@ func Run(ctx context.Context, cfg Config) error {
 	if err != nil {
 		return err
 	}
-	a := &agent{cfg: cfg, url: url, hc: hc, epoch: newEpoch(), probes: make(chan struct{}, maxProbes), socks: seccollect.NewSocketWatch(10 * time.Minute), host: newHostReader(cfg), runCtx: ctx}
+	a := &agent{cfg: cfg, url: url, hc: hc, epoch: newEpoch(), probes: make(chan struct{}, maxProbes), admins: make(chan struct{}, 4), socks: seccollect.NewSocketWatch(10 * time.Minute), host: newHostReader(cfg), runCtx: ctx}
 	a.socks.Containers = func() map[int]string { return seccollect.ContainerPorts(cfg.ContainersFile) }
 	back := secshell.Dialer{BaseURL: strings.TrimRight(cfg.ServerURL, "/"), Token: a.token, Client: hc}
 	a.shells, a.dialBack = &secshell.Runner{Log: cfg.Log, Dial: back.Dial}, back.DialPath
@@ -197,6 +203,7 @@ type agent struct {
 	done   *executed
 	cmdMu  sync.Mutex // one command at a time, in the order they arrive
 	probes chan struct{}
+	admins chan struct{}
 	socks  *seccollect.SocketWatch
 	host   *seccollect.HostReader
 	runCtx context.Context // lives as long as the agent: a terminal outlives a reconnect of the reports
@@ -269,6 +276,9 @@ func (a *agent) capabilities(ban bool) []string {
 	}
 	if a.cfg.AllowDesktop {
 		caps = append(caps, secproto.CapDesktop)
+	}
+	if a.cfg.AllowAdmin && runtime.GOOS == "windows" {
+		caps = append(caps, secproto.CapAdmin)
 	}
 	if a.cfg.AllowWeb {
 		caps = append(caps, secproto.CapWeb)
@@ -480,6 +490,17 @@ func (a *agent) reader(ctx context.Context, c *websocket.Conn, ban bool, acks ch
 			go func() {
 				if err := secshell.Proxy(a.runCtx, a.dialBack, req); err != nil {
 					a.cfg.Log.Warn("web service", "port", req.Port, "err", err)
+				}
+			}()
+		case "admin_req":
+			var req secproto.AdminReq
+			if json.Unmarshal(b, &req) != nil || req.ID == "" || len(req.ID) > 64 {
+				fail(errors.New("secagent: a bad management request"))
+				return
+			}
+			go func() {
+				if err := write(ctx, c, a.admin(ctx, req)); err != nil {
+					a.cfg.Log.Warn("could not report a management result", "id", req.ID, "err", err)
 				}
 			}()
 		case "remote_open":
@@ -732,4 +753,38 @@ func newHostReader(cfg Config) *seccollect.HostReader {
 	h := seccollect.NewHostReader()
 	h.ContainersFile = cfg.ContainersFile
 	return h
+}
+
+// admin carries out one management request, if this machine allows them. At most a few run at once: listing the
+// processes takes a moment, and a page that is refreshed over and over should not pile them up.
+func (a *agent) admin(ctx context.Context, req secproto.AdminReq) secproto.AdminResult {
+	res := secproto.AdminResult{Type: "admin_result", ID: req.ID}
+	if !a.cfg.AllowAdmin {
+		res.Error = "на этой машине управление не разрешено"
+		return res
+	}
+	if !secproto.AdminReads[req.Op] && !secproto.AdminWrites[req.Op] {
+		res.Error = "неизвестное действие"
+		return res
+	}
+	select {
+	case a.admins <- struct{}{}:
+		defer func() { <-a.admins }()
+	default:
+		res.Error = "машина занята другими запросами, повторите"
+		return res
+	}
+	actx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+	data, err := adminops.Do(actx, req.Op, req.Args)
+	if err != nil {
+		res.Error = err.Error()
+		return res
+	}
+	if len(data) > secproto.MaxAdminData {
+		res.Error = "ответ слишком большой"
+		return res
+	}
+	res.OK, res.Data = true, data
+	return res
 }
