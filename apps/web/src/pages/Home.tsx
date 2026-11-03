@@ -1,37 +1,22 @@
 import { Link } from 'react-router-dom'
-import { CircleCheck, OctagonAlert, TriangleAlert, type LucideIcon } from 'lucide-react'
+import { CircleCheck, DoorOpen, KeyRound, Lock, OctagonAlert, ShieldAlert, TriangleAlert, type LucideIcon } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { t } from '../i18n'
 import { api } from '../lib/api'
-import { formatRate } from '../lib/format'
+import { formatInt, plural } from '../lib/format'
 import { useLoad } from '../hooks/useLoad'
 import { Card } from '../components/ui'
 import { PageHead, TableSkeleton } from '../components/Analyzer'
-import { RoleChips, StatusChip, StatusDot, type Server } from '../components/ServerParts'
-import { Spark, tone, uptimeText } from '../components/HostView'
+import { StatusChip, type Server } from '../components/ServerParts'
 import { useModulesOff } from '../lib/modules'
-import type { AlertsResponse } from '../lib/types'
+import type { AlertsResponse, FleetSummary } from '../lib/types'
 
-const TEXT = { green: 'text-green', amber: 'text-amber', red: 'text-red' } as const
 const RANK = { bad: 0, warn: 1, unknown: 2, ok: 3 } as const
-const EDGE = { bad: 'border-t-red', warn: 'border-t-amber', unknown: 'border-t-muted/40', ok: 'border-t-green' } as const
-
-function Stat({ label, value, hint, accent }: { label: string; value: number; hint?: string; accent?: 'amber' | 'red' | 'green' }) {
-  return (
-    <div className="rounded-control border border-line bg-bg/40 px-3 py-2">
-      <div className="text-[11px] uppercase tracking-wide text-muted">{label}</div>
-      <div className={`tnum text-[24px] font-semibold leading-8 ${accent && value > 0 ? TEXT[accent] : ''}`}>{value}</div>
-      {hint && <div className="text-[11px] text-muted">{hint}</div>}
-    </div>
-  )
-}
 
 /** The one sentence the whole page is about: is the farm all right. */
-function Hero({ list, alerts }: { list: Server[]; alerts: number }) {
+function Hero({ list, alerts, offline }: { list: Server[]; alerts: number; offline: number }) {
   const bad = list.filter((s) => s.status === 'bad').length
   const warn = list.filter((s) => s.status === 'warn').length
-  const ok = list.filter((s) => s.status === 'ok').length
-  const offline = list.filter((s) => s.reason === 'offline').length
-  const noAgent = list.filter((s) => s.status === 'unknown').length
   const state: 'ok' | 'warn' | 'bad' = bad > 0 ? 'bad' : warn > 0 ? 'warn' : 'ok'
   const Icon: LucideIcon = { ok: CircleCheck, warn: TriangleAlert, bad: OctagonAlert }[state]
   const look = {
@@ -39,25 +24,20 @@ function Hero({ list, alerts }: { list: Server[]; alerts: number }) {
     warn: 'border-amber/40 bg-gradient-to-br from-amber/15 via-surface to-surface text-amber',
     bad: 'border-red/40 bg-gradient-to-br from-red/15 via-surface to-surface text-red',
   }[state]
-  const withData = list.filter((s) => s.host?.has_data)
-  const rx = withData.reduce((a, s) => a + (s.host?.rx_bps ?? 0), 0)
-  const tx = withData.reduce((a, s) => a + (s.host?.tx_bps ?? 0), 0)
+  const asking = bad + warn
+  const noAgent = list.filter((s) => s.status === 'unknown').length
   return (
     <section aria-label={t(`home.hero.${state}` as never)} className={`rounded-card border p-5 ${look}`}>
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
-        <Icon size={44} strokeWidth={1.6} aria-hidden />
-        <div className="min-w-0 flex-1">
+      <div className="flex items-center gap-5">
+        <Icon size={44} strokeWidth={1.6} aria-hidden className="shrink-0" />
+        <div className="min-w-0">
           <h2 className="text-[22px] font-semibold leading-7 text-fg">{t(`home.hero.${state}` as never)}</h2>
           <p className="mt-0.5 text-[13px] text-muted">
-            {t('home.hero.sub', { ok, total: list.length })}
-            {withData.length > 0 && <> · <span className="tnum">↓ {formatRate(rx)} · ↑ {formatRate(tx)}</span> {t('home.hero.now')}</>}
+            {t('home.hero.sub', { n: list.length })}
+            {asking > 0 && <> · {t('home.hero.asking', { n: asking })}</>}
+            {offline > 0 && <> · {t('home.hero.offline', { n: offline })}</>}
+            {alerts > 0 && <> · {t('home.hero.alerts', { n: alerts })}</>}
           </p>
-        </div>
-        <div className="grid w-full grid-cols-2 gap-2 text-fg sm:w-auto sm:grid-cols-4">
-          <Stat label={t('home.stat.total')} value={list.length} />
-          <Stat label={t('home.stat.ok')} value={ok} accent="green" />
-          <Stat label={t('home.stat.warn')} value={warn} accent="amber" hint={alerts > 0 ? t('home.stat.alertsHint', { n: alerts }) : undefined} />
-          <Stat label={t('home.stat.bad')} value={bad} accent="red" hint={t('home.stat.badHint', { n: offline })} />
         </div>
       </div>
       {noAgent > 0 && <p className="mt-3 text-xs text-muted">{t('home.hero.noAgent', { n: noAgent })}</p>}
@@ -65,43 +45,42 @@ function Hero({ list, alerts }: { list: Server[]; alerts: number }) {
   )
 }
 
-function Mini({ label, v }: { label: string; v: number | null }) {
-  const pct = v === null ? 0 : Math.max(0, Math.min(100, v))
-  const color = { green: 'bg-green', amber: 'bg-amber', red: 'bg-red' }[tone(pct)]
-  return (
-    <div className="min-w-0 flex-1">
-      <div className="flex justify-between text-[11px] text-muted"><span>{label}</span><span className={`tnum ${v === null ? '' : TEXT[tone(pct)]}`}>{v === null ? '—' : `${Math.round(v)}%`}</span></div>
-      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-elevated"><div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} /></div>
-    </div>
+function Tile({ icon: Icon, label, value, sub, tone, to }: { icon: LucideIcon; label: string; value: ReactNode; sub?: ReactNode; tone?: 'amber' | 'red'; to?: string }) {
+  const body = (
+    <>
+      <div className="flex items-center gap-1.5 text-xs text-muted"><Icon size={14} aria-hidden />{label}</div>
+      <div className={`tnum mt-1 text-[26px] font-semibold leading-8 ${tone === 'red' ? 'text-red' : tone === 'amber' ? 'text-amber' : ''}`}>{value}</div>
+      {sub && <div className="mt-1 text-xs text-muted">{sub}</div>}
+    </>
   )
+  const cls = 'block rounded-card border border-line bg-surface p-3.5'
+  return to
+    ? <Link to={to} className={`${cls} transition-colors hover:border-cyan/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan`}>{body}</Link>
+    : <section className={cls}>{body}</section>
 }
 
-function MachineCard({ s }: { s: Server }) {
-  const h = s.host?.has_data ? s.host : null
-  const root = h?.disks.find((d) => d.m === '/' || d.m === 'C:') ?? h?.disks[0]
-  const mem = h && h.mem_total > 0 ? (h.mem_used * 100) / h.mem_total : null
+function daysLeft(iso: string): number {
+  return Math.floor((new Date(iso).getTime() - Date.now()) / 86_400_000)
+}
+
+function Summary({ sum, hours }: { sum: FleetSummary; hours: number }) {
+  const top = sum.bans.servers[0]
+  const nearest = sum.tls.nearest_end ? daysLeft(sum.tls.nearest_end) : null
+  const o = sum.owlery
   return (
-    <li>
-      <Link to={`/servers/${s.id}`}
-        className={`block rounded-card border border-t-2 border-line bg-surface p-3.5 transition-colors hover:border-cyan/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan ${EDGE[s.status]}`}>
-        <div className="flex items-center gap-2">
-          <StatusDot s={s} />
-          <span className="min-w-0 flex-1 truncate text-[14px] font-semibold">{s.name}</span>
-          {h && <Spark values={h.cpu_spark} />}
-        </div>
-        <div className="mt-1.5 min-h-5"><RoleChips roles={s.roles} /></div>
-        {h ? (
-          <>
-            <div className="mt-2.5 flex gap-3">
-              <Mini label={t('host.cpu')} v={h.cpu} />
-              <Mini label={t('host.mem')} v={mem} />
-              <Mini label={t('host.disk')} v={root && root.t > 0 ? (root.u * 100) / root.t : null} />
-            </div>
-            <p className="tnum mt-2 text-[11px] text-muted">↓ {formatRate(h.rx_bps)} · ↑ {formatRate(h.tx_bps)} · {t('host.up')} {uptimeText(h.uptime)}</p>
-          </>
-        ) : <p className="mt-2.5 text-xs text-muted">{t('srv.reason.no_agent_short')}</p>}
-      </Link>
-    </li>
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <Tile icon={ShieldAlert} label={t('home.sum.bans')} value={formatInt(sum.bans.total)} to="/security"
+        sub={sum.bans.total === 0 ? t('home.sum.bansNone', { h: hours }) : t('home.sum.bansSub', { n: sum.bans.servers.length, name: top?.name ?? '' })} />
+      <Tile icon={DoorOpen} label={t('home.sum.changes')} value={formatInt(sum.changes.total)} tone={sum.changes.total > 0 ? 'amber' : undefined} to="/security"
+        sub={sum.changes.total === 0 ? t('home.sum.changesNone') : sum.changes.items.slice(0, 2).map((c) => `${c.server}: ${t(`home.change.${c.type}` as never)}`).join('; ')} />
+      {o && (
+        <Tile icon={KeyRound} label={t('home.sum.owlery')} value={formatInt(o.logins)} tone={o.failed_logins > 0 ? 'amber' : undefined} to="/settings"
+          sub={`${o.failed_logins > 0 ? `${t('home.sum.failedLogins', { n: o.failed_logins })} · ` : ''}${t('home.sum.sessions', { n: o.terminals + o.screens + o.desktops })}`} />
+      )}
+      <Tile icon={Lock} label={t('home.sum.tls')} value={nearest === null ? '—' : `${nearest} ${plural(nearest, 'день', 'дня', 'дней')}`}
+        tone={sum.tls.problems > 0 || (nearest !== null && nearest < 14) ? 'red' : nearest !== null && nearest < 30 ? 'amber' : undefined} to="/security"
+        sub={sum.tls.problems > 0 ? t('home.sum.tlsProblems', { n: sum.tls.problems }) : nearest === null ? t('home.sum.tlsNone') : sum.tls.nearest_host} />
+    </div>
   )
 }
 
@@ -116,12 +95,12 @@ function ago(iso: string): string {
 export default function Home() {
   const servers = useLoad((sig) => api.get<{ servers: Server[] }>('/api/v1/servers', sig), [], 30_000)
   const alerts = useLoad((sig) => api.get<AlertsResponse>('/api/v1/alerts', sig), [], 60_000)
+  const summary = useLoad((sig) => api.get<FleetSummary>('/api/v1/summary?hours=24', sig), [], 120_000)
   const off = useModulesOff()
   const list = servers.data?.servers ?? []
   const byTrouble = (a: Server, b: Server) => RANK[a.status] - RANK[b.status] || a.name.localeCompare(b.name, 'ru')
   const trouble = list.filter((s) => s.status === 'bad' || s.status === 'warn').sort(byTrouble)
   const open = (alerts.data?.alerts ?? []).filter((a) => !a.resolved_at)
-  const sorted = [...list].sort(byTrouble)
   return (
     <div className="space-y-5">
       <PageHead title={t('home.title')} subtitle={t('home.subtitle')} />
@@ -132,7 +111,8 @@ export default function Home() {
       )}
       {list.length > 0 && (
         <>
-          <Hero list={list} alerts={open.length} />
+          <Hero list={list} alerts={open.length} offline={list.filter((s) => s.reason === 'offline').length} />
+          {summary.data && <Summary sum={summary.data} hours={24} />}
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [&>*]:min-w-0">
             <Card title={t('home.attention')} note={trouble.length ? undefined : t('home.attentionOk')}>
@@ -171,17 +151,10 @@ export default function Home() {
             </Card>
           </div>
 
-          <section aria-label={t('home.fleet')} className="space-y-3">
-            <div className="flex items-baseline justify-between">
-              <h2 className="text-[13px] font-semibold uppercase tracking-wide text-muted">{t('home.fleet')}</h2>
-              <Link to="/servers" className="text-xs text-cyan underline">{t('home.allServers')}</Link>
-            </div>
-            <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">{sorted.map((s) => <MachineCard key={s.id} s={s} />)}</ul>
-          </section>
-
-          {!off.has('remnawave') && (
-            <p className="text-[13px] text-muted">{t('home.vpn')} <Link to="/vpn" className="text-cyan underline">{t('home.vpnLink')}</Link></p>
-          )}
+          <p className="text-[13px] text-muted">
+            <Link to="/servers" className="text-cyan underline">{t('home.allServers')}</Link>
+            {!off.has('remnawave') && <> · {t('home.vpn')} <Link to="/vpn" className="text-cyan underline">{t('home.vpnLink')}</Link></>}
+          </p>
         </>
       )}
     </div>
