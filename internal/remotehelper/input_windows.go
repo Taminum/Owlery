@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"unicode/utf16"
 	"unsafe"
 
@@ -86,6 +87,7 @@ func scanCodeFor(vk uint16) uint16 {
 var (
 	procSetCursorPos = user32.NewProc("SetCursorPos")
 	mouseOnce        sync.Once
+	mouseTrace       atomic.Int32
 )
 
 func applyMouse(ev mouseEvent, prevButtons uint8) {
@@ -103,6 +105,11 @@ func applyMouse(ev mouseEvent, prevButtons uint8) {
 			ay = (py - vy) * 65535 / (vh - 1)
 		}
 		sendInput(mouseInputRaw(int32(ax), int32(ay), 0, mouseMoveAbs|mouseVirtualDesk))
+	}
+	if mouseTrace.Add(1) <= 20 {
+		var pt struct{ X, Y int32 }
+		procGetCursorPos.Call(uintptr(unsafe.Pointer(&pt)))
+		slog.Info("mouse", "want", fmt.Sprint(px, py), "got", fmt.Sprint(pt.X, pt.Y), "monitor", fmt.Sprint(m))
 	}
 	mouseOnce.Do(func() {
 		slog.Info("first mouse event", "px", px, "py", py, "monitor", fmt.Sprint(m), "virtual", fmt.Sprint(vx, vy, vw, vh))

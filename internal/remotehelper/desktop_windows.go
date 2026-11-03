@@ -59,6 +59,11 @@ func (f *follower) bindCapture() {
 	desktopGen.Add(1)
 }
 
+// forget makes the next bindCapture reopen the input desktop even if its name is unchanged: after a remote-desktop
+// session is disconnected and reconnected the desktop is called "Default" again, but the handle held is stale and
+// the screen can no longer be read through it.
+func (f *follower) forget() { f.bound = false }
+
 // bindInput does the same for the injection thread, but reopens only once the capture loop has signalled a change, so
 // an ordinary mouse move costs a single atomic read.
 func (f *follower) bindInput() {

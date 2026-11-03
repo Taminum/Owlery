@@ -166,12 +166,12 @@ func captureRaw() (pix []byte, w, h int, err error) {
 	defer procDeleteObject.Call(bmp)
 
 	old, _, _ := procSelectObject.Call(memDC, bmp)
-	ok, _, _ := procBitBlt.Call(memDC, 0, 0, uintptr(w), uintptr(h), screenDC, uintptr(x), uintptr(y), uintptr(srcCopy|captureBlt))
+	ok, _, blitErr := procBitBlt.Call(memDC, 0, 0, uintptr(w), uintptr(h), screenDC, uintptr(x), uintptr(y), uintptr(srcCopy|captureBlt))
 	// GetDIBits requires the bitmap to be out of every device context. Some display drivers (remote desktop sessions
 	// among them) refuse it otherwise, so the bitmap is released before it is read.
 	procSelectObject.Call(memDC, old)
 	if ok == 0 {
-		return nil, 0, 0, fmt.Errorf("remotehelper: BitBlt failed")
+		return nil, 0, 0, fmt.Errorf("remotehelper: BitBlt failed (%dx%d at %d,%d): %v", w, h, x, y, blitErr)
 	}
 
 	var bi bitmapInfoHeader
