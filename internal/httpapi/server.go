@@ -213,6 +213,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/modules", s.session(s.moduleList))
 	mux.Handle("PUT /api/v1/modules/{id}", s.session(s.moduleSet))
 	mux.Handle("GET /api/v1/servers", s.session(s.serverList))
+	mux.Handle("GET /api/v1/summary", s.session(s.fleetSummary))
 	mux.Handle("GET /api/v1/servers/{id}", s.session(s.serverCard))
 	mux.Handle("GET /api/v1/servers/{id}/terminal", s.session(s.terminal))
 	mux.Handle("GET /api/v1/servers/{id}/services", s.session(s.listWebServices))
