@@ -22,8 +22,8 @@ import (
 )
 
 // videoFPS is how often the screen is captured and handed to the encoder. Full uncompressed frames are copied to
-// ffmpeg, so this trades smoothness against the processor and the pipe; 15 is a sensible middle on a desktop machine.
-const videoFPS = 15
+// ffmpeg, so this trades smoothness against the processor and the pipe; a grab of a 1440p monitor takes about 35 ms, so 20 fits.
+const videoFPS = 20
 
 // frameInterval and jpegQuality are the still-picture fallback used when there is no encoder.
 const frameInterval = 140 * time.Millisecond

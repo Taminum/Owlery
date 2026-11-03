@@ -137,6 +137,8 @@ func selectedMonitor() monRect {
 // GDI is the simple, broadly-compatible way to read the screen. It is not the fastest Windows offers (that would be
 // DXGI Desktop Duplication, a sizeable addition of its own), but it can follow onto the secure desktop, which Desktop
 // Duplication cannot — the deciding reason to use it here.
+var rawBuf []byte
+
 func captureRaw() (pix []byte, w, h int, err error) {
 	m := selectedMonitor()
 	x, y, w, h := m.X, m.Y, m.W, m.H
@@ -177,7 +179,12 @@ func captureRaw() (pix []byte, w, h int, err error) {
 	bi.BitCount = 32
 	bi.Compression = biRGB
 
-	raw := make([]byte, w*h*4)
+	// One session shows one screen at a time, so the buffer is reused: a frame of a big monitor is 15 MB, and a new one
+	// for every grab would make the garbage collector the slowest part of the pipeline.
+	if cap(rawBuf) < w*h*4 {
+		rawBuf = make([]byte, w*h*4)
+	}
+	raw := rawBuf[:w*h*4]
 	r, _, _ := procGetDIBits.Call(memDC, bmp, 0, uintptr(h), uintptr(unsafe.Pointer(&raw[0])), uintptr(unsafe.Pointer(&bi)), dibRGBColors)
 	if r == 0 {
 		return nil, 0, 0, fmt.Errorf("remotehelper: GetDIBits failed")
