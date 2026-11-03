@@ -33,11 +33,14 @@ const server = (over: object) => ({
   id: 's1', name: 'exit-nl', roles: ['exit'], status: 'ok', reason: '', host: host(10), nodes: [], alerts_open: 0, alerts_critical: 0, ...over,
 })
 
+const hours = (bans: number[]) => bans.map((b, i) => ({ at: new Date(Date.UTC(2026, 10, 3, i)).toISOString(), bans: b, changes: 0, alerts: 0, access: 0 }))
 const summary = (over: object = {}) => ({
-  from: '', to: '', bans: { total: 0, servers: [] }, changes: { total: 0, items: [] }, tls: { problems: 0, nearest_end: null, nearest_host: '' }, owlery: { logins: 3, failed_logins: 1, terminals: 1, screens: 0, desktops: 0 }, ...over,
+  from: '2026-11-03T00:00:00Z', to: '2026-11-04T00:00:00Z', hourly: hours([0, 0, 0]), top_ips: [], jails: [], recent: [],
+  bans: { total: 0, servers: [] }, changes: { total: 0, items: [] }, tls: { problems: 0, nearest_end: null, nearest_host: '' },
+  owlery: { logins: 3, failed_logins: 1, terminals: 1, screens: 0, desktops: 0 }, ...over,
 })
 
-function backend(servers: object[], alerts: object[] = [], sum: object = summary()) {
+function backend(servers: object[], sum: object = summary(), alerts: object[] = []) {
   mockApi({
     me: owner,
     handler: (r: Req) => {
@@ -49,7 +52,7 @@ function backend(servers: object[], alerts: object[] = [], sum: object = summary
 }
 
 describe('Home', () => {
-  it('counts the machines and puts the troubled ones, worst first, in "needs attention"', async () => {
+  it('says how the farm is, and lists the machines with the ones that need attention first', async () => {
     backend([
       server({ id: 'a', name: 'calm-box' }),
       server({ id: 'b', name: 'warn-box', status: 'warn', reason: 'alerts', alerts_open: 2 }),
@@ -57,54 +60,49 @@ describe('Home', () => {
       server({ id: 'd', name: 'bare-box', status: 'unknown', reason: 'no_agent', host: null }),
     ])
     renderHome()
-    const card = (await screen.findByText('Требует внимания')).closest('section') as HTMLElement
-    const names = within(card).getAllByRole('link').map((l) => l.textContent ?? '')
-    expect(names[0]).toMatch(/dead-box/)
-    expect(names[1]).toMatch(/warn-box/)
-    expect(within(card).queryByText(/calm-box|bare-box/)).toBeNull()
+    expect(await screen.findByText('Нужно внимание')).toBeInTheDocument() // one dead machine makes the whole state red
     expect(screen.getByText(/без связи: 1/)).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Нужно внимание' })).toBeInTheDocument() // one dead machine makes the whole banner red
+    const table = (await screen.findByRole('heading', { name: 'Машины, сначала те, кому нужно внимание' })).closest('section') as HTMLElement
+    const names = within(table).getAllByRole('link').map((l) => l.textContent ?? '').filter((x) => /-box$/.test(x))
+    expect(names).toEqual(['dead-box', 'warn-box', 'bare-box', 'calm-box'])
+    expect(screen.getByText('1 / 4')).toBeInTheDocument()
   })
 
-  it('says all is calm when nothing is wrong, and lists the open alerts', async () => {
-    backend([server({})], [{ id: 'x', panel_id: 'p', panel_name: 'P', kind: 'k', label: 'Диск почти полон', detail: 'C: 95%', opened_at: new Date().toISOString(), last_seen_at: new Date().toISOString(), resolved_at: null }])
+  it('turns the night into numbers and lists: bans, the busiest machine, who was banned, what was hit, what changed', async () => {
+    const soon = new Date(Date.now() + 21 * 86_400_000 + 3_600_000).toISOString()
+    backend([server({})], summary({
+      hourly: hours([20, 90, 10]),
+      bans: { total: 120, servers: [{ name: 'exit-2', count: 80 }, { name: 'exit-nl', count: 30 }] },
+      top_ips: [{ ip: '185.220.101.4', jail: 'sshd', count: 38, country: 'DE', country_name: 'Германия' }],
+      jails: [{ name: 'sshd', count: 100 }, { name: 'odd-jail', count: 20 }],
+      recent: [{ server: 'exit-nl', type: 'firewall.rules_changed', severity: 'warning', at: new Date().toISOString() }],
+      changes: { total: 1, items: [] },
+      tls: { problems: 0, nearest_end: soon, nearest_host: 'vm.example.com' },
+    }))
     renderHome()
-    expect(await screen.findByText(/Сейчас всё спокойно/)).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Ночью было спокойно' })).toBeInTheDocument()
-    expect(await screen.findByText('Диск почти полон')).toBeInTheDocument()
-    expect(screen.getByText('C: 95%')).toBeInTheDocument()
+    const bans = (await screen.findAllByText('Атаки за сутки'))[0].closest('a') as HTMLElement
+    expect(within(bans).getByText('120')).toBeInTheDocument()
+    expect(screen.getByText('185.220.101.4')).toBeInTheDocument()
+    expect(screen.getByText('Германия')).toBeInTheDocument()
+    expect(screen.getByText('SSH')).toBeInTheDocument() // a known jail is named for what it protects
+    expect(screen.getByText('odd-jail')).toBeInTheDocument() // an unknown one keeps its own name
+    expect(screen.getByText('остальные')).toBeInTheDocument() // bans not on the top machines are one line, not lost
+    expect(screen.getByText('правка брандмауэра')).toBeInTheDocument()
+    expect(screen.getByText('21 день')).toBeInTheDocument()
+    expect(screen.getByText('vm.example.com')).toBeInTheDocument()
+  })
+
+  it('says nothing happened when nothing did, and shows no access tile to someone who is not the owner', async () => {
+    backend([server({})], summary({ owlery: null }))
+    renderHome()
+    expect(await screen.findByText('Ночью было спокойно')).toBeInTheDocument()
+    expect(screen.getByText('За сутки ничего не происходило.')).toBeInTheDocument()
+    expect(screen.queryByText('Доступ к машинам')).toBeNull()
   })
 
   it('invites to add the first machine when there are none', async () => {
     backend([])
     renderHome()
     expect(await screen.findByRole('link', { name: 'Добавить первую' })).toHaveAttribute('href', '/servers')
-  })
-})
-
-describe('Home summary', () => {
-  it('turns the night into numbers: bans with the busiest machine, changes, sign-ins, nearest certificate', async () => {
-    const soon = new Date(Date.now() + 21 * 86_400_000 + 3_600_000).toISOString()
-    backend([server({})], [], summary({
-      bans: { total: 47, servers: [{ name: 'exit-2', count: 30 }, { name: 'exit-nl', count: 17 }] },
-      changes: { total: 1, items: [{ server: 'exit-nl', type: 'firewall.rules_changed', at: new Date().toISOString() }] },
-      tls: { problems: 0, nearest_end: soon, nearest_host: 'vm.example.com' },
-    }))
-    renderHome()
-    const bans = (await screen.findByText('Атаки за сутки')).closest('a') as HTMLElement
-    expect(within(bans).getByText('47')).toBeInTheDocument()
-    expect(within(bans).getByText(/больше всего на exit-2/)).toBeInTheDocument()
-    expect(screen.getByText(/exit-nl: правка брандмауэра/)).toBeInTheDocument()
-    expect(screen.getByText('21 день')).toBeInTheDocument()
-    expect(screen.getByText('vm.example.com')).toBeInTheDocument()
-    expect(screen.getByText(/неудачных: 1/)).toBeInTheDocument()
-  })
-
-  it('shows no sign-in tile to someone who is not the owner, and says when nothing happened', async () => {
-    backend([server({})], [], summary({ owlery: null }))
-    renderHome()
-    expect(await screen.findByText('Атаки за сутки')).toBeInTheDocument()
-    expect(screen.getByText(/новых блокировок за 24 ч нет/)).toBeInTheDocument()
-    expect(screen.queryByText('Входы в Owlery')).toBeNull()
   })
 })
