@@ -266,6 +266,18 @@ export function ScreenView({ serverId }: { serverId: string }) {
     <>
       <Card title={t('scr.title')} note={t('scr.note')}>
         {state === 'closed' && reason && <p className="mb-3 text-[13px] text-muted" role="status">{reason}</p>}
+        {state === 'closed' && winSessions.length > 0 && (
+          // The full-window view is gone once a connection fails, so the session can be changed here: a machine whose
+          // default session cannot be read is exactly when another one has to be picked.
+          <select aria-label={t('scr.session')} className={`${btn} mb-3 mr-2`} value={chosen} onChange={(e) => pickSession(Number(e.target.value))}>
+            <option value={0}>{t('scr.sessionAuto')}</option>
+            {winSessions.map((s) => (
+              <option key={s.id} value={s.id}>
+                {t('scr.sessionN', { u: s.user || '—', id: String(s.id), s: SESSION_STATES.includes(s.state) ? t(`mng.sess.${s.state}` as MsgKey) : s.state })}
+              </option>
+            ))}
+          </select>
+        )}
         <PrimaryButton onClick={start}>{state === 'closed' ? t('scr.reopen') : t('scr.open')}</PrimaryButton>
       </Card>
       {session > 0 && (

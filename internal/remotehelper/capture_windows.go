@@ -28,6 +28,8 @@ var (
 	procGetDIBits              = gdi32.NewProc("GetDIBits")
 	procDeleteDC               = gdi32.NewProc("DeleteDC")
 	procDeleteObject           = gdi32.NewProc("DeleteObject")
+	procCreateDIBSection       = gdi32.NewProc("CreateDIBSection")
+	procGdiFlush               = gdi32.NewProc("GdiFlush")
 )
 
 // Virtual-screen metrics (GetSystemMetrics indices): the rectangle covering every monitor, which may start at a
@@ -188,9 +190,31 @@ func captureRaw() (pix []byte, w, h int, err error) {
 	raw := rawBuf[:w*h*4]
 	r, _, _ := procGetDIBits.Call(screenDC, bmp, 0, uintptr(h), uintptr(unsafe.Pointer(&raw[0])), uintptr(unsafe.Pointer(&bi)), dibRGBColors)
 	if r == 0 {
-		return nil, 0, 0, fmt.Errorf("remotehelper: GetDIBits failed")
+		// Some display drivers (a remote desktop session's among them) refuse GetDIBits. A DIB section is memory the
+		// application owns, so it needs no such call: draw into it and read it directly.
+		if err := captureDIBSection(screenDC, memDC, x, y, w, h, raw, &bi); err != nil {
+			return nil, 0, 0, fmt.Errorf("remotehelper: GetDIBits failed (%dx%d at %d,%d), and so did the fallback: %w", w, h, x, y, err)
+		}
 	}
 	return raw, w, h, nil
+}
+
+// captureDIBSection copies the screen rectangle into raw through a DIB section instead of GetDIBits.
+func captureDIBSection(screenDC, memDC uintptr, x, y, w, h int, raw []byte, bi *bitmapInfoHeader) error {
+	var bits unsafe.Pointer
+	bmp, _, e := procCreateDIBSection.Call(screenDC, uintptr(unsafe.Pointer(bi)), dibRGBColors, uintptr(unsafe.Pointer(&bits)), 0, 0)
+	if bmp == 0 || bits == nil {
+		return fmt.Errorf("CreateDIBSection: %v", e)
+	}
+	defer procDeleteObject.Call(bmp)
+	old, _, _ := procSelectObject.Call(memDC, bmp)
+	defer procSelectObject.Call(memDC, old)
+	if ok, _, e := procBitBlt.Call(memDC, 0, 0, uintptr(w), uintptr(h), screenDC, uintptr(x), uintptr(y), uintptr(srcCopy|captureBlt)); ok == 0 {
+		return fmt.Errorf("BitBlt: %v", e)
+	}
+	procGdiFlush.Call()
+	copy(raw, unsafe.Slice((*byte)(bits), len(raw)))
+	return nil
 }
 
 // captureScreen is the JPEG fallback's view of the screen: captureRaw turned into an opaque image.
