@@ -360,10 +360,16 @@ export interface DigestResponse {
   dns: { total: number; volatile: number; failed_checks: number } | null
   open_alerts: number; has_traffic: boolean; has_security: boolean
 }
-export interface FleetSummary {
+export interface FleetSummary extends FleetSummaryExtra {
   from: string; to: string
   bans: { total: number; servers: { name: string; count: number }[] }
   changes: { total: number; items: { server: string; type: string; at: string }[] }
   tls: { problems: number; nearest_end: string | null; nearest_host: string }
   owlery: { logins: number; failed_logins: number; terminals: number; screens: number; desktops: number } | null
+}
+export interface FleetSummaryExtra {
+  hourly: { at: string; bans: number; changes: number; alerts: number; access: number }[]
+  top_ips: { ip: string; jail: string; count: number; country: string; country_name: string }[]
+  jails: { name: string; count: number }[]
+  recent: { server: string; type: string; severity: string; at: string }[]
 }

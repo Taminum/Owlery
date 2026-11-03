@@ -133,3 +133,175 @@ func (s *Store) OwleryActivity(ctx context.Context, from, to time.Time) (OwleryA
 		FROM audit_log WHERE ts >= $1 AND ts < $2`, from, to).Scan(&a.Logins, &a.Failed, &a.Terminals, &a.Screens, &a.Desktops)
 	return a, err
 }
+
+// SummaryHour is one hour of the window: bans, changes and alerts that opened in it.
+type SummaryHour struct {
+	At      time.Time `json:"at"`
+	Bans    int       `json:"bans"`
+	Changes int       `json:"changes"`
+	Alerts  int       `json:"alerts"`
+	Access  int       `json:"access"` // terminal, screen and desktop sessions; owners only
+}
+
+// SummaryIP is an address that was banned, with the jail that banned it most often.
+type SummaryIP struct {
+	IP    string `json:"ip"`
+	Jail  string `json:"jail"`
+	Count int    `json:"count"`
+}
+
+// SummaryJail is what was hit: a fail2ban jail with how many bans it made.
+type SummaryJail struct {
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+}
+
+// SummaryEvent is one line of the recent journal.
+type SummaryEvent struct {
+	Server   string    `json:"server"`
+	Type     string    `json:"type"`
+	Severity string    `json:"severity"`
+	At       time.Time `json:"at"`
+}
+
+// FleetDetails is the second half of the summary: the hour by hour picture and the top lists.
+type FleetDetails struct {
+	Hourly []SummaryHour  `json:"hourly"`
+	TopIPs []SummaryIP    `json:"top_ips"`
+	Jails  []SummaryJail  `json:"jails"`
+	Recent []SummaryEvent `json:"recent"`
+}
+
+const banCount = `CASE WHEN e.type = 'fail2ban.ban' THEN 1 WHEN e.type = 'fail2ban.bans_unobserved' THEN COALESCE((e.payload->>'count')::int, 0) ELSE 0 END`
+
+// FleetDetails fills the hour buckets (one per hour of the window, empty ones included) and the top lists. withAccess
+// adds the access sessions and the opened alerts, which belong to no machine and so only an owner sees.
+func (s *Store) FleetDetails(ctx context.Context, sc Scope, from, to time.Time, withAccess bool) (FleetDetails, error) {
+	d := FleetDetails{TopIPs: []SummaryIP{}, Jails: []SummaryJail{}, Recent: []SummaryEvent{}}
+	start := from.Truncate(time.Hour)
+	idx := map[time.Time]int{}
+	for h := start; h.Before(to); h = h.Add(time.Hour) {
+		idx[h] = len(d.Hourly)
+		d.Hourly = append(d.Hourly, SummaryHour{At: h})
+	}
+	put := func(h time.Time, f func(*SummaryHour)) {
+		if i, ok := idx[h.UTC().Truncate(time.Hour)]; ok {
+			f(&d.Hourly[i])
+		}
+	}
+	pred, args := vpsVisible(sc, 0)
+	n := len(args)
+	args = append(args, from, to)
+	win := ` AND e.observed_at >= $` + strconv.Itoa(n+1) + ` AND e.observed_at < $` + strconv.Itoa(n+2)
+	from2 := ` FROM security_events e JOIN security_vps v ON v.id = e.vps_id WHERE ` + pred + win
+
+	rows, err := s.pool.Query(ctx, `SELECT date_trunc('hour', e.observed_at AT TIME ZONE 'UTC'), sum(`+banCount+`)::int, (count(*) FILTER (WHERE e.type = ANY($`+strconv.Itoa(n+3)+`::text[])))::int`+from2+` GROUP BY 1`, append(append([]any{}, args...), changeTypes)...)
+	if err != nil {
+		return d, err
+	}
+	for rows.Next() {
+		var h time.Time
+		var bans, changes int
+		if err := rows.Scan(&h, &bans, &changes); err != nil {
+			rows.Close()
+			return d, err
+		}
+		put(h, func(x *SummaryHour) { x.Bans, x.Changes = bans, changes })
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return d, err
+	}
+
+	ips, err := s.pool.Query(ctx, `SELECT e.payload->>'ip', COALESCE(mode() WITHIN GROUP (ORDER BY e.payload->>'jail'), ''), count(*)::int`+from2+`
+		AND e.type = 'fail2ban.ban' AND e.payload->>'ip' IS NOT NULL GROUP BY 1 ORDER BY count(*) DESC, 1 LIMIT 5`, args...)
+	if err != nil {
+		return d, err
+	}
+	for ips.Next() {
+		var x SummaryIP
+		if err := ips.Scan(&x.IP, &x.Jail, &x.Count); err != nil {
+			ips.Close()
+			return d, err
+		}
+		d.TopIPs = append(d.TopIPs, x)
+	}
+	ips.Close()
+	if err := ips.Err(); err != nil {
+		return d, err
+	}
+
+	jr, err := s.pool.Query(ctx, `SELECT COALESCE(e.payload->>'jail', ''), sum(`+banCount+`)::int`+from2+`
+		AND e.type IN ('fail2ban.ban', 'fail2ban.bans_unobserved') GROUP BY 1 HAVING sum(`+banCount+`) > 0 ORDER BY 2 DESC, 1 LIMIT 6`, args...)
+	if err != nil {
+		return d, err
+	}
+	for jr.Next() {
+		var x SummaryJail
+		if err := jr.Scan(&x.Name, &x.Count); err != nil {
+			jr.Close()
+			return d, err
+		}
+		d.Jails = append(d.Jails, x)
+	}
+	jr.Close()
+	if err := jr.Err(); err != nil {
+		return d, err
+	}
+
+	ev, err := s.pool.Query(ctx, `SELECT v.name, e.type, e.severity, e.observed_at`+from2+`
+		AND e.type NOT IN ('fail2ban.ban', 'fail2ban.unban', 'fail2ban.bans_unobserved') ORDER BY e.observed_at DESC LIMIT 8`, args...)
+	if err != nil {
+		return d, err
+	}
+	for ev.Next() {
+		var x SummaryEvent
+		if err := ev.Scan(&x.Server, &x.Type, &x.Severity, &x.At); err != nil {
+			ev.Close()
+			return d, err
+		}
+		d.Recent = append(d.Recent, x)
+	}
+	ev.Close()
+	if err := ev.Err(); err != nil {
+		return d, err
+	}
+
+	if withAccess {
+		ar, err := s.pool.Query(ctx, `SELECT date_trunc('hour', ts AT TIME ZONE 'UTC'), count(*)::int FROM audit_log WHERE ts >= $1 AND ts < $2 AND action IN ('terminal.open', 'screen.open', 'desktop.open') GROUP BY 1`, from, to)
+		if err != nil {
+			return d, err
+		}
+		for ar.Next() {
+			var h time.Time
+			var c int
+			if err := ar.Scan(&h, &c); err != nil {
+				ar.Close()
+				return d, err
+			}
+			put(h, func(x *SummaryHour) { x.Access = c })
+		}
+		ar.Close()
+		if err := ar.Err(); err != nil {
+			return d, err
+		}
+		al, err := s.pool.Query(ctx, `SELECT date_trunc('hour', opened_at AT TIME ZONE 'UTC'), count(*)::int FROM alerts WHERE opened_at >= $1 AND opened_at < $2 GROUP BY 1`, from, to)
+		if err != nil {
+			return d, err
+		}
+		for al.Next() {
+			var h time.Time
+			var c int
+			if err := al.Scan(&h, &c); err != nil {
+				al.Close()
+				return d, err
+			}
+			put(h, func(x *SummaryHour) { x.Alerts = c })
+		}
+		al.Close()
+		if err := al.Err(); err != nil {
+			return d, err
+		}
+	}
+	return d, nil
+}
