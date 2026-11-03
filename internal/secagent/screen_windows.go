@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -31,6 +32,13 @@ func (a *agent) openScreen(req secproto.RemoteOpen) {
 	sid, why := pickSession(req.Session)
 	port := secproto.RemoteHelperPortFor(sid)
 	a.cfg.Log.Info("screen: session chosen", "session", sid, "why", why)
+	// A remote-desktop session whose client has gone has no display, and the screen of such a session cannot be read at
+	// all. Attaching it to the console gives it one; its programs keep running and the person reconnects to it as usual.
+	if sessionDisconnected(sid) {
+		out, err := exec.Command(os.ExpandEnv(`${SystemRoot}\System32	scon.exe`), strconv.Itoa(int(sid)), "/dest:console").CombinedOutput()
+		a.cfg.Log.Info("screen: attaching a disconnected session to the console", "session", sid, "err", err, "out", strings.TrimSpace(string(out)))
+		time.Sleep(2 * time.Second)
+	}
 	// The helper stays alive after a session, so a second launch would only fail to take the port: start one only when
 	// none is listening for this session.
 	if portOpen(port) {
@@ -76,6 +84,22 @@ func waitForPort(ctx interface{ Done() <-chan struct{} }, port int, timeout time
 		}
 		time.Sleep(150 * time.Millisecond)
 	}
+}
+
+// sessionDisconnected says whether the session exists and has lost its client (state 4, WTSDisconnected).
+func sessionDisconnected(id uint32) bool {
+	var info *windows.WTS_SESSION_INFO
+	var count uint32
+	if windows.WTSEnumerateSessions(0, 0, 1, &info, &count) != nil || info == nil {
+		return false
+	}
+	defer windows.WTSFreeMemory(uintptr(unsafe.Pointer(info)))
+	for _, s := range unsafe.Slice(info, count) {
+		if s.SessionID == id {
+			return s.State == 4
+		}
+	}
+	return false
 }
 
 // pickSession chooses the Windows session whose screen is shown, and says why. The administrator may be signed in at the
