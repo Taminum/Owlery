@@ -16,7 +16,7 @@ func TestFleetSummaryCountsTheWindowAndHidesSignInsFromPeople(t *testing.T) {
 	addEvent(t, w, b, "fail2ban", "fail2ban.bans_unobserved", "info", `{"jail":"sshd","count":5}`, now.Add(-4*time.Hour))
 	addEvent(t, w, a, "fail2ban", "fail2ban.ban", "info", `{"jail":"sshd","ip":"198.51.100.9"}`, now.Add(-72*time.Hour)) // before the window
 	addEvent(t, w, a, "firewall", "firewall.rules_changed", "warning", `{}`, now.Add(-time.Hour))
-	if _, err := w.h.st.Pool().Exec(ctx, `INSERT INTO audit_log (action, object_type) VALUES ('auth.login', 'account'), ('auth.login_failed', 'account'), ('terminal.open', 'server')`); err != nil {
+	if _, err := w.h.st.Pool().Exec(ctx, `INSERT INTO audit_log (action, object_type, ts) VALUES ('auth.login', 'account', now() - interval '1 hour'), ('auth.login_failed', 'account', now() - interval '1 hour'), ('terminal.open', 'server', now() - interval '1 hour')`); err != nil {
 		t.Fatal(err)
 	}
 
