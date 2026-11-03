@@ -59,12 +59,14 @@ describe('Home', () => {
     expect(within(card).queryByText(/calm-box|bare-box/)).toBeNull()
     expect(screen.getByText('Машин всего').nextElementSibling).toHaveTextContent('4')
     expect(screen.getByText('без связи: 1')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Нужно внимание' })).toBeInTheDocument() // one dead machine makes the whole banner red
   })
 
   it('says all is calm when nothing is wrong, and lists the open alerts', async () => {
     backend([server({})], [{ id: 'x', panel_id: 'p', panel_name: 'P', kind: 'k', label: 'Диск почти полон', detail: 'C: 95%', opened_at: new Date().toISOString(), last_seen_at: new Date().toISOString(), resolved_at: null }])
     renderHome()
     expect(await screen.findByText(/Сейчас всё спокойно/)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Всё спокойно' })).toBeInTheDocument()
     expect(await screen.findByText('Диск почти полон')).toBeInTheDocument()
     expect(screen.getByText('C: 95%')).toBeInTheDocument()
   })
