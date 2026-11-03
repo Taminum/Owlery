@@ -250,7 +250,7 @@ func (s *Store) FleetDetails(ctx context.Context, sc Scope, from, to time.Time, 
 	}
 
 	ev, err := s.pool.Query(ctx, `SELECT v.name, e.type, e.severity, e.observed_at`+from2+`
-		AND e.type NOT IN ('fail2ban.ban', 'fail2ban.unban', 'fail2ban.bans_unobserved') ORDER BY e.observed_at DESC LIMIT 8`, args...)
+		AND e.type NOT IN ('fail2ban.ban', 'fail2ban.unban', 'fail2ban.bans_unobserved', 'port.local_added', 'port.local_removed', 'port.local_bind_changed') ORDER BY e.observed_at DESC LIMIT 8`, args...)
 	if err != nil {
 		return d, err
 	}

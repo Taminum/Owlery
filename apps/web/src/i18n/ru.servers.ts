@@ -296,6 +296,8 @@ export const serversText = {
   'home.ev.port.public_reachable': 'порт открылся снаружи',
   'home.ev.port.public_lost': 'порт перестал отвечать',
   'home.ev.port.local_bind_changed': 'служба сменила адрес прослушивания',
+  'home.ev.port.local_added': 'служба начала слушать порт',
+  'home.ev.port.local_removed': 'служба перестала слушать порт',
   'home.ev.tls.expired': 'сертификат истёк',
   'home.ev.tls.validation_error': 'сертификат не проходит проверку',
   'home.ev.tls.validation_recovered': 'сертификат снова в порядке',
