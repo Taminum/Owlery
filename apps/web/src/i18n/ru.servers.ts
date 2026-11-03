@@ -159,6 +159,7 @@ export const serversText = {
   'scr.drives': 'Диски',
   'scr.downloads': 'Загрузки',
   'scr.download': 'Скачать',
+  'scr.downloadZip': 'Скачать (zip)',
   'scr.uploadHere': 'Загрузить сюда',
   'scr.fsEmpty': 'Папка пуста',
   'scr.exists': 'Файл {n} уже есть на машине. Заменить?',

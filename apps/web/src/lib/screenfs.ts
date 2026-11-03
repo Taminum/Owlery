@@ -98,11 +98,12 @@ export class FsClient {
     })
   }
 
-  download(path: string, progress?: (p: number) => void): Promise<Blob> {
+  /** Fetches a file, or with zip a folder packed into one archive. */
+  download(path: string, progress?: (p: number) => void, zip = false): Promise<Blob> {
     const id = this.next++
     return new Promise((resolve, reject) => {
       this.pending.set(id, { kind: 'get', resolve, reject, chunks: [], size: 0, got: 0, progress })
-      this.json(MSG_FS_GET, { id, path })
+      this.json(MSG_FS_GET, { id, path, zip })
     })
   }
 

@@ -44,6 +44,7 @@ type fsRequest struct {
 	Path      string `json:"path"`
 	Size      int64  `json:"size"`
 	Overwrite bool   `json:"overwrite"`
+	Zip       bool   `json:"zip"` // a folder is asked for: send it as one zip
 }
 
 type fsEntry struct {
@@ -231,6 +232,11 @@ func (s *fsSession) get(r fsRequest) {
 	}
 	defer f.Close()
 	st, err := f.Stat()
+	if err == nil && st.IsDir() && r.Zip {
+		f.Close()
+		s.zipFolder(r, p)
+		return
+	}
 	if err != nil || st.IsDir() {
 		s.reply(msgFsResult, fail(r.ID, errors.New("это папка")))
 		return

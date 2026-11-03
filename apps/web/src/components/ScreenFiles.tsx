@@ -64,7 +64,7 @@ export function ScreenFiles({ fs, onClose }: { fs: FsClient; onClose: () => void
     const full = joinPath(path, e.n)
     setBusy(t('scr.progress', { n: e.n, p: '0' }))
     try {
-      saveBlob(await fs.download(full, (p) => setBusy(t('scr.progress', { n: e.n, p: String(p) }))), e.n)
+      saveBlob(await fs.download(full, (p) => setBusy(t('scr.progress', { n: e.n, p: String(p) })), !!e.d), e.d ? `${e.n}.zip` : e.n)
       setBusy('')
     } catch (err) {
       setBusy('')
@@ -106,7 +106,7 @@ export function ScreenFiles({ fs, onClose }: { fs: FsClient; onClose: () => void
               ? <button type="button" className="min-w-0 flex-1 truncate text-left text-fg" onClick={() => void open(joinPath(path, e.n))}>{e.n}</button>
               : <span className="min-w-0 flex-1 truncate">{e.n}</span>}
             {!e.d && <span className="tnum shrink-0 text-xs text-muted">{formatBytes(e.s ?? 0)}</span>}
-            {!e.d && <button type="button" className={btn} onClick={() => void download(e)}><Download size={13} aria-hidden /> {t('scr.download')}</button>}
+            {!(e.d && !path) && <button type="button" className={btn} onClick={() => void download(e)}><Download size={13} aria-hidden /> {e.d ? t('scr.downloadZip') : t('scr.download')}</button>}
           </li>
         ))}
       </ul>
