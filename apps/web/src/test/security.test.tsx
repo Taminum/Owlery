@@ -209,6 +209,8 @@ describe('Security page', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Windows' }))
     expect(screen.getByText(/secagent\.exe" install -server/)).toBeInTheDocument()
     expect(screen.queryByText(/Set-Content/)).toBeNull()
+    // The helpers started from the same exe are stopped before it is replaced, or the download fails on a locked file.
+    expect(screen.getByText(/Get-Process secagent .* Stop-Process -Force/)).toBeInTheDocument()
   })
 
   describe('ban and unban', () => {
