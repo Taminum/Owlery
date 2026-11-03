@@ -288,6 +288,9 @@ func stillPictures(ctx context.Context, stop context.CancelFunc, c net.Conn) {
 		img, err := captureScreen()
 		if err != nil {
 			foll.forget() // the desktop the thread was bound to may be gone (a session that was reconnected)
+			if failures == 4 && attachToConsole(&foll) {
+				failures = 0 // give the console's display a fresh set of attempts
+			}
 			if tooManyFailures(c, &failures, err) {
 				return
 			}
@@ -344,6 +347,9 @@ func streamVideo(ctx context.Context, c net.Conn, ffmpeg string) error {
 		raw, w, h, err := captureRaw()
 		if err != nil || w == 0 || h == 0 {
 			foll.forget()
+			if failures == 4 && attachToConsole(&foll) {
+				failures = 0 // give the console's display a fresh set of attempts
+			}
 			if tooManyFailures(c, &failures, err) {
 				return nil
 			}
@@ -416,6 +422,10 @@ func tooManyFailures(c net.Conn, failures *int, err error) bool {
 		return false
 	}
 	reason := "экран этого сеанса не читается"
+	if note := disconnectedNote(); note != "" {
+		_ = writeError(c, "Экран не показан: "+note+".")
+		return true
+	}
 	if err != nil {
 		reason += " (" + err.Error() + ")"
 	}
