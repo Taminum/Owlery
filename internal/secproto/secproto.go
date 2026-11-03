@@ -382,10 +382,16 @@ const RemotePath = Path + "/remote"
 // speak to it: the first bytes of a connection must be the shared secret written when the helper was installed.
 const RemoteHelperPort = 47821
 
+// RemoteHelperPortFor is the port of the helper that serves one Windows session. Each session has its own helper: a
+// helper started for the console cannot show the desktop of an administrator who is signed in over remote desktop.
+func RemoteHelperPortFor(session uint32) int { return RemoteHelperPort + int(session%1000) }
+
 // RemoteOpen asks the agent to relay a session to its remote-control helper.
 type RemoteOpen struct {
 	Type string `json:"type"` // "remote_open"
 	ID   string `json:"id"`
+	// Session is the Windows session to show; 0 (never a real one: that is where services run) lets the agent choose.
+	Session uint32 `json:"session,omitempty"`
 }
 
 // CapWeb is announced by an agent whose machine lets Owlery reach web services bound to 127.0.0.1 on it (an admin

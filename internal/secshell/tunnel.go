@@ -27,12 +27,12 @@ func Tunnel(ctx context.Context, dial func(ctx context.Context, path, id string)
 // the signed-in person's own screen and takes mouse and keyboard, for machines the agent's own session (a system
 // service, invisible to any desktop) cannot reach directly. secretFile holds the token the helper requires as the
 // first bytes of a connection, written when the helper was installed, so no other local process can drive it.
-func RemoteTunnel(ctx context.Context, dial func(ctx context.Context, path, id string) (*websocket.Conn, error), secretFile string, req secproto.RemoteOpen) error {
+func RemoteTunnel(ctx context.Context, dial func(ctx context.Context, path, id string) (*websocket.Conn, error), secretFile string, port int, req secproto.RemoteOpen) error {
 	secret, err := os.ReadFile(secretFile)
 	if err != nil {
 		return fmt.Errorf("remote control is not set up on this machine: %w", err)
 	}
-	return dialAndRelay(ctx, dial, secproto.RemotePath, req.ID, secproto.RemoteHelperPort, secret)
+	return dialAndRelay(ctx, dial, secproto.RemotePath, req.ID, port, secret)
 }
 
 // dialAndRelay dials 127.0.0.1:port and the matching session back to Owlery, sends `lead` first on the local

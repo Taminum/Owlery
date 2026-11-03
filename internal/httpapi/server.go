@@ -221,6 +221,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/services/{slug}/enter", s.session(s.serviceEnter))
 	mux.HandleFunc("GET /internal/tls-ask", s.tlsAsk)
 	mux.Handle("GET /api/v1/servers/{id}/screen", s.session(s.screen))
+	mux.Handle("GET /api/v1/servers/{id}/screen/sessions", s.session(s.screenSessions))
 	mux.Handle("POST /api/v1/servers/{id}/manage", s.session(s.manage))
 	mux.Handle("POST /api/v1/servers/{id}/desktop", s.session(s.desktopTicket))
 	mux.Handle("GET /api/v1/servers/{id}/desktop", s.session(s.desktop))

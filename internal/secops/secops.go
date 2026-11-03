@@ -188,8 +188,9 @@ func (h *Hub) OpenTunnel(ctx context.Context, agentID string, port int) (c *webs
 }
 
 // OpenRemote asks an agent for a session with its remote-control helper and waits for its connection back.
-func (h *Hub) OpenRemote(ctx context.Context, agentID string) (c *websocket.Conn, release func(), err error) {
-	return h.openBack(ctx, agentID, func(id string) any { return secproto.RemoteOpen{Type: "remote_open", ID: id} })
+// session is the Windows session to show, or 0 to let the agent choose.
+func (h *Hub) OpenRemote(ctx context.Context, agentID string, session uint32) (c *websocket.Conn, release func(), err error) {
+	return h.openBack(ctx, agentID, func(id string) any { return secproto.RemoteOpen{Type: "remote_open", ID: id, Session: session} })
 }
 
 // OpenProxy asks an agent for a connection to one local web service port and waits for its connection back.

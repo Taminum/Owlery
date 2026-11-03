@@ -20,6 +20,7 @@ import (
 	"syscall"
 
 	"github.com/Taminum/Owlery/internal/remotehelper"
+	"github.com/Taminum/Owlery/internal/secproto"
 )
 
 // The screen-sharing helper is not a program of its own: it is this same secagent binary, run with the "screen-helper"
@@ -38,6 +39,7 @@ func screenDir() string {
 func runScreenHelper(args []string) {
 	fs := flag.NewFlagSet("screen-helper", flag.ExitOnError)
 	secret := fs.String("secret-file", filepath.Join(screenDir(), "remote.secret"), "the shared secret the agent authenticates with")
+	port := fs.Int("port", secproto.RemoteHelperPort, "the loopback port to serve on (one per Windows session)")
 	_ = fs.Parse(args)
 	out := io.Writer(os.Stderr)
 	if f, err := os.OpenFile(filepath.Join(screenDir(), "remote.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err == nil {
@@ -47,7 +49,7 @@ func runScreenHelper(args []string) {
 	log := slog.New(slog.NewTextHandler(out, nil))
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := remotehelper.Run(ctx, *secret, log); err != nil {
+	if err := remotehelper.Run(ctx, *secret, *port, log); err != nil {
 		log.Error("screen helper stopped", "err", err)
 		os.Exit(1)
 	}

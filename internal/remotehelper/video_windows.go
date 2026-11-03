@@ -37,13 +37,15 @@ func fileExists(p string) bool {
 // process captures them, so ffmpeg itself needs no access to the screen or the desktop), low-latency H.264 goes out on
 // its standard output. The picture is capped at 1920 wide and made even-sided as the encoder requires; a one-second
 // group of pictures with headers repeated on every key picture lets a browser that joins or recovers start quickly, and
-// an access-unit delimiter before each picture lets the stream be cut back into pictures.
+// an access-unit delimiter before each picture lets the stream be cut back into pictures. The encoder is left on its
+// zerolatency threading (slices): switching that off, as this once did, made it hold about two seconds of frames and
+// the picture lagged by that much.
 func startEncoder(ctx context.Context, ffmpeg string, w, h, fps, crf int) (*exec.Cmd, io.WriteCloser, io.ReadCloser, error) {
 	cmd := exec.CommandContext(ctx, ffmpeg, "-hide_banner", "-loglevel", "error",
 		"-f", "rawvideo", "-pixel_format", "bgra", "-video_size", fmt.Sprintf("%dx%d", w, h), "-framerate", strconv.Itoa(fps), "-i", "pipe:0",
 		"-vf", "scale='trunc(min(1920,iw)/2)*2':-2:flags=fast_bilinear",
 		"-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency", "-profile:v", "baseline", "-pix_fmt", "yuv420p",
-		"-crf", strconv.Itoa(crf), "-maxrate", "10M", "-bufsize", "2M", "-g", strconv.Itoa(fps), "-x264-params", "aud=1:repeat-headers=1:bframes=0:sliced-threads=0",
+		"-crf", strconv.Itoa(crf), "-maxrate", "10M", "-bufsize", "2M", "-g", strconv.Itoa(fps), "-x264-params", "aud=1:repeat-headers=1:bframes=0",
 		"-flush_packets", "1", "-f", "h264", "pipe:1")
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: 0x08000000} // CREATE_NO_WINDOW
 	stdin, err := cmd.StdinPipe()
