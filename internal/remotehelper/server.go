@@ -417,6 +417,7 @@ func tooManyFailures(c net.Conn, failures *int, err error) bool {
 	if err != nil {
 		reason += " (" + err.Error() + ")"
 	}
+	slog.Warn("the screen cannot be read", "err", err)
 	_ = writeError(c, reason+". Войдите на машине или выберите другой сеанс.")
 	return true
 }

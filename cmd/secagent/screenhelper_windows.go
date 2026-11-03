@@ -47,6 +47,7 @@ func runScreenHelper(args []string) {
 		out = f
 	}
 	log := slog.New(slog.NewTextHandler(out, nil))
+	slog.SetDefault(log) // the helper's package-level warnings go to the same file
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if err := remotehelper.Run(ctx, *secret, *port, log); err != nil {
