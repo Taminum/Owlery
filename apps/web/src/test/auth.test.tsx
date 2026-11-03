@@ -10,7 +10,7 @@ describe('signing in', () => {
     renderApp('/')
     expect(await screen.findByRole('heading', { name: 'Вход в Owlery' })).toBeInTheDocument()
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
-    expect(screen.queryByText('Обзор')).not.toBeInTheDocument()
+    expect(screen.queryByText('Главная')).not.toBeInTheDocument()
     const paths = api.calls.map((c) => c.path)
     expect(paths).toEqual(['/api/v1/auth/me'])
   })
@@ -59,7 +59,7 @@ describe('signing in', () => {
     await userEvent.type(await screen.findByLabelText('Логин'), 'owner')
     await userEvent.type(screen.getByLabelText('Пароль'), 'a-good-password-1')
     await userEvent.click(screen.getByRole('button', { name: 'Войти' }))
-    expect(await screen.findByRole('link', { name: 'Обзор' })).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: 'Главная' })).toBeInTheDocument()
     expect(api.find('POST', '/api/v1/auth/login')[0].body).toEqual({ username: 'owner', password: 'a-good-password-1' })
 
     await userEvent.click(await screen.findByRole('button', { name: 'Аккаунт' }))
@@ -73,7 +73,7 @@ describe('an established session', () => {
   it('shows the app and the account menu, and signs out', async () => {
     const api = mockApi({ me: owner })
     renderApp('/')
-    expect(await screen.findByRole('link', { name: 'Обзор' })).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: 'Главная' })).toBeInTheDocument()
     await userEvent.click(await screen.findByRole('button', { name: 'Аккаунт' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Выйти' }))
     await waitFor(() => expect(api.find('POST', '/api/v1/auth/logout')).toHaveLength(1))
@@ -88,7 +88,7 @@ describe('an established session', () => {
       handler: (r) => (dead && r.path !== '/api/v1/auth/me' ? { status: 401, body: { code: 'session_expired', message: 'x', request_id: 'r' } } : undefined),
     })
     renderApp('/')
-    await screen.findByRole('link', { name: 'Обзор' })
+    await screen.findByRole('link', { name: 'Главная' })
     const refresh = await screen.findByRole('button', { name: 'Обновить' })
     dead = true
     await userEvent.click(refresh)

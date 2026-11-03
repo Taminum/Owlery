@@ -14,7 +14,8 @@ interface Section { key: MsgKey; items: Item[] }
 // Addresses never change, so old links and bookmarks keep working.
 const SECTIONS: Section[] = [
   { key: 'nav.section.summary', items: [
-    { to: '/', key: 'nav.overview', icon: LayoutDashboard },
+    { to: '/', key: 'nav.home', icon: LayoutDashboard },
+    { to: '/vpn', key: 'nav.vpn', icon: BarChart3, module: 'remnawave' },
     { to: '/digest', key: 'nav.digest', icon: History, module: 'remnawave' },
     { to: '/live', key: 'nav.live', icon: Radio, module: 'remnawave' },
   ] },

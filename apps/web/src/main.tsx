@@ -24,6 +24,7 @@ import Traffic from './pages/Traffic'
 import Nodes from './pages/Nodes'
 import Users from './pages/Users'
 import Overview from './pages/Overview'
+import Home from './pages/Home'
 import Panels from './pages/Panels'
 import Placeholder from './pages/Placeholder'
 import Settings from './pages/Settings'
@@ -34,7 +35,8 @@ createRoot(document.getElementById('root')!).render(
       <AuthProvider>
         <Routes>
           <Route element={<Layout />}>
-            <Route index element={<Overview />} />
+            <Route index element={<Home />} />
+            <Route path="vpn" element={<Overview />} />
             <Route path="traffic" element={<Traffic />} />
             <Route path="live" element={<Live />} />
             <Route path="channels" element={<Channels />} />
