@@ -287,6 +287,7 @@ func stillPictures(ctx context.Context, stop context.CancelFunc, c net.Conn) {
 		foll.bindCapture()
 		img, err := captureScreen()
 		if err != nil {
+			foll.forget() // the desktop the thread was bound to may be gone (a session that was reconnected)
 			if tooManyFailures(c, &failures, err) {
 				return
 			}
@@ -342,6 +343,7 @@ func streamVideo(ctx context.Context, c net.Conn, ffmpeg string) error {
 		foll.bindCapture()
 		raw, w, h, err := captureRaw()
 		if err != nil || w == 0 || h == 0 {
+			foll.forget()
 			if tooManyFailures(c, &failures, err) {
 				return nil
 			}
