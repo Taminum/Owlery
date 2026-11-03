@@ -63,6 +63,16 @@ function daysLeft(iso: string): number {
   return Math.floor((new Date(iso).getTime() - Date.now()) / 86_400_000)
 }
 
+/** The same change on the same machine, repeated, reads as one line with a count. */
+function changeLines(items: FleetSummary['changes']['items']): string {
+  const seen = new Map<string, number>()
+  for (const c of items) {
+    const k = `${c.server}: ${t(`home.change.${c.type}` as never)}`
+    seen.set(k, (seen.get(k) ?? 0) + 1)
+  }
+  return [...seen].slice(0, 2).map(([k, n]) => (n > 1 ? `${k} ×${n}` : k)).join('; ')
+}
+
 function Summary({ sum, hours }: { sum: FleetSummary; hours: number }) {
   const top = sum.bans.servers[0]
   const nearest = sum.tls.nearest_end ? daysLeft(sum.tls.nearest_end) : null
@@ -72,7 +82,7 @@ function Summary({ sum, hours }: { sum: FleetSummary; hours: number }) {
       <Tile icon={ShieldAlert} label={t('home.sum.bans')} value={formatInt(sum.bans.total)} to="/security"
         sub={sum.bans.total === 0 ? t('home.sum.bansNone', { h: hours }) : t('home.sum.bansSub', { n: sum.bans.servers.length, name: top?.name ?? '' })} />
       <Tile icon={DoorOpen} label={t('home.sum.changes')} value={formatInt(sum.changes.total)} tone={sum.changes.total > 0 ? 'amber' : undefined} to="/security"
-        sub={sum.changes.total === 0 ? t('home.sum.changesNone') : sum.changes.items.slice(0, 2).map((c) => `${c.server}: ${t(`home.change.${c.type}` as never)}`).join('; ')} />
+        sub={sum.changes.total === 0 ? t('home.sum.changesNone') : changeLines(sum.changes.items)} />
       {o && (
         <Tile icon={KeyRound} label={t('home.sum.owlery')} value={formatInt(o.logins)} tone={o.failed_logins > 0 ? 'amber' : undefined} to="/settings"
           sub={`${o.failed_logins > 0 ? `${t('home.sum.failedLogins', { n: o.failed_logins })} · ` : ''}${t('home.sum.sessions', { n: o.terminals + o.screens + o.desktops })}`} />
