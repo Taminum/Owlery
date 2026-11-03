@@ -110,6 +110,8 @@ systemctl is-active remnascope-secagent`}</Code>
             <Code>{`$ErrorActionPreference = 'Stop'
 $d = "$env:ProgramData\\Owlery"
 if (Get-Service OwlerySecAgent -ErrorAction SilentlyContinue) { & "$d\\secagent.exe" uninstall | Out-Null }
+# The screen and file helpers are this same program, started in a person's session; they keep the file in use.
+Get-Process secagent -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$d\\*" } | Stop-Process -Force
 $a = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'amd64' }
 [Net.ServicePointManager]::SecurityProtocol = 'Tls12'
 Invoke-WebRequest "${RELEASES}/remnascope-secagent-windows-$a.exe" -OutFile "$d\\secagent.exe" -UseBasicParsing
@@ -127,6 +129,8 @@ Get-Service OwlerySecAgent`}</Code>
 $d = "$env:ProgramData\\Owlery"
 New-Item -ItemType Directory -Force $d | Out-Null
 if (Get-Service OwlerySecAgent -ErrorAction SilentlyContinue) { & "$d\\secagent.exe" uninstall | Out-Null }
+# The screen and file helpers are this same program, started in a person's session; they keep the file in use.
+Get-Process secagent -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$d\\*" } | Stop-Process -Force
 Set-Content -Path "$d\\secagent.token" -Value '${token}' -NoNewline -Encoding ascii
 icacls "$d\\secagent.token" /inheritance:r /grant:r "*S-1-5-18:R" "*S-1-5-32-544:F" | Out-Null
 $a = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'amd64' }
