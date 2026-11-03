@@ -4,6 +4,9 @@ package remotehelper
 
 import (
 	"encoding/binary"
+	"fmt"
+	"log/slog"
+	"sync"
 	"unicode/utf16"
 	"unsafe"
 
@@ -80,18 +83,30 @@ func scanCodeFor(vk uint16) uint16 {
 // applyMouse moves the pointer to the normalised position and applies the buttons and wheel that changed since the
 // last event. The caller (server.go) tracks the previous button state and passes only the buttons now held, so a
 // button already down is not pressed again.
+var (
+	procSetCursorPos = user32.NewProc("SetCursorPos")
+	mouseOnce        sync.Once
+)
+
 func applyMouse(ev mouseEvent, prevButtons uint8) {
 	// ev.X and ev.Y are positions within the monitor that is shown; Windows wants them within the whole virtual desktop.
 	m := selectedMonitor()
 	vx, vy, vw, vh := screenBounds()
 	px := m.X + int(ev.X)*(m.W-1)/65535
 	py := m.Y + int(ev.Y)*(m.H-1)/65535
-	ax, ay := 0, 0
-	if vw > 1 && vh > 1 {
-		ax = (px - vx) * 65535 / (vw - 1)
-		ay = (py - vy) * 65535 / (vh - 1)
+	// The position is set in pixels. Normalised absolute SendInput moves go through a conversion that remote-desktop
+	// sessions and mixed-scale monitors do not always agree with, and the pointer then drifts to an edge.
+	if r, _, _ := procSetCursorPos.Call(uintptr(px), uintptr(py)); r == 0 {
+		ax, ay := 0, 0
+		if vw > 1 && vh > 1 {
+			ax = (px - vx) * 65535 / (vw - 1)
+			ay = (py - vy) * 65535 / (vh - 1)
+		}
+		sendInput(mouseInputRaw(int32(ax), int32(ay), 0, mouseMoveAbs|mouseVirtualDesk))
 	}
-	sendInput(mouseInputRaw(int32(ax), int32(ay), 0, mouseMoveAbs|mouseVirtualDesk))
+	mouseOnce.Do(func() {
+		slog.Info("first mouse event", "px", px, "py", py, "monitor", fmt.Sprint(m), "virtual", fmt.Sprint(vx, vy, vw, vh))
+	})
 	changed := ev.Buttons ^ prevButtons
 	if changed&1 != 0 {
 		flag := uint32(mouseLeftUp)
