@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { t, type MsgKey } from '../i18n'
 import { request } from '../lib/api'
@@ -25,6 +25,42 @@ function ask<T>(serverId: string, op: string, args?: object, signal?: AbortSigna
 
 const th = 'px-2 py-1.5 text-left text-xs font-medium text-muted'
 const td = 'px-2 py-1.5 align-top'
+
+type Getter<T> = (r: T) => string | number
+
+/** Sorting by a column: click a heading to sort by it, click again to turn the order round. Numbers start largest first. */
+function useSort<T>(rows: T[], cols: Record<string, Getter<T>>) {
+  const [key, setKey] = useState('')
+  const [dir, setDir] = useState<1 | -1>(1)
+  const sorted = useMemo(() => {
+    const get = cols[key]
+    if (!get) return rows
+    return [...rows].sort((a, b) => {
+      const x = get(a)
+      const y = get(b)
+      const c = typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), 'ru', { numeric: true })
+      return c * dir
+    })
+  }, [rows, cols, key, dir])
+  const head = useCallback((label: ReactNode, k: string) => (
+    <button type="button" className="inline-flex items-center gap-1 hover:text-fg" aria-sort={key === k ? (dir === 1 ? 'ascending' : 'descending') : 'none'}
+      onClick={() => {
+        if (key === k) { setDir((d) => (d === 1 ? -1 : 1)); return }
+        setKey(k)
+        setDir(typeof cols[k](rows[0] as T) === 'number' ? -1 : 1)
+      }}>
+      {label}<span aria-hidden className="text-[10px]">{key === k ? (dir === 1 ? '▲' : '▼') : ''}</span>
+    </button>
+  ), [key, dir, cols, rows])
+  return [sorted, head] as const
+}
+
+const procCols: Record<string, Getter<Proc>> = { name: (p) => p.name, pid: (p) => p.pid, user: (p) => p.user ?? '', cpu: (p) => p.cpu, mem: (p) => p.rss, started: (p) => p.started ?? 0 }
+const serviceCols: Record<string, Getter<Service>> = { name: (s) => s.display || s.name, state: (s) => s.state, start: (s) => s.start }
+const startupCols: Record<string, Getter<Startup>> = { name: (s) => s.name, command: (s) => s.command ?? '', where: (s) => s.where }
+const sessionCols: Record<string, Getter<Session>> = { id: (s) => s.id, user: (s) => s.user ?? '', state: (s) => s.state, client: (s) => s.client ?? '' }
+const eventCols: Record<string, Getter<Event>> = { time: (e) => e.time, level: (e) => e.level, source: (e) => e.source }
+const connCols: Record<string, Getter<Conn>> = { proto: (c) => c.proto, local: (c) => c.local, remote: (c) => c.remote ?? '', state: (c) => c.state ?? '', process: (c) => c.name ?? '' }
 
 function Table({ head, children, empty }: { head: ReactNode[]; children: ReactNode[]; empty: string }) {
   if (children.length === 0) return <p className="py-3 text-[13px] text-muted">{empty}</p>
@@ -116,11 +152,12 @@ const has = (hay: (string | number | undefined)[], q: string) => !q || hay.some(
 function Procs({ serverId }: { serverId: string }) {
   const l = useList<Proc>(serverId, 'procs')
   const [f, setF] = useState('')
-  const rows = useMemo(() => l.rows.filter((p) => has([p.name, p.pid, p.user, p.path], f)), [l.rows, f])
+  const found = useMemo(() => l.rows.filter((p) => has([p.name, p.pid, p.user, p.path], f)), [l.rows, f])
+  const [rows, h] = useSort(found, procCols)
   return (
     <>
       <Bar filter={f} setFilter={setF} reload={l.reload} note={l.note} error={l.error} loadError={l.loadError} loading={l.loading} />
-      <Table head={[t('mng.name'), 'PID', t('mng.user'), t('mng.cpu'), t('mng.mem'), t('mng.started'), '']} empty={t('mng.empty')}>
+      <Table head={[h(t('mng.name'), 'name'), h('PID', 'pid'), h(t('mng.user'), 'user'), h(t('mng.cpu'), 'cpu'), h(t('mng.mem'), 'mem'), h(t('mng.started'), 'started'), '']} empty={t('mng.empty')}>
         {rows.map((p) => (
           <tr key={p.pid}>
             <td className={td} title={p.path}>{p.name}</td>
@@ -142,11 +179,12 @@ const STATE_TONE: Record<string, 'green' | 'muted' | 'amber'> = { running: 'gree
 function Services({ serverId }: { serverId: string }) {
   const l = useList<Service>(serverId, 'services')
   const [f, setF] = useState('')
-  const rows = useMemo(() => l.rows.filter((s) => has([s.name, s.display, s.state], f)), [l.rows, f])
+  const found = useMemo(() => l.rows.filter((s) => has([s.name, s.display, s.state], f)), [l.rows, f])
+  const [rows, h] = useSort(found, serviceCols)
   return (
     <>
       <Bar filter={f} setFilter={setF} reload={l.reload} note={l.note} error={l.error} loadError={l.loadError} loading={l.loading} />
-      <Table head={[t('mng.name'), t('mng.state'), t('mng.startType'), '']} empty={t('mng.empty')}>
+      <Table head={[h(t('mng.name'), 'name'), h(t('mng.state'), 'state'), h(t('mng.startType'), 'start'), '']} empty={t('mng.empty')}>
         {rows.map((s) => (
           <tr key={s.name}>
             <td className={td}>{s.display || s.name}<span className="block font-mono text-xs text-muted">{s.name}</span></td>
@@ -177,11 +215,12 @@ function StartupList({ serverId }: { serverId: string }) {
   const [f, setF] = useState('')
   const [name, setName] = useState('')
   const [command, setCommand] = useState('')
-  const rows = useMemo(() => l.rows.filter((s) => has([s.name, s.command, s.user], f)), [l.rows, f])
+  const found = useMemo(() => l.rows.filter((s) => has([s.name, s.command, s.user], f)), [l.rows, f])
+  const [rows, h] = useSort(found, startupCols)
   return (
     <>
       <Bar filter={f} setFilter={setF} reload={l.reload} note={l.note} error={l.error} loadError={l.loadError} loading={l.loading} />
-      <Table head={[t('mng.name'), t('mng.command'), t('mng.where'), '']} empty={t('mng.empty')}>
+      <Table head={[h(t('mng.name'), 'name'), h(t('mng.command'), 'command'), h(t('mng.where'), 'where'), '']} empty={t('mng.empty')}>
         {rows.map((s) => (
           <tr key={`${s.where}|${s.name}`}>
             <td className={td}>{s.name}</td>
@@ -205,11 +244,12 @@ function StartupList({ serverId }: { serverId: string }) {
 
 function Sessions({ serverId }: { serverId: string }) {
   const l = useList<Session>(serverId, 'sessions')
+  const [sessions, h] = useSort(l.rows, sessionCols)
   return (
     <>
       <Bar reload={l.reload} note={l.note} error={l.error} loadError={l.loadError} loading={l.loading} />
-      <Table head={['ID', t('mng.user'), t('mng.state'), t('mng.client'), '']} empty={t('mng.empty')}>
-        {l.rows.map((s) => (
+      <Table head={[h('ID', 'id'), h(t('mng.user'), 'user'), h(t('mng.state'), 'state'), h(t('mng.client'), 'client'), '']} empty={t('mng.empty')}>
+        {sessions.map((s) => (
           <tr key={s.id}>
             <td className={`${td} tnum`}>{s.id}</td>
             <td className={td}>{s.user || '—'}</td>
@@ -231,7 +271,8 @@ function Events({ serverId }: { serverId: string }) {
   const [level, setLevel] = useState(3)
   const l = useList<Event>(serverId, 'events', { log, level, limit: 150 })
   const [f, setF] = useState('')
-  const rows = useMemo(() => l.rows.filter((e) => has([e.source, e.message, e.id], f)), [l.rows, f])
+  const found = useMemo(() => l.rows.filter((e) => has([e.source, e.message, e.id], f)), [l.rows, f])
+  const [rows, h] = useSort(found, eventCols)
   return (
     <>
       <Bar filter={f} setFilter={setF} reload={l.reload} note={l.note} error={l.error} loadError={l.loadError} loading={l.loading} extra={
@@ -248,7 +289,7 @@ function Events({ serverId }: { serverId: string }) {
             <option value={4}>{t('mng.lv.4')}</option>
           </select>
         </>} />
-      <Table head={[t('mng.time'), t('mng.level'), t('mng.source'), t('mng.message')]} empty={t('mng.empty')}>
+      <Table head={[h(t('mng.time'), 'time'), h(t('mng.level'), 'level'), h(t('mng.source'), 'source'), t('mng.message')]} empty={t('mng.empty')}>
         {rows.map((e, i) => (
           <tr key={i}>
             <td className={`${td} tnum whitespace-nowrap text-muted`}>{formatDateTime(e.time, 'local')}</td>
@@ -265,11 +306,12 @@ function Events({ serverId }: { serverId: string }) {
 function Conns({ serverId }: { serverId: string }) {
   const l = useList<Conn>(serverId, 'conns')
   const [f, setF] = useState('')
-  const rows = useMemo(() => l.rows.filter((c) => has([c.local, c.remote, c.name, c.pid, c.state], f)), [l.rows, f])
+  const found = useMemo(() => l.rows.filter((c) => has([c.local, c.remote, c.name, c.pid, c.state], f)), [l.rows, f])
+  const [rows, h] = useSort(found, connCols)
   return (
     <>
       <Bar filter={f} setFilter={setF} reload={l.reload} note={l.note} error={l.error} loadError={l.loadError} loading={l.loading} />
-      <Table head={[t('mng.proto'), t('mng.local'), t('mng.remote'), t('mng.state'), t('mng.process'), '']} empty={t('mng.empty')}>
+      <Table head={[h(t('mng.proto'), 'proto'), h(t('mng.local'), 'local'), h(t('mng.remote'), 'remote'), h(t('mng.state'), 'state'), h(t('mng.process'), 'process'), '']} empty={t('mng.empty')}>
         {rows.map((c, i) => (
           <tr key={i}>
             <td className={td}>{c.proto}</td>
