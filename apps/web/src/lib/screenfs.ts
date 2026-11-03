@@ -27,6 +27,7 @@ const dec = new TextDecoder()
 
 /** The folder separator of a Windows path, so that a name can be put after a folder. */
 export function joinPath(dir: string, name: string): string {
+  if (dir === '') return name // the drives view: a drive's name, "C:\\", is already a full path
   return dir.endsWith('\\') ? dir + name : `${dir}\\${name}`
 }
 
