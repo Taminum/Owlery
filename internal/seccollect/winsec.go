@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"net/netip"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Taminum/Owlery/internal/secproto"
 )
@@ -71,7 +73,7 @@ func parseEvents(out string) []winEvent {
 	var wrapped struct {
 		Events []winEventXML `xml:"Event"`
 	}
-	if err := xml.Unmarshal([]byte("<Events>"+out+"</Events>"), &wrapped); err != nil {
+	if err := xml.Unmarshal([]byte("<Events>"+toUTF8(out)+"</Events>"), &wrapped); err != nil {
 		return nil
 	}
 	evs := make([]winEvent, 0, len(wrapped.Events))
@@ -84,6 +86,58 @@ func parseEvents(out string) []winEvent {
 		evs = append(evs, ev)
 	}
 	return evs
+}
+
+// toUTF8 makes what wevtutil printed fit for an XML parser. Into a pipe it writes in the console's code page, so a
+// Russian account name arrives as cp866 bytes, which are not UTF-8, and one such name used to sink the whole batch.
+// Text that is not valid UTF-8 is read as cp866 (the Russian console); anything left over becomes "?".
+func toUTF8(s string) string {
+	if utf8.ValidString(s) {
+		return stripXMLControls(s)
+	}
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c < 0x80:
+			b.WriteByte(c)
+		case c >= 0x80 && c <= 0xAF:
+			b.WriteRune(rune(0x410 + int(c-0x80)))
+		case c >= 0xE0 && c <= 0xEF:
+			b.WriteRune(rune(0x440 + int(c-0xE0)))
+		case c == 0xF0:
+			b.WriteRune('Ё')
+		case c == 0xF1:
+			b.WriteRune('ё')
+		default:
+			b.WriteByte('?')
+		}
+	}
+	return stripXMLControls(b.String())
+}
+
+// stripXMLControls drops the control characters XML does not allow; a log entry may carry any text.
+func stripXMLControls(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r < 0x20 && r != '\t' && r != '\n' && r != '\r' {
+			return -1
+		}
+		return r
+	}, s)
+}
+
+var recordIDRe = regexp.MustCompile(`<EventRecordID>(\d+)</EventRecordID>`)
+
+// highestRecord finds the biggest record number in text that could not be parsed, so a bad batch is skipped over
+// instead of being read again forever.
+func highestRecord(out string) int64 {
+	var hi int64
+	for _, m := range recordIDRe.FindAllStringSubmatch(out, -1) {
+		if n, err := strconv.ParseInt(m[1], 10, 64); err == nil && n > hi {
+			hi = n
+		}
+	}
+	return hi
 }
 
 // remoteAddr says whether s is the address of another machine: empty, "-", loopback and unspecified are not.
@@ -143,6 +197,12 @@ func (w *Winsec) readSecurity(ctx context.Context) (denied bool, failed bool) {
 			w.secN = e.Rec
 		}
 		w.count(e)
+	}
+	// Text came back but nothing could be read from it: step over it rather than meet the same batch every time.
+	if len(evs) == 0 && strings.TrimSpace(res.Stdout) != "" {
+		if hi := highestRecord(res.Stdout); hi > w.secN {
+			w.secN = hi
+		}
 	}
 	// A cleared log starts numbering again; when nothing new came for a while, check that our place still exists.
 	if len(evs) == 0 {

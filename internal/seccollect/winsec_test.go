@@ -130,3 +130,32 @@ func TestWinsecSaysWhenItMayNotReadTheLogAndWhenDefenderIsNotThere(t *testing.T)
 		t.Errorf("no defender: %s %+v", snap.Status, d)
 	}
 }
+
+// wevtutil writes into a pipe in the console code page: a Russian account name is cp866 bytes, not UTF-8. Such a name
+// used to make the whole batch unreadable, so the counters stayed at zero while the machine was being hammered.
+func TestWinsecReadsABatchWithRussianNamesInConsoleEncoding(t *testing.T) {
+	s := &winScript{logs: map[string][]string{
+		secLog: {evXML(100, 100, "2026-11-03T10:00:00Z", map[string]string{"LogonType": "2", "IpAddress": "-"})},
+		defLog: {},
+	}, status: "none"}
+	w := NewWinsec(s)
+	w.Collect(context.Background())
+
+	// "ПАНТЕЛЕЙМОН" as cp866 bytes
+	name := "\x8f\x80\x8d\x92\x85\x8b\x85\x89\x8c\x8e\x8d"
+	s.logs[secLog] = append(s.logs[secLog],
+		evXML(4625, 101, "2026-11-03T10:01:00Z", map[string]string{"LogonType": "3", "IpAddress": "198.51.100.7", "TargetUserName": name}),
+		evXML(4625, 102, "2026-11-03T10:01:01Z", map[string]string{"LogonType": "3", "IpAddress": "203.0.113.9", "TargetUserName": "\x01\xff\xfe"}),
+		evXML(4624, 103, "2026-11-03T10:01:02Z", map[string]string{"LogonType": "10", "IpAddress": "198.51.100.20", "TargetUserName": name}))
+	got := w.Collect(context.Background()).Data.(secproto.Winsec)
+	if got.RemoteFailed != 2 || got.RemoteOK != 1 || len(got.RecentOK) != 1 || got.RecentOK[0].User != "ПАНТЕЛЕЙМОН" {
+		t.Fatalf("counts: failed %d ok %d recent %+v", got.RemoteFailed, got.RemoteOK, got.RecentOK)
+	}
+
+	// A batch that cannot be read at all is stepped over, not met again on every pass.
+	s.logs[secLog] = append(s.logs[secLog], "<Event><EventRecordID>104</EventRecordID><broken")
+	w.Collect(context.Background())
+	if w.secN != 104 {
+		t.Errorf("an unreadable batch must move the cursor past itself, it is at %d", w.secN)
+	}
+}
