@@ -10,6 +10,8 @@ import { Card } from './ui'
 import { GhostButton, PrimaryButton, inputCls } from './Modal'
 
 const MODES: BlockSettings['mode'][] = ['off', 'watch', 'block']
+// A number field is as wide as its number: the shared field class is full width, which would stack the sentence it sits in.
+const numCls = 'h-10 rounded-control border border-line bg-canvas px-3 text-[14px] text-fg focus-visible:border-cyan'
 
 function Tile({ label, value }: { label: string; value: string | number }) {
   return (
@@ -129,14 +131,14 @@ export function RdpProtect({ serverId }: { serverId: string }) {
           <span className="text-muted">{t('prot.rule')}</span>
           <span className="flex flex-wrap items-center gap-2">
             {t('prot.rule.a')}
-            <input aria-label={t('prot.rule.b')} type="number" min={2} max={1000} className={`${inputCls} w-20`} value={draft.threshold} disabled={ro} onChange={(e) => edit({ threshold: num(e.target.value) })} />
+            <input aria-label={t('prot.rule.b')} type="number" min={2} max={1000} className={`${numCls} w-20`} value={draft.threshold} disabled={ro} onChange={(e) => edit({ threshold: num(e.target.value) })} />
             {t('prot.rule.b')}
-            <input aria-label={t('prot.rule.c')} type="number" min={1} max={1440} className={`${inputCls} w-20`} value={draft.window_min} disabled={ro} onChange={(e) => edit({ window_min: num(e.target.value) })} />
+            <input aria-label={t('prot.rule.c')} type="number" min={1} max={1440} className={`${numCls} w-20`} value={draft.window_min} disabled={ro} onChange={(e) => edit({ window_min: num(e.target.value) })} />
             {t('prot.rule.c')}
           </span>
           <span className="text-muted">{t('prot.ttl')}</span>
           <span className="flex flex-wrap items-center gap-2">
-            <input aria-label={t('prot.ttl')} type="number" min={0} max={8760} className={`${inputCls} w-24`} value={draft.ttl_hours} disabled={ro} onChange={(e) => edit({ ttl_hours: num(e.target.value) })} />
+            <input aria-label={t('prot.ttl')} type="number" min={0} max={8760} className={`${numCls} w-24`} value={draft.ttl_hours} disabled={ro} onChange={(e) => edit({ ttl_hours: num(e.target.value) })} />
             {t('prot.ttl.h')}
           </span>
         </div>
