@@ -156,6 +156,7 @@ func Run(ctx context.Context, cfg Config) error {
 		return err
 	}
 	a := &agent{cfg: cfg, url: url, hc: hc, epoch: newEpoch(), probes: make(chan struct{}, maxProbes), admins: make(chan struct{}, 4), socks: seccollect.NewSocketWatch(10 * time.Minute), host: newHostReader(cfg), runCtx: ctx}
+	a.hw = seccollect.NewHardware(seccollect.ExecRunner{Timeout: 90 * time.Second})
 	if runtime.GOOS == "windows" {
 		a.winsec = seccollect.NewWinsec(seccollect.ExecRunner{})
 	}
@@ -209,6 +210,7 @@ type agent struct {
 	admins chan struct{}
 	socks  *seccollect.SocketWatch
 	winsec *seccollect.Winsec // Windows only: sign-ins from other machines and Defender
+	hw     *seccollect.HardwareReader
 	host   *seccollect.HostReader
 	runCtx context.Context // lives as long as the agent: a terminal outlives a reconnect of the reports
 	shells *secshell.Runner
@@ -269,6 +271,7 @@ func (a *agent) capabilities(ban bool) []string {
 	if !a.cfg.NoFirewall {
 		caps = append(caps, "firewall_read")
 	}
+	caps = append(caps, secproto.CapHardware)
 	if a.winsec != nil {
 		caps = append(caps, secproto.CapWinsec)
 	}
@@ -548,6 +551,7 @@ func (a *agent) collect(ctx context.Context) []seccollect.Snapshot {
 	if a.winsec != nil {
 		out = append(out, a.winsec.Collect(ctx))
 	}
+	out = append(out, a.hw.Collect(ctx, time.Now()))
 	return out
 }
 

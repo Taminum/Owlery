@@ -245,6 +245,22 @@ func ParseSnapshotData(category, status string, raw json.RawMessage) (secevents.
 		}
 		snap.Win = &v
 		canon, err = json.Marshal(v)
+	case secproto.CatHardware:
+		var v secproto.Hardware
+		if err = dec(&v); err != nil || len(v.Disks) > secproto.MaxHWItems || len(v.GPUs) > secproto.MaxHWItems || len(v.NICs) > secproto.MaxHWItems ||
+			len(v.Vendor) > 64 || len(v.Model) > 96 || len(v.BIOS) > 96 || len(v.CPU.Model) > 96 || len(v.OSBuild) > 96 {
+			return snap, nil, "", ErrBadSnapshot
+		}
+		if v.Disks == nil {
+			v.Disks = []secproto.HWDisk{}
+		}
+		if v.GPUs == nil {
+			v.GPUs = []secproto.HWGPU{}
+		}
+		if v.NICs == nil {
+			v.NICs = []secproto.HWNic{}
+		}
+		canon, err = json.Marshal(v)
 	case secproto.CatFirewall:
 		var w secproto.Firewall
 		if err = dec(&w); err != nil || len(w.Rules) > secproto.MaxRulesBytes || len(w.Backend) > 16 {

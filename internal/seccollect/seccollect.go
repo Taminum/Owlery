@@ -38,7 +38,8 @@ const (
 	maxOutput  = 4 << 20
 )
 
-type ExecRunner struct{}
+// ExecRunner runs real commands. Timeout, when set, replaces the default ten seconds: some Windows queries need longer.
+type ExecRunner struct{ Timeout time.Duration }
 
 type capped struct {
 	b bytes.Buffer
@@ -51,8 +52,12 @@ func (c *capped) Write(p []byte) (int, error) {
 	return len(p), nil // the rest is dropped, and the command is not blocked by a full pipe
 }
 
-func (ExecRunner) Run(ctx context.Context, name string, args ...string) Result {
-	ctx, cancel := context.WithTimeout(ctx, cmdTimeout)
+func (e ExecRunner) Run(ctx context.Context, name string, args ...string) Result {
+	limit := cmdTimeout
+	if e.Timeout > 0 {
+		limit = e.Timeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, limit)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
 	if runtime.GOOS != "windows" { // Windows tools need the system environment (SystemRoot and the like)

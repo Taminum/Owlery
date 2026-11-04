@@ -9,6 +9,7 @@ import type { ServerAlert } from '../lib/types'
 import { Card, Chip } from '../components/ui'
 import { PageHead, TableSkeleton } from '../components/Analyzer'
 import { GhostButton } from '../components/Modal'
+import { HardwareSection } from '../components/HardwareView'
 import { HostDetail, Meter, uptimeText } from '../components/HostView'
 import { AgentBlock } from '../components/AgentSetup'
 import { InventoryDialog, RoleChips, StatusChip, durationText, placeText, type Server } from '../components/ServerParts'
@@ -129,13 +130,16 @@ export default function ServerCard() {
       </div>
 
       {tab === 'overview' && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Inventory s={s} onEdit={() => setEditing(true)} />
-          <div className="space-y-4">
-            <Now s={s} />
-            <AgentBlock vpsId={s.id} canEdit={s.can_edit} hostOS={s.os || s.host?.os} />
-            <Card title={t('srv.openAlerts')}><AlertList items={open} empty={t('srv.noAlerts')} /></Card>
+        <div className="space-y-5">
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Inventory s={s} onEdit={() => setEditing(true)} />
+            <div className="space-y-4">
+              <Now s={s} />
+              <AgentBlock vpsId={s.id} canEdit={s.can_edit} hostOS={s.os || s.host?.os} />
+              <Card title={t('srv.openAlerts')}><AlertList items={open} empty={t('srv.noAlerts')} /></Card>
+            </div>
           </div>
+          {s.hardware && <HardwareSection hw={s.hardware} host={s.host} />}
         </div>
       )}
       {tab === 'resources' && (s.host?.has_data ? <HostDetail host={s.host} /> : <p className="text-[13px] text-muted">{t('srv.noData')}</p>)}
