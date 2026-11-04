@@ -19,7 +19,7 @@ func TestFleetSummaryCountsTheWindowAndHidesSignInsFromPeople(t *testing.T) {
 	addEvent(t, w, a, "winsec", "winsec.rdp_failed", "warning", `{"ip":"198.51.100.50","count":7}`, now.Add(-30*time.Minute))
 	addEvent(t, w, a, "winsec", "winsec.rdp_ok", "info", `{"user":"Administrator","ip":"198.51.100.60"}`, now.Add(-20*time.Minute))
 	addEvent(t, w, a, "winsec", "winsec.defender_threat", "critical", `{"name":"Trojan:Win32/Test"}`, now.Add(-10*time.Minute))
-	if _, err := w.h.st.Pool().Exec(ctx, `INSERT INTO security_snapshot_state (vps_id, category, status, source_hash, observed_at, received_at, data) VALUES ($1, 'winsec', 'ok', 'h', now(), now(), '{"defender":{"present":true,"realtime":false}}')`, a); err != nil {
+	if _, err := w.h.st.Pool().Exec(ctx, `INSERT INTO security_snapshot_state (vps_id, category, status, source_hash, observed_at, received_at, data) VALUES ($1, 'winsec', 'ok', 'h', now(), now(), '{"defender":{"present":true,"enabled":true,"realtime":false}}')`, a); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := w.h.st.Pool().Exec(ctx, `INSERT INTO audit_log (action, object_type, ts) VALUES ('auth.login', 'account', now() - interval '1 hour'), ('auth.login_failed', 'account', now() - interval '1 hour'), ('terminal.open', 'server', now() - interval '1 hour')`); err != nil {

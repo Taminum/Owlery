@@ -35,7 +35,7 @@ type FleetSummary struct {
 		RDPOK        int `json:"rdp_ok"`        // remote-desktop sign-ins that worked
 		Threats      int `json:"threats"`       // things Defender found
 		DefenderOff  int `json:"defender_off"`  // times Defender's live protection was seen switched off
-		DefenderDown int `json:"defender_down"` // machines where Defender is the antivirus and its live protection is off now
+		DefenderDown int `json:"defender_down"` // machines where Defender is the active antivirus and its live protection is off now (another antivirus: not counted)
 	} `json:"win"`
 	TLS struct {
 		Problems    int        `json:"problems"`
@@ -118,7 +118,7 @@ func (s *Store) FleetSummary(ctx context.Context, sc Scope, from, to time.Time) 
 	}
 	if out.Win.Machines > 0 {
 		if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM security_snapshot_state st JOIN security_vps v ON v.id = st.vps_id WHERE `+pred+` AND st.category = 'winsec' AND st.status = 'ok'
-			AND st.data->'defender'->>'present' = 'true' AND st.data->'defender'->>'realtime' = 'false'`, args[:n]...).Scan(&out.Win.DefenderDown); err != nil {
+			AND st.data->'defender'->>'enabled' = 'true' AND st.data->'defender'->>'realtime' = 'false'`, args[:n]...).Scan(&out.Win.DefenderDown); err != nil {
 			return out, err
 		}
 		if err := s.pool.QueryRow(ctx, `SELECT COALESCE(sum(CASE WHEN e.type = 'winsec.rdp_failed' THEN COALESCE((e.payload->>'count')::int, 0) END), 0)::int,
