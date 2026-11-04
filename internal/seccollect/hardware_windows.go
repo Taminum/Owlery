@@ -12,7 +12,8 @@ import (
 
 // hwScript asks Windows what the machine is made of, once, and prints it as JSON. Serial numbers and MAC addresses are
 // not asked for. Every query is allowed to fail on its own: a machine without a video controller still has a processor.
-const hwScript = `$ErrorActionPreference = 'SilentlyContinue'
+const hwScript = `[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+$ErrorActionPreference = 'SilentlyContinue'
 $cs = Get-CimInstance Win32_ComputerSystem
 $bios = Get-CimInstance Win32_BIOS | Select-Object -First 1
 $os = Get-CimInstance Win32_OperatingSystem

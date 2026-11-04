@@ -153,6 +153,7 @@ var memTypes = map[int]string{20: "DDR", 21: "DDR2", 24: "DDR3", 26: "DDR4", 34:
 
 // ParseWinHardware reads what the PowerShell script in hardware_windows.go prints.
 func ParseWinHardware(out string) (secproto.Hardware, error) {
+	out = strings.TrimPrefix(toUTF8(out), string([]byte{0xEF, 0xBB, 0xBF})) // PowerShell may still answer in the console code page, or start with a byte order mark
 	var v struct {
 		Vendor string `json:"vendor"`
 		Model  string `json:"model"`

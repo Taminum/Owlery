@@ -118,3 +118,22 @@ func TestWinHardwareLeavesOutVirtualDisplaysAndTheFourGigabyteLie(t *testing.T) 
 		t.Errorf("gpus: %+v", h.GPUs)
 	}
 }
+
+// A Russian Windows names itself "Майкрософт Windows ..." and PowerShell may print that in the console code page.
+func TestWinHardwareReadsRussianTextInConsoleEncoding(t *testing.T) {
+	maykrosoft := "\x8c\xa0\xa9\xaa\xe0\xae\xe1\xae\xe4\xe2" // cp866
+	h, err := ParseWinHardware(`{"build":"` + maykrosoft + ` Windows Server 2022 Standard 20348"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.OSBuild != "Майкрософт Windows Server 2022 Standard 20348" {
+		t.Errorf("build: %q", h.OSBuild)
+	}
+}
+
+func TestWinHardwareToleratesAByteOrderMark(t *testing.T) {
+	h, err := ParseWinHardware("\xef\xbb\xbf" + `{"vendor":"ASUS"}`)
+	if err != nil || h.Vendor != "ASUS" {
+		t.Errorf("%+v %v", h, err)
+	}
+}
