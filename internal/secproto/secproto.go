@@ -29,9 +29,12 @@ const (
 	CatFail2ban = "fail2ban"
 	CatSockets  = "sockets"
 	CatFirewall = "firewall"
+	CatWinsec   = "winsec"
 )
 
-func ValidCategory(c string) bool { return c == CatFail2ban || c == CatSockets || c == CatFirewall }
+func ValidCategory(c string) bool {
+	return c == CatFail2ban || c == CatSockets || c == CatFirewall || c == CatWinsec
+}
 
 // EventCategories are the categories the journal can be filtered by: the agent's three plus the
 // external checks'.
@@ -464,3 +467,55 @@ type AdminResult struct {
 }
 
 const MaxAdminData = 900 << 10
+
+// --- Windows security (the "winsec" category) --------------------------------------------------------
+//
+// What the Windows event log says about sign-ins from other machines, and what Windows Defender says about itself and
+// what it caught. The counters count from the moment the agent started (like Fail2ban's total), so the server finds
+// what is new by subtracting the previous snapshot; a counter that went down means the agent restarted.
+
+const (
+	MaxWinsecSources = 20
+	MaxWinsecRecent  = 10
+	CapWinsec        = "winsec_read"
+)
+
+// WinSource is a remote address that failed to sign in, with how many times since the agent started.
+type WinSource struct {
+	IP     string `json:"ip"`
+	Failed int    `json:"failed"`
+}
+
+// WinLogon is one sign-in that worked, as remote desktop.
+type WinLogon struct {
+	ID   int64     `json:"id"` // the event record number, to tell one from another
+	User string    `json:"user"`
+	IP   string    `json:"ip"`
+	At   time.Time `json:"at"`
+}
+
+// WinThreat is one thing Defender found.
+type WinThreat struct {
+	ID       int64     `json:"id"`
+	Name     string    `json:"name"`
+	Severity string    `json:"severity,omitempty"`
+	Path     string    `json:"path,omitempty"`
+	At       time.Time `json:"at"`
+}
+
+type WinDefender struct {
+	Present       bool `json:"present"` // false: Defender is not the antivirus here, or is not there at all
+	Enabled       bool `json:"enabled"`
+	Realtime      bool `json:"realtime"`
+	SignatureDays int  `json:"signature_days"` // how old the definitions are; -1 when unknown
+}
+
+type Winsec struct {
+	RemoteFailed int64       `json:"remote_failed"` // failed network and remote-desktop sign-ins since the agent started
+	RemoteOK     int64       `json:"remote_ok"`     // remote-desktop sign-ins that worked
+	Sources      []WinSource `json:"sources"`       // the addresses behind the failures, most first
+	RecentOK     []WinLogon  `json:"recent_ok"`
+	Defender     WinDefender `json:"defender"`
+	Threats      []WinThreat `json:"threats"` // the latest, newest first
+	ThreatsTotal int64       `json:"threats_total"`
+}

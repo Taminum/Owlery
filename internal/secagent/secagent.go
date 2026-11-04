@@ -156,6 +156,9 @@ func Run(ctx context.Context, cfg Config) error {
 		return err
 	}
 	a := &agent{cfg: cfg, url: url, hc: hc, epoch: newEpoch(), probes: make(chan struct{}, maxProbes), admins: make(chan struct{}, 4), socks: seccollect.NewSocketWatch(10 * time.Minute), host: newHostReader(cfg), runCtx: ctx}
+	if runtime.GOOS == "windows" {
+		a.winsec = seccollect.NewWinsec(seccollect.ExecRunner{})
+	}
 	a.socks.Containers = func() map[int]string { return seccollect.ContainerPorts(cfg.ContainersFile) }
 	back := secshell.Dialer{BaseURL: strings.TrimRight(cfg.ServerURL, "/"), Token: a.token, Client: hc}
 	a.shells, a.dialBack = &secshell.Runner{Log: cfg.Log, Dial: back.Dial}, back.DialPath
@@ -205,6 +208,7 @@ type agent struct {
 	probes chan struct{}
 	admins chan struct{}
 	socks  *seccollect.SocketWatch
+	winsec *seccollect.Winsec // Windows only: sign-ins from other machines and Defender
 	host   *seccollect.HostReader
 	runCtx context.Context // lives as long as the agent: a terminal outlives a reconnect of the reports
 	shells *secshell.Runner
@@ -264,6 +268,9 @@ func (a *agent) capabilities(ban bool) []string {
 	}
 	if !a.cfg.NoFirewall {
 		caps = append(caps, "firewall_read")
+	}
+	if a.winsec != nil {
+		caps = append(caps, secproto.CapWinsec)
 	}
 	if ban {
 		caps = append(caps, secproto.CapFail2banBan)
@@ -537,6 +544,9 @@ func (a *agent) collect(ctx context.Context) []seccollect.Snapshot {
 	}
 	if !a.cfg.NoFirewall {
 		out = append(out, seccollect.FirewallWithBans(ctx, a.cfg.Runner, a.cfg.NftBin, a.cfg.IptablesBin, banned))
+	}
+	if a.winsec != nil {
+		out = append(out, a.winsec.Collect(ctx))
 	}
 	return out
 }

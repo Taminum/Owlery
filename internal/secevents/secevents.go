@@ -33,6 +33,7 @@ type Snap struct {
 	F2B    *secproto.Fail2ban
 	Sock   *secproto.Sockets
 	FW     *secproto.Firewall
+	Win    *secproto.Winsec
 }
 
 func Diff(category string, prev, cur Snap) []Event {
@@ -43,6 +44,8 @@ func Diff(category string, prev, cur Snap) []Event {
 		return diffSockets(prev, cur)
 	case secproto.CatFirewall:
 		return diffFirewall(prev, cur)
+	case secproto.CatWinsec:
+		return diffWinsec(prev, cur)
 	}
 	return nil
 }

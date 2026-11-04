@@ -29,6 +29,13 @@ type FleetSummary struct {
 		Total int             `json:"total"`
 		Items []SummaryChange `json:"items"`
 	} `json:"changes"`
+	Win struct {
+		Machines    int `json:"machines"`     // Windows machines whose agent reads the event log
+		RDPFailed   int `json:"rdp_failed"`   // failed remote sign-ins in the window
+		RDPOK       int `json:"rdp_ok"`       // remote-desktop sign-ins that worked
+		Threats     int `json:"threats"`      // things Defender found
+		DefenderOff int `json:"defender_off"` // times Defender's live protection was seen switched off
+	} `json:"win"`
 	TLS struct {
 		Problems    int        `json:"problems"`
 		NearestEnd  *time.Time `json:"nearest_end"`
@@ -105,6 +112,16 @@ func (s *Store) FleetSummary(ctx context.Context, sc Scope, from, to time.Time) 
 	if err != nil {
 		return out, err
 	}
+	if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM security_snapshot_state st JOIN security_vps v ON v.id = st.vps_id WHERE `+pred+` AND st.category = 'winsec' AND st.status = 'ok'`, args[:n]...).Scan(&out.Win.Machines); err != nil {
+		return out, err
+	}
+	if out.Win.Machines > 0 {
+		if err := s.pool.QueryRow(ctx, `SELECT COALESCE(sum(CASE WHEN e.type = 'winsec.rdp_failed' THEN COALESCE((e.payload->>'count')::int, 0) END), 0)::int,
+				(count(*) FILTER (WHERE e.type = 'winsec.rdp_ok'))::int, (count(*) FILTER (WHERE e.type = 'winsec.defender_threat'))::int, (count(*) FILTER (WHERE e.type = 'winsec.defender_off'))::int`+
+			` FROM security_events e JOIN security_vps v ON v.id = e.vps_id WHERE `+pred+win+` AND e.category = 'winsec'`, args...).Scan(&out.Win.RDPFailed, &out.Win.RDPOK, &out.Win.Threats, &out.Win.DefenderOff); err != nil {
+			return out, err
+		}
+	}
 	if out.TLS.NearestEnd != nil {
 		_ = s.pool.QueryRow(ctx, `SELECT t.host FROM security_tls_endpoints t JOIN security_vps v ON v.id = t.vps_id
 			WHERE `+pred+` AND t.enabled AND t.last_not_after = $`+strconv.Itoa(n+1)+` LIMIT 1`, append(append([]any{}, args[:n]...), *out.TLS.NearestEnd)...).Scan(&out.TLS.NearestHost)
@@ -139,6 +156,7 @@ type SummaryHour struct {
 	At      time.Time `json:"at"`
 	Bans    int       `json:"bans"`
 	Changes int       `json:"changes"`
+	RDP     int       `json:"rdp"` // failed remote-desktop sign-ins
 	Alerts  int       `json:"alerts"`
 	Access  int       `json:"access"` // terminal, screen and desktop sessions; owners only
 }
@@ -174,6 +192,9 @@ type FleetDetails struct {
 
 const banCount = `CASE WHEN e.type = 'fail2ban.ban' THEN 1 WHEN e.type = 'fail2ban.bans_unobserved' THEN COALESCE((e.payload->>'count')::int, 0) ELSE 0 END`
 
+// rdpCount is how many failed remote sign-ins one winsec.rdp_failed event stands for.
+const rdpCount = `CASE WHEN e.type = 'winsec.rdp_failed' THEN COALESCE((e.payload->>'count')::int, 0) ELSE 0 END`
+
 // FleetDetails fills the hour buckets (one per hour of the window, empty ones included) and the top lists. withAccess
 // adds the access sessions and the opened alerts, which belong to no machine and so only an owner sees.
 func (s *Store) FleetDetails(ctx context.Context, sc Scope, from, to time.Time, withAccess bool) (FleetDetails, error) {
@@ -195,26 +216,29 @@ func (s *Store) FleetDetails(ctx context.Context, sc Scope, from, to time.Time, 
 	win := ` AND e.observed_at >= $` + strconv.Itoa(n+1) + ` AND e.observed_at < $` + strconv.Itoa(n+2)
 	from2 := ` FROM security_events e JOIN security_vps v ON v.id = e.vps_id WHERE ` + pred + win
 
-	rows, err := s.pool.Query(ctx, `SELECT date_trunc('hour', e.observed_at AT TIME ZONE 'UTC'), sum(`+banCount+`)::int, (count(*) FILTER (WHERE e.type = ANY($`+strconv.Itoa(n+3)+`::text[])))::int`+from2+` GROUP BY 1`, append(append([]any{}, args...), changeTypes)...)
+	rows, err := s.pool.Query(ctx, `SELECT date_trunc('hour', e.observed_at AT TIME ZONE 'UTC'), sum(`+banCount+`)::int, (count(*) FILTER (WHERE e.type = ANY($`+strconv.Itoa(n+3)+`::text[])))::int, sum(`+rdpCount+`)::int`+from2+` GROUP BY 1`, append(append([]any{}, args...), changeTypes)...)
 	if err != nil {
 		return d, err
 	}
 	for rows.Next() {
 		var h time.Time
-		var bans, changes int
-		if err := rows.Scan(&h, &bans, &changes); err != nil {
+		var bans, changes, rdp int
+		if err := rows.Scan(&h, &bans, &changes, &rdp); err != nil {
 			rows.Close()
 			return d, err
 		}
-		put(h, func(x *SummaryHour) { x.Bans, x.Changes = bans, changes })
+		put(h, func(x *SummaryHour) { x.Bans, x.Changes, x.RDP = bans, changes, rdp })
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
 		return d, err
 	}
 
-	ips, err := s.pool.Query(ctx, `SELECT e.payload->>'ip', COALESCE(mode() WITHIN GROUP (ORDER BY e.payload->>'jail'), ''), count(*)::int`+from2+`
-		AND e.type = 'fail2ban.ban' AND e.payload->>'ip' IS NOT NULL GROUP BY 1 ORDER BY count(*) DESC, 1 LIMIT 5`, args...)
+	ips, err := s.pool.Query(ctx, `SELECT ip, COALESCE(mode() WITHIN GROUP (ORDER BY jail), ''), sum(n)::int FROM (
+		SELECT e.payload->>'ip' AS ip, CASE WHEN e.type = 'winsec.rdp_failed' THEN 'rdp' ELSE e.payload->>'jail' END AS jail,
+			CASE WHEN e.type = 'winsec.rdp_failed' THEN COALESCE((e.payload->>'count')::int, 0) ELSE 1 END AS n`+from2+`
+			AND e.type IN ('fail2ban.ban', 'winsec.rdp_failed') AND COALESCE(e.payload->>'ip', '') <> '') x
+		GROUP BY ip ORDER BY sum(n) DESC, ip LIMIT 5`, args...)
 	if err != nil {
 		return d, err
 	}
@@ -231,8 +255,8 @@ func (s *Store) FleetDetails(ctx context.Context, sc Scope, from, to time.Time, 
 		return d, err
 	}
 
-	jr, err := s.pool.Query(ctx, `SELECT COALESCE(e.payload->>'jail', ''), sum(`+banCount+`)::int`+from2+`
-		AND e.type IN ('fail2ban.ban', 'fail2ban.bans_unobserved') GROUP BY 1 HAVING sum(`+banCount+`) > 0 ORDER BY 2 DESC, 1 LIMIT 6`, args...)
+	jr, err := s.pool.Query(ctx, `SELECT CASE WHEN e.type = 'winsec.rdp_failed' THEN 'rdp' ELSE COALESCE(e.payload->>'jail', '') END, sum(`+banCount+` + `+rdpCount+`)::int`+from2+`
+		AND e.type IN ('fail2ban.ban', 'fail2ban.bans_unobserved', 'winsec.rdp_failed') GROUP BY 1 HAVING sum(`+banCount+` + `+rdpCount+`) > 0 ORDER BY 2 DESC, 1 LIMIT 6`, args...)
 	if err != nil {
 		return d, err
 	}
@@ -250,7 +274,8 @@ func (s *Store) FleetDetails(ctx context.Context, sc Scope, from, to time.Time, 
 	}
 
 	ev, err := s.pool.Query(ctx, `SELECT v.name, e.type, e.severity, e.observed_at`+from2+`
-		AND e.type NOT IN ('fail2ban.ban', 'fail2ban.unban', 'fail2ban.bans_unobserved', 'port.local_added', 'port.local_removed', 'port.local_bind_changed') ORDER BY e.observed_at DESC LIMIT 8`, args...)
+		AND e.type NOT IN ('fail2ban.ban', 'fail2ban.unban', 'fail2ban.bans_unobserved', 'port.local_added', 'port.local_removed', 'port.local_bind_changed')
+		AND NOT (e.type = 'winsec.rdp_failed' AND e.severity = 'info') ORDER BY e.observed_at DESC LIMIT 8`, args...)
 	if err != nil {
 		return d, err
 	}

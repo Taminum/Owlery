@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -54,7 +55,9 @@ func (ExecRunner) Run(ctx context.Context, name string, args ...string) Result {
 	ctx, cancel := context.WithTimeout(ctx, cmdTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Env = []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL=C", "LANG=C"}
+	if runtime.GOOS != "windows" { // Windows tools need the system environment (SystemRoot and the like)
+		cmd.Env = []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL=C", "LANG=C"}
+	}
 	var out, errb capped
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	err := cmd.Run()
