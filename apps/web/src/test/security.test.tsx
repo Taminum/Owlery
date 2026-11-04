@@ -188,7 +188,7 @@ describe('Security page', () => {
   })
 
   it('shows what the machine allows and updates the agent without a new secret', async () => {
-    const agent = { id: 'a1', status: 'active', agent_version: '0.3.30', hostname: 'box', capabilities: ['shell', 'web'], last_seen: '2026-10-28T10:00:00Z', online: true }
+    const agent = { id: 'a1', status: 'active', agent_version: 'v0.3.30', hostname: 'box', capabilities: ['shell', 'web'], last_seen: '2026-10-28T10:00:00Z', online: true }
     mockApi({ me: owner, handler: (r: Req) => {
       if (r.path === '/api/v1/security/vps/v1') return { status: 200, body: vps() }
       if (r.path === '/api/v1/security/vps/v1/agent' && r.method === 'GET') return { status: 200, body: { agent } }
@@ -197,6 +197,7 @@ describe('Security page', () => {
     renderSec('/security/v1?tab=fail2ban')
     // What the machine allows: ticked for what its agent announces, crossed for the rest.
     expect(await screen.findByText(/✓ терминал/)).toBeInTheDocument()
+    expect(screen.getByText(/^v0.3.30/)).toBeInTheDocument() // the version already has its letter: not "vv0.3.30"
     expect(screen.getByText(/✓ веб-службы/)).toBeInTheDocument()
     expect(screen.getByText(/✕ экран/)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Обновить или изменить разрешения' }))

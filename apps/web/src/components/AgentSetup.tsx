@@ -241,7 +241,7 @@ export function AgentBlock({ vpsId, canEdit, hostOS }: { vpsId: string; canEdit:
         <div className="space-y-2 text-[13px]">
           <div className="flex flex-wrap items-center gap-3">
             <Chip tone={agent.online ? 'green' : 'muted'}>{agent.last_seen ? (agent.online ? t('sec.agent.online') : t('sec.agent.offline')) : t('sec.agent.waiting')}</Chip>
-            {agent.agent_version && <span className="text-muted">v{agent.agent_version}{agent.hostname ? ` · ${agent.hostname}` : ''}</span>}
+            {agent.agent_version && <span className="text-muted">{agent.agent_version.startsWith('v') ? '' : 'v'}{agent.agent_version}{agent.hostname ? ` · ${agent.hostname}` : ''}</span>}
           </div>
           {agent.last_seen && <p className="tnum text-muted">{t('sec.agent.lastSeen')}: {formatDateTime(agent.last_seen, 'local')}</p>}
           {agent.last_seen && (
