@@ -3,10 +3,12 @@ package seccollect
 import (
 	"context"
 	"fmt"
+	"net/netip"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/Taminum/Owlery/internal/ipblock"
 	"github.com/Taminum/Owlery/internal/secproto"
 )
 
@@ -157,5 +159,51 @@ func TestWinsecReadsABatchWithRussianNamesInConsoleEncoding(t *testing.T) {
 	w.Collect(context.Background())
 	if w.secN != 104 {
 		t.Errorf("an unreadable batch must move the cursor past itself, it is at %d", w.secN)
+	}
+}
+
+type recFW struct{ rules map[netip.Addr]bool }
+
+func (f *recFW) Block(_ context.Context, ip netip.Addr) error   { f.rules[ip] = true; return nil }
+func (f *recFW) Unblock(_ context.Context, ip netip.Addr) error { delete(f.rules, ip); return nil }
+func (f *recFW) Blocked(context.Context) ([]netip.Addr, error)  { return nil, nil }
+
+// The log feeds the address blocker: failures from one address add up to a block, a sign-in that worked keeps its address
+// safe, and the machine's report carries what the blocker did.
+func TestWinsecFeedsTheAddressBlocker(t *testing.T) {
+	s := &winScript{logs: map[string][]string{
+		secLog: {evXML(100, 100, "2026-11-03T10:00:00Z", map[string]string{"LogonType": "2", "IpAddress": "-"})},
+		defLog: {},
+	}, status: "none"}
+	fw := &recFW{rules: map[netip.Addr]bool{}}
+	cfg := ipblock.DefaultConfig()
+	cfg.Mode = secproto.BlockOn
+	w := NewWinsec(s)
+	w.SetBlocker(ipblock.New(fw, "", cfg, true))
+	w.Collect(context.Background())
+
+	var evs []string
+	rec := int64(101)
+	add := func(id int, lt, ip, user string) {
+		evs = append(evs, evXML(id, rec, time.Now().UTC().Format(time.RFC3339), map[string]string{"LogonType": lt, "IpAddress": ip, "TargetUserName": user}))
+		rec++
+	}
+	for i := 0; i < 6; i++ {
+		add(4625, "3", "198.51.100.7", "admin")
+	}
+	add(4624, "3", "198.51.100.8", "ivan") // signed in earlier today
+	for i := 0; i < 6; i++ {               // and now mistypes
+		add(4625, "3", "198.51.100.8", "ivan")
+	}
+	s.logs[secLog] = append(s.logs[secLog], evs...)
+	got := w.Collect(context.Background()).Data.(secproto.Winsec)
+	if got.Block == nil || got.Block.Mode != secproto.BlockOn {
+		t.Fatalf("block: %+v", got.Block)
+	}
+	if len(got.Block.Active) != 1 || got.Block.Active[0].IP != "198.51.100.7" || !fw.rules[netip.MustParseAddr("198.51.100.7")] {
+		t.Errorf("the guessing address must be blocked: %+v", got.Block)
+	}
+	if fw.rules[netip.MustParseAddr("198.51.100.8")] {
+		t.Error("an address that signed in must not be blocked")
 	}
 }
