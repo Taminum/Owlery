@@ -164,7 +164,7 @@ func closeWith(c *websocket.Conn, code int, reason string) {
 	_ = c.Close(websocket.StatusCode(code), reason)
 }
 
-var knownCaps = map[string]bool{"fail2ban_read": true, "socket_read": true, "firewall_read": true, secproto.CapWinsec: true, secproto.CapHardware: true, secproto.CapBlock: true, secproto.CapFail2banBan: true, secproto.CapProbe: true, secproto.CapShell: true, secproto.CapDesktop: true, secproto.CapAdmin: true, secproto.CapWeb: true, secproto.CapRemote: true}
+var knownCaps = map[string]bool{"fail2ban_read": true, "socket_read": true, "firewall_read": true, secproto.CapWinsec: true, secproto.CapHardware: true, secproto.CapBlock: true, secproto.CapBlockCfg: true, secproto.CapFail2banBan: true, secproto.CapProbe: true, secproto.CapShell: true, secproto.CapDesktop: true, secproto.CapAdmin: true, secproto.CapWeb: true, secproto.CapRemote: true}
 
 func (s *Server) session(ctx context.Context, c *websocket.Conn, agent store.SecAgent) {
 	hctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -175,7 +175,7 @@ func (s *Server) session(ctx context.Context, c *websocket.Conn, agent store.Sec
 	}
 	var hello secproto.Hello
 	if json.Unmarshal(data, &hello) != nil || hello.Type != "hello" || hello.ProtoVersion != secproto.Version ||
-		hello.Epoch == "" || len(hello.Epoch) > 64 || len(hello.AgentVersion) > 64 || len(hello.Hostname) > 253 || len(hello.Capabilities) > 12 {
+		hello.Epoch == "" || len(hello.Epoch) > 64 || len(hello.AgentVersion) > 64 || len(hello.Hostname) > 253 || len(hello.Capabilities) > 16 {
 		_ = send(ctx, c, secproto.Error{Type: "error", Code: "bad_message"})
 		closeWith(c, secproto.CloseProtocol, "bad hello")
 		return
@@ -206,7 +206,7 @@ func (s *Server) session(ctx context.Context, c *websocket.Conn, agent store.Sec
 	// A Windows agent is told how its address blocker is set up. It keeps what it was told, so this only matters the
 	// first time and after a change made while it was away.
 	for _, k := range caps {
-		if k == secproto.CapWinsec {
+		if k == secproto.CapBlockCfg {
 			if b, err := s.Store.GetBlockSettings(ctx, agent.VPSID); err == nil {
 				_ = send(ctx, c, b.Message())
 			}

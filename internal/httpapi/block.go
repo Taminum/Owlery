@@ -21,6 +21,7 @@ type blockView struct {
 	State     *secproto.WinBlock  `json:"state"`     // what the agent last reported; nil until it reports one
 	Supported bool                `json:"supported"` // a Windows agent that reads sign-ins is there
 	CanBlock  bool                `json:"can_block"` // the machine was installed with -allow-block
+	Updated   bool                `json:"updated"`   // the agent is new enough to take settings
 	Online    bool                `json:"online"`
 	CanEdit   bool                `json:"can_edit"`
 }
@@ -45,6 +46,7 @@ func (s *Server) blockViewOf(ctx context.Context, a auth.Actor, v store.VPS) (bl
 	}
 	if agent, err := s.Store.SecAgentOf(ctx, v.ID); err == nil {
 		out.CanBlock = slices.Contains(agent.Capabilities, secproto.CapBlock)
+		out.Updated = slices.Contains(agent.Capabilities, secproto.CapBlockCfg)
 		out.Online = s.SecOps != nil && s.SecOps.Online(agent.ID)
 	}
 	return out, nil
@@ -90,7 +92,7 @@ func (s *Server) putBlock(w http.ResponseWriter, r *http.Request, a auth.Actor, 
 		return
 	}
 	s.audit(r, a, "", "block.settings", "server", v.ID, map[string]any{"name": v.Name, "mode": in.Mode, "threshold": in.Threshold, "window_min": in.WindowMin, "ttl_hours": in.TTLHours, "whitelist": len(in.Whitelist)})
-	if agent, err := s.Store.SecAgentOf(r.Context(), v.ID); err == nil && s.SecOps != nil && s.SecOps.Online(agent.ID) {
+	if agent, err := s.Store.SecAgentOf(r.Context(), v.ID); err == nil && s.SecOps != nil && s.SecOps.Online(agent.ID) && slices.Contains(agent.Capabilities, secproto.CapBlockCfg) {
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
 		_ = s.SecOps.Send(ctx, agent.ID, in.Message())
@@ -128,6 +130,10 @@ func (s *Server) unblock(w http.ResponseWriter, r *http.Request, a auth.Actor, _
 	agent, err := s.Store.SecAgentOf(r.Context(), v.ID)
 	if err != nil || s.SecOps == nil || !s.SecOps.Online(agent.ID) {
 		s.writeErr(w, r, http.StatusConflict, "agent_offline", "the machine's agent is not connected")
+		return
+	}
+	if !slices.Contains(agent.Capabilities, secproto.CapBlockCfg) {
+		s.writeErr(w, r, http.StatusConflict, "agent_old", "the machine's agent is too old for this; update it")
 		return
 	}
 	s.audit(r, a, "", "block.unblock", "server", v.ID, map[string]any{"name": v.Name, "ip": ip.String()})

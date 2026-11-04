@@ -301,6 +301,9 @@ func (a *agent) capabilities(ban bool) []string {
 	if a.cfg.AllowWeb {
 		caps = append(caps, secproto.CapWeb)
 	}
+	if a.winsec != nil {
+		caps = append(caps, secproto.CapBlockCfg)
+	}
 	if a.cfg.AllowBlock && a.winsec != nil {
 		caps = append(caps, secproto.CapBlock)
 	}
