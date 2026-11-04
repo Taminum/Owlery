@@ -1,6 +1,11 @@
 package httpapi
 
-import "testing"
+import (
+	"testing"
+	"time"
+
+	"github.com/Taminum/Owlery/internal/store"
+)
 
 func TestBlockSettingsStartAtTheDefaultsAndAreCheckedAndGuarded(t *testing.T) {
 	w := newAgentWorld(t)
@@ -56,5 +61,56 @@ func TestBlockSettingsStartAtTheDefaultsAndAreCheckedAndGuarded(t *testing.T) {
 	}
 	if st, b := w.owner.do("POST", "/api/v1/servers/"+id+"/block/unblock", map[string]any{"ip": "nope"}); st != 422 {
 		t.Errorf("not an address: %d %s", st, b)
+	}
+}
+
+func TestSharedBlocksArePassedOnOnceAndNotBackToTheirSource(t *testing.T) {
+	w := newAgentWorld(t)
+	a := mkVPS(t, w, "autocad", "203.0.113.41", w.work.ID)
+	b := mkVPS(t, w, "btr", "203.0.113.42", w.work.ID)
+	st := w.h.st
+	soon := time.Now().Add(time.Hour)
+
+	if fresh, err := st.ShareBlock(ctx, a, "198.51.100.77", time.Now(), &soon); err != nil || !fresh {
+		t.Fatalf("a new block is news: %v %v", fresh, err)
+	}
+	if fresh, _ := st.ShareBlock(ctx, a, "198.51.100.77", time.Now(), &soon); fresh {
+		t.Error("the same block reported again is not news")
+	}
+	if list, _ := st.ActiveSharedBlocks(ctx, b); len(list) != 1 || list[0].IP != "198.51.100.77" {
+		t.Errorf("the other machine is owed it: %+v", list)
+	}
+	if list, _ := st.ActiveSharedBlocks(ctx, a); len(list) != 0 {
+		t.Errorf("the machine that made it is not told its own block: %+v", list)
+	}
+	if peers, _ := st.SharePeers(ctx, a); len(peers) != 1 || peers[0] != b {
+		t.Errorf("peers: %v", peers)
+	}
+
+	// Somebody who leaves the shared list neither gets nor gives.
+	if err := st.PutBlockSettings(ctx, b, store.BlockSettings{Mode: "block", Threshold: 5, WindowMin: 10, TTLHours: 24, Share: false}); err != nil {
+		t.Fatal(err)
+	}
+	if st.ShareOn(ctx, b) {
+		t.Error("a machine that turned sharing off is out")
+	}
+	if peers, _ := st.SharePeers(ctx, a); len(peers) != 0 {
+		t.Errorf("a machine that turned sharing off is not a peer: %v", peers)
+	}
+
+	// A block that ended may be shared again; an unblocked address leaves the list.
+	past := time.Now().Add(-time.Minute)
+	if _, err := w.h.st.Pool().Exec(ctx, `UPDATE security_shared_blocks SET until=$1`, past); err != nil {
+		t.Fatal(err)
+	}
+	if list, _ := st.ActiveSharedBlocks(ctx, b); len(list) != 0 {
+		t.Errorf("an ended block is not owed: %+v", list)
+	}
+	if fresh, _ := st.ShareBlock(ctx, a, "198.51.100.77", time.Now(), &soon); !fresh {
+		t.Error("an address whose block ended can be blocked again")
+	}
+	_ = st.DropSharedBlock(ctx, "198.51.100.77")
+	if list, _ := st.ActiveSharedBlocks(ctx, b); len(list) != 0 {
+		t.Errorf("an unblocked address is off the list: %+v", list)
 	}
 }

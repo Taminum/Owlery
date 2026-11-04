@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/netip"
+	"slices"
 	"strings"
 	"time"
 
@@ -164,7 +165,7 @@ func closeWith(c *websocket.Conn, code int, reason string) {
 	_ = c.Close(websocket.StatusCode(code), reason)
 }
 
-var knownCaps = map[string]bool{"fail2ban_read": true, "socket_read": true, "firewall_read": true, secproto.CapWinsec: true, secproto.CapHardware: true, secproto.CapBlock: true, secproto.CapBlockCfg: true, secproto.CapFail2banBan: true, secproto.CapProbe: true, secproto.CapShell: true, secproto.CapDesktop: true, secproto.CapAdmin: true, secproto.CapWeb: true, secproto.CapRemote: true}
+var knownCaps = map[string]bool{"fail2ban_read": true, "socket_read": true, "firewall_read": true, secproto.CapWinsec: true, secproto.CapHardware: true, secproto.CapBlock: true, secproto.CapBlockCfg: true, secproto.CapBlockShare: true, secproto.CapFail2banBan: true, secproto.CapProbe: true, secproto.CapShell: true, secproto.CapDesktop: true, secproto.CapAdmin: true, secproto.CapWeb: true, secproto.CapRemote: true}
 
 func (s *Server) session(ctx context.Context, c *websocket.Conn, agent store.SecAgent) {
 	hctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -212,6 +213,9 @@ func (s *Server) session(ctx context.Context, c *websocket.Conn, agent store.Sec
 			}
 			break
 		}
+	}
+	if slices.Contains(caps, secproto.CapBlockShare) {
+		s.sendSharedBlocks(ctx, c, agent)
 	}
 
 	for {
@@ -304,6 +308,9 @@ func (s *Server) snapshot(ctx context.Context, c *websocket.Conn, agent store.Se
 		s.log().Error("committing security snapshot", "agent", agent.ID)
 		_ = c.Close(websocket.StatusInternalError, "try again")
 		return false
+	}
+	if m.Category == secproto.CatWinsec && res.Stored {
+		s.shareNewBlocks(ctx, agent, snap.Win)
 	}
 	return send(ctx, c, secproto.Ack{Type: "ack", AckSeq: res.AckSeq, Stored: res.Stored}) == nil
 }

@@ -545,8 +545,9 @@ const (
 type WinBlockEntry struct {
 	IP     string     `json:"ip"`
 	Since  time.Time  `json:"since"`
-	Until  *time.Time `json:"until,omitempty"` // nil: no end
-	Failed int        `json:"failed"`          // the failures that crossed the limit
+	Until  *time.Time `json:"until,omitempty"`  // nil: no end
+	Failed int        `json:"failed"`           // the failures that crossed the limit
+	Shared bool       `json:"shared,omitempty"` // blocked because another machine blocked it, not because of failures here
 }
 
 // WinBlock is the state of the blocker: its settings as they are now, what it blocks, what it would have blocked.
@@ -637,4 +638,17 @@ type BlockCfg struct {
 type BlockUnblock struct {
 	Type string `json:"type"` // "block_unblock"
 	IP   string `json:"ip"`
+}
+
+// CapBlockShare is announced by an agent that understands block_add, the server passing on an address another machine
+// blocked. As with the other messages, an older agent drops the connection on one it does not know, so only agents that
+// announced this are sent it.
+const CapBlockShare = "ip_block_share"
+
+// BlockAdd asks an agent that is in block mode to block an address another machine blocked. Seconds is how long is left of
+// the block (0: for good); the agent never blocks an address that is private, whitelisted or that signed in lately.
+type BlockAdd struct {
+	Type    string `json:"type"` // "block_add"
+	IP      string `json:"ip"`
+	Seconds int    `json:"seconds"`
 }

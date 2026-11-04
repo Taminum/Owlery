@@ -302,7 +302,7 @@ func (a *agent) capabilities(ban bool) []string {
 		caps = append(caps, secproto.CapWeb)
 	}
 	if a.winsec != nil {
-		caps = append(caps, secproto.CapBlockCfg)
+		caps = append(caps, secproto.CapBlockCfg, secproto.CapBlockShare)
 	}
 	if a.cfg.AllowBlock && a.winsec != nil {
 		caps = append(caps, secproto.CapBlock)
@@ -523,6 +523,15 @@ func (a *agent) reader(ctx context.Context, c *websocket.Conn, ban bool, acks ch
 				return
 			}
 			a.applyBlockCfg(ctx, cfg)
+		case "block_add":
+			var req secproto.BlockAdd
+			if json.Unmarshal(b, &req) != nil || len(req.IP) > 45 || req.Seconds < 0 {
+				fail(errors.New("secagent: a bad shared block"))
+				return
+			}
+			if a.blocker != nil && a.blocker.AddShared(ctx, req.IP, time.Duration(req.Seconds)*time.Second) {
+				a.cfg.Log.Info("an address was blocked because another machine blocked it", "ip", req.IP)
+			}
 		case "block_unblock":
 			var req secproto.BlockUnblock
 			if json.Unmarshal(b, &req) != nil || len(req.IP) > 45 {

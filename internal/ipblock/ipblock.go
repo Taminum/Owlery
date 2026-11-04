@@ -76,6 +76,7 @@ type Entry struct {
 	Since  time.Time
 	Until  time.Time // zero: no end
 	Failed int
+	Shared bool // blocked because another machine blocked it
 }
 
 const (
@@ -351,7 +352,7 @@ func entries(m map[netip.Addr]Entry) []secproto.WinBlockEntry {
 	}
 	out := make([]secproto.WinBlockEntry, 0, len(list))
 	for _, en := range list {
-		x := secproto.WinBlockEntry{IP: en.IP.String(), Since: en.Since, Failed: en.Failed}
+		x := secproto.WinBlockEntry{IP: en.IP.String(), Since: en.Since, Failed: en.Failed, Shared: en.Shared}
 		if !en.Until.IsZero() {
 			u := en.Until
 			x.Until = &u
@@ -382,6 +383,7 @@ type savedEntry struct {
 	Since  time.Time `json:"since"`
 	Until  time.Time `json:"until"`
 	Failed int       `json:"failed"`
+	Shared bool      `json:"shared,omitempty"`
 }
 
 func (e *Engine) save() {
@@ -395,10 +397,10 @@ func (e *Engine) save() {
 	}
 	s.Config = &sc
 	for _, en := range e.active {
-		s.Active = append(s.Active, savedEntry{en.IP.String(), en.Since, en.Until, en.Failed})
+		s.Active = append(s.Active, savedEntry{en.IP.String(), en.Since, en.Until, en.Failed, en.Shared})
 	}
 	for _, en := range e.would {
-		s.Would = append(s.Would, savedEntry{en.IP.String(), en.Since, en.Until, en.Failed})
+		s.Would = append(s.Would, savedEntry{en.IP.String(), en.Since, en.Until, en.Failed, en.Shared})
 	}
 	for ip, t := range e.safe {
 		s.Safe[ip.String()] = t
@@ -441,7 +443,7 @@ func (e *Engine) load() {
 	}
 	for _, x := range s.Active {
 		if ip, ok := parseIP(x.IP); ok && e.cfg.Mode == secproto.BlockOn {
-			e.active[ip] = Entry{IP: ip, Since: x.Since, Until: x.Until, Failed: x.Failed}
+			e.active[ip] = Entry{IP: ip, Since: x.Since, Until: x.Until, Failed: x.Failed, Shared: x.Shared}
 		}
 	}
 	for _, x := range s.Would {
@@ -455,4 +457,42 @@ func (e *Engine) load() {
 		}
 	}
 	e.total = s.Total
+}
+
+// AddShared blocks an address because another machine blocked it. Only a machine in block mode does, and the same rules
+// protect the address as for one found here: private, whitelisted, or signed in lately, and it is left alone. ttl is what
+// is left of the other machine's block (0: for good); it never outlasts this machine's own limit.
+func (e *Engine) AddShared(ctx context.Context, ipStr string, ttl time.Duration) bool {
+	ip, ok := parseIP(ipStr)
+	if !ok {
+		return false
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	now := e.now()
+	if e.cfg.Mode != secproto.BlockOn || e.exempt(ip, now) {
+		return false
+	}
+	if _, on := e.active[ip]; on {
+		return false
+	}
+	if e.cfg.TTL > 0 && (ttl <= 0 || ttl > e.cfg.TTL) {
+		ttl = e.cfg.TTL
+	}
+	en := Entry{IP: ip, Since: now, Shared: true}
+	if ttl > 0 {
+		en.Until = now.Add(ttl)
+	}
+	if len(e.active) >= maxRemember {
+		return false
+	}
+	if err := e.fw.Block(ctx, ip); err != nil {
+		e.err = "the firewall did not take a rule"
+		return false
+	}
+	e.err = ""
+	delete(e.tries, ip)
+	e.active[ip] = en
+	e.save()
+	return true
 }
