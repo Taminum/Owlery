@@ -17,6 +17,7 @@ func TestFleetSummaryCountsTheWindowAndHidesSignInsFromPeople(t *testing.T) {
 	addEvent(t, w, a, "fail2ban", "fail2ban.ban", "info", `{"jail":"sshd","ip":"198.51.100.9"}`, now.Add(-72*time.Hour)) // before the window
 	addEvent(t, w, a, "firewall", "firewall.rules_changed", "warning", `{}`, now.Add(-time.Hour))
 	addEvent(t, w, a, "winsec", "winsec.rdp_failed", "warning", `{"ip":"198.51.100.50","count":7}`, now.Add(-30*time.Minute))
+	addEvent(t, w, a, "winsec", "winsec.ip_blocked", "warning", `{"ip":"198.51.100.50","failed":5}`, now.Add(-29*time.Minute))
 	addEvent(t, w, a, "winsec", "winsec.rdp_ok", "info", `{"user":"Administrator","ip":"198.51.100.60"}`, now.Add(-20*time.Minute))
 	addEvent(t, w, a, "winsec", "winsec.defender_threat", "critical", `{"name":"Trojan:Win32/Test"}`, now.Add(-10*time.Minute))
 	if _, err := w.h.st.Pool().Exec(ctx, `INSERT INTO security_snapshot_state (vps_id, category, status, source_hash, observed_at, received_at, data) VALUES ($1, 'winsec', 'ok', 'h', now(), now(), '{"defender":{"present":true,"enabled":true,"realtime":false}}')`, a); err != nil {
@@ -65,8 +66,9 @@ func TestFleetSummaryCountsTheWindowAndHidesSignInsFromPeople(t *testing.T) {
 			Count int    `json:"count"`
 		} `json:"top_ips"`
 		Jails []struct {
-			Name  string `json:"name"`
-			Count int    `json:"count"`
+			Name     string `json:"name"`
+			Count    int    `json:"count"`
+			Attempts int    `json:"attempts"`
 		} `json:"jails"`
 		Recent []struct {
 			Server string `json:"server"`
@@ -95,7 +97,7 @@ func TestFleetSummaryCountsTheWindowAndHidesSignInsFromPeople(t *testing.T) {
 	if len(got.TopIPs) != 4 || got.TopIPs[0].Jail != "rdp" || got.TopIPs[0].Count != 7 || got.TopIPs[1].Jail != "sshd" {
 		t.Errorf("top addresses: %s", body)
 	}
-	if len(got.Jails) != 2 || got.Jails[0].Name != "sshd" || got.Jails[0].Count != 8 || got.Jails[1].Name != "rdp" || got.Jails[1].Count != 7 {
+	if len(got.Jails) != 2 || got.Jails[0].Name != "sshd" || got.Jails[0].Count != 8 || got.Jails[1].Name != "rdp" || got.Jails[1].Count != 1 || got.Jails[1].Attempts != 7 {
 		t.Errorf("jails: %s", body)
 	}
 	if len(got.Recent) != 4 || got.Recent[len(got.Recent)-1].Type != "firewall.rules_changed" {

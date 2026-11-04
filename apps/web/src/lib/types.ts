@@ -371,7 +371,7 @@ export interface FleetSummary extends FleetSummaryExtra {
 export interface FleetSummaryExtra {
   hourly: { at: string; bans: number; changes: number; rdp: number; alerts: number; access: number }[]
   top_ips: { ip: string; jail: string; count: number; country: string; country_name: string }[]
-  jails: { name: string; count: number }[]
+  jails: { name: string; count: number; attempts?: number }[]
   recent: { server: string; type: string; severity: string; at: string }[]
 }
 export interface Hardware {
