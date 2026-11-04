@@ -207,6 +207,11 @@ export const serversText = {
 
   'srv.inv': 'Что это за машина',
   'srv.inv.edit': 'Изменить',
+  'srv.about': 'О машине',
+  'srv.about.add': 'Добавить заметку',
+  'srv.about.hidden': 'Пустые поля не показываются.',
+  'srv.about.empty': 'Пока ничего не заполнено. Название, роли и заметку можно добавить через «Изменить».',
+  'srv.inv.name': 'Название',
   'srv.inv.title': 'Машина: {name}',
   'srv.inv.roles': 'Роли',
   'srv.inv.os': 'Система',

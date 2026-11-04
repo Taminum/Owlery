@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, StickyNote } from 'lucide-react'
 import { t, type MsgKey } from '../i18n'
 import { api } from '../lib/api'
 import { formatBytes, formatDateTime, formatRate } from '../lib/format'
@@ -42,26 +42,54 @@ function AlertList({ items, empty }: { items: ServerAlert[]; empty: string }) {
   )
 }
 
-function Inventory({ s, onEdit }: { s: Server; onEdit: () => void }) {
-  const none = <span className="text-muted">{t('srv.inv.none')}</span>
-  const rows: [MsgKey, ReactNode][] = [
-    ['srv.inv.roles', s.roles?.length ? <RoleChips roles={s.roles} /> : none],
-    ['srv.inv.os', s.os || s.host?.os || none],
-    ['srv.inv.provider', s.provider || none],
-    ['srv.inv.place', placeText(s) || none],
-    ['srv.inv.group', s.group || none],
-    ['srv.inv.tags', s.tags?.length ? s.tags.join(', ') : none],
-    ['srv.inv.purchased', s.purchased_on ? s.purchased_on.slice(0, 10) : none],
-    ['srv.inv.addresses', s.addresses.length ? <span className="font-mono">{s.addresses.map((a) => a.address).join(', ')}</span> : none],
-    ['srv.inv.note', s.note || none],
-  ]
+/** What is known about the machine, as a note by its name: a button that opens a small panel with only the filled fields. */
+export function About({ s, onEdit }: { s: Server; onEdit: () => void }) {
+  const [open, setOpen] = useState(false)
+  const box = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const away = (e: MouseEvent) => { if (box.current && !box.current.contains(e.target as Node)) setOpen(false) }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('mousedown', away)
+    document.addEventListener('keydown', esc)
+    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc) }
+  }, [open])
+  const rows: [MsgKey, ReactNode][] = []
+  if (s.roles?.length) rows.push(['srv.inv.roles', <RoleChips roles={s.roles} />])
+  if (s.os || s.host?.os) rows.push(['srv.inv.os', s.os || s.host?.os])
+  if (s.provider) rows.push(['srv.inv.provider', s.provider])
+  if (placeText(s)) rows.push(['srv.inv.place', placeText(s)])
+  if (s.group) rows.push(['srv.inv.group', s.group])
+  if (s.tags?.length) rows.push(['srv.inv.tags', s.tags.join(', ')])
+  if (s.purchased_on) rows.push(['srv.inv.purchased', s.purchased_on.slice(0, 10)])
+  if (s.addresses.length) rows.push(['srv.inv.addresses', <span className="font-mono">{s.addresses.map((a) => a.address).join(', ')}</span>])
+  if (s.note) rows.push(['srv.inv.note', s.note])
+  const filled = rows.length > 0
+  if (!filled && !s.can_edit) return null
   return (
-    <Card title={t('srv.inv')} right={s.can_edit ? <GhostButton onClick={onEdit}>{t('srv.inv.edit')}</GhostButton> : undefined}>
-      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-[13px]">
-        {rows.map(([k, v]) => <div key={k} className="contents"><dt className="text-muted">{t(k)}</dt><dd className="min-w-0 break-words">{v}</dd></div>)}
-      </dl>
-      {!s.can_edit && <p className="mt-3 text-xs text-muted">{t('srv.inv.readonly')}</p>}
-    </Card>
+    <div ref={box} className="relative">
+      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}
+        className="inline-flex h-8 items-center gap-1.5 rounded-control border border-line px-3 text-[13px] text-muted hover:text-fg">
+        <StickyNote size={14} aria-hidden />{filled ? t('srv.about') : t('srv.about.add')}
+      </button>
+      {open && (
+        <div role="dialog" aria-label={t('srv.about')} className="absolute right-0 top-full z-20 mt-2 w-[340px] max-w-[88vw] rounded-card border border-line bg-surface p-3 shadow-lg">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <span className="text-[13px] font-semibold">{t('srv.about')}</span>
+            {s.can_edit && <GhostButton onClick={() => { setOpen(false); onEdit() }}>{t('srv.inv.edit')}</GhostButton>}
+          </div>
+          {filled ? (
+            <>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-[13px]">
+                {rows.map(([k, v]) => <div key={k} className="contents"><dt className="text-muted">{t(k)}</dt><dd className="min-w-0 break-words">{v}</dd></div>)}
+              </dl>
+              <p className="mt-2 text-xs text-muted">{t('srv.about.hidden')}</p>
+            </>
+          ) : <p className="text-[13px] text-muted">{t('srv.about.empty')}</p>}
+          {!s.can_edit && <p className="mt-2 text-xs text-muted">{t('srv.inv.readonly')}</p>}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -118,7 +146,7 @@ export default function ServerCard() {
   return (
     <div className="space-y-4">
       <Link to="/servers" className="inline-flex items-center gap-2 text-[13px] text-muted hover:text-fg"><ArrowLeft size={15} aria-hidden />{t('srv.back')}</Link>
-      <PageHead title={s.name} subtitle={[s.os || s.host?.os, s.provider, placeText(s)].filter(Boolean).join(' · ') || t('srv.subtitle')} right={<StatusChip s={s} />} />
+      <PageHead title={s.name} subtitle={[s.os || s.host?.os, s.provider, placeText(s)].filter(Boolean).join(' · ') || t('srv.subtitle')} right={<div className="flex items-center gap-3"><About s={s} onEdit={() => setEditing(true)} /><StatusChip s={s} /></div>} />
 
       <div role="tablist" aria-label={s.name} className="flex flex-wrap gap-2">
         {TABS.filter((x) => (x !== 'terminal' && x !== 'desktop' && x !== 'screen' && x !== 'manage' && x !== 'services') || s.can_edit).map((x) => (
@@ -132,11 +160,8 @@ export default function ServerCard() {
       {tab === 'overview' && (
         <div className="space-y-5">
           <div className="grid gap-4 lg:grid-cols-2">
-            <Inventory s={s} onEdit={() => setEditing(true)} />
-            <div className="space-y-4">
-              <Now s={s} />
-              <Card title={t('srv.openAlerts')}><AlertList items={open} empty={t('srv.noAlerts')} /></Card>
-            </div>
+            <Now s={s} />
+            <Card title={t('srv.openAlerts')}><AlertList items={open} empty={t('srv.noAlerts')} /></Card>
           </div>
           {s.hardware && <HardwareSection hw={s.hardware} host={s.host} />}
         </div>

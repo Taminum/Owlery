@@ -60,6 +60,8 @@ export function placeText(s: VPS): string {
 }
 
 export function InventoryDialog({ s, onClose, onDone }: { s: Server; onClose: () => void; onDone: () => void }) {
+  const [name, setName] = useState(s.name)
+  const [note, setNote] = useState(s.note ?? '')
   const [roles, setRoles] = useState<ServerRole[]>(s.roles ?? [])
   const [os, setOS] = useState(s.os ?? '')
   const [provider, setProvider] = useState(s.provider ?? '')
@@ -76,6 +78,7 @@ export function InventoryDialog({ s, onClose, onDone }: { s: Server; onClose: ()
     setError('')
     try {
       await api.patch(`/api/v1/security/vps/${s.id}`, {
+        name: name.trim(), note: note.trim(),
         inventory: { roles, os, provider, country, city, group, purchased_on: purchased, tags: tags.split(',').map((x) => x.trim()).filter(Boolean) },
       })
       onDone()
@@ -87,6 +90,7 @@ export function InventoryDialog({ s, onClose, onDone }: { s: Server; onClose: ()
   return (
     <Modal title={t('srv.inv.title', { name: s.name })} onClose={onClose} busy={busy}>
       <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); if (!busy) void save() }}>
+        <Field label={t('srv.inv.name')} htmlFor="inv-name"><input id="inv-name" className={inputCls} value={name} onChange={(e) => setName(e.target.value)} maxLength={64} required /></Field>
         <fieldset>
           <legend className="mb-2 text-[13px] text-muted">{t('srv.inv.roles')}</legend>
           <div className="flex flex-wrap gap-2">
@@ -105,6 +109,7 @@ export function InventoryDialog({ s, onClose, onDone }: { s: Server; onClose: ()
           <Field label={t('srv.inv.purchased')} htmlFor="inv-date"><input id="inv-date" type="date" className={inputCls} value={purchased} onChange={(e) => setPurchased(e.target.value)} /></Field>
         </div>
         <Field label={t('srv.inv.tags')} hint={t('srv.inv.tagsHint')} htmlFor="inv-tags"><input id="inv-tags" className={inputCls} value={tags} onChange={(e) => setTags(e.target.value)} /></Field>
+        <Field label={t('srv.inv.note')} htmlFor="inv-note"><textarea id="inv-note" className={`${inputCls} h-auto py-2`} rows={3} value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} /></Field>
         {error && <p role="alert" className="text-[13px] text-red">{error}</p>}
         <div className="flex justify-end gap-3">
           <GhostButton onClick={onClose} disabled={busy}>{t('common.cancel')}</GhostButton>
