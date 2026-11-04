@@ -7,7 +7,7 @@ afterEach(() => vi.unstubAllGlobals())
 
 const settings = { mode: 'watch', threshold: 5, window_min: 10, ttl_hours: 24, whitelist: ['203.0.113.0/24'], share: true }
 const view = (over: object = {}) => ({
-  settings, supported: true, can_block: false, online: true, can_edit: true,
+  settings, supported: true, can_block: false, updated: true, online: true, can_edit: true,
   state: { mode: 'watch', threshold: 5, window_min: 10, ttl_hours: 24, total: 0, active: [], would: [{ ip: '198.51.100.7', since: '2026-11-04T10:00:00Z', failed: 6 }] },
   ...over,
 })
@@ -58,5 +58,13 @@ describe('Защита RDP', () => {
     await screen.findByText('198.51.100.7')
     expect(screen.queryByRole('button', { name: 'Сохранить' })).toBeNull()
     expect(screen.getByRole('radio', { name: 'Блокирует' })).toBeDisabled()
+  })
+})
+
+describe('Защита RDP, an agent that is too old', () => {
+  it('says the agent must be updated instead of pretending the settings reach it', async () => {
+    backend(view({ updated: false }))
+    render(<RdpProtect serverId="s1" />)
+    expect(await screen.findByText(/старой версии/)).toBeInTheDocument()
   })
 })

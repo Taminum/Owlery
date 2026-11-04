@@ -104,7 +104,8 @@ export function RdpProtect({ serverId }: { serverId: string }) {
   return (
     <div className="space-y-4">
       {!v.supported && <Notice>{t('prot.unsupported')}</Notice>}
-      {v.supported && draft.mode === 'block' && !v.can_block && <Notice>{t('prot.noPermission')}</Notice>}
+      {v.supported && !v.updated && <Notice>{t('prot.old')}</Notice>}
+      {v.supported && v.updated && draft.mode === 'block' && !v.can_block && <Notice>{t('prot.noPermission')}</Notice>}
       {v.supported && !v.online && <Notice>{t('prot.offline')}</Notice>}
       {st?.error && <Notice>{st.error}</Notice>}
       {err && <p role="alert" className="text-[13px] text-red">{err}</p>}

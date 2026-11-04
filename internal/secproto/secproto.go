@@ -530,7 +530,10 @@ type Winsec struct {
 // networks and the whitelist are never blocked.
 
 const (
-	CapBlock     = "ip_block"
+	CapBlock = "ip_block"
+	// CapBlockCfg is announced by an agent that understands block_cfg and block_unblock. An older agent drops the
+	// connection on a message it does not know, so the server sends these to agents that announced this and no others.
+	CapBlockCfg  = "ip_block_cfg"
 	MaxWinBlocks = 200
 
 	BlockOff   = "off"   // counts nothing, blocks nothing
