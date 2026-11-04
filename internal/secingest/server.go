@@ -203,6 +203,16 @@ func (s *Server) session(ctx context.Context, c *websocket.Conn, agent store.Sec
 		defer s.Ops.Register(agent.ID, func(ctx context.Context, v any) error { return send(ctx, c, v) })()
 	}
 	s.log().Info("security agent connected", "agent", agent.ID, "vps", agent.VPSID, "ack_seq", ack)
+	// A Windows agent is told how its address blocker is set up. It keeps what it was told, so this only matters the
+	// first time and after a change made while it was away.
+	for _, k := range caps {
+		if k == secproto.CapWinsec {
+			if b, err := s.Store.GetBlockSettings(ctx, agent.VPSID); err == nil {
+				_ = send(ctx, c, b.Message())
+			}
+			break
+		}
+	}
 
 	for {
 		rctx, cancel := context.WithTimeout(ctx, s.idle())

@@ -69,3 +69,36 @@ func TestWinsecAgentRestartCountsEverythingAgainAndDefenderSwitchedOffIsCritical
 		t.Errorf("nothing changed: %+v", got)
 	}
 }
+
+func TestBlockerEventsSayWhatWasBlockedLiftedAndWouldHaveBeen(t *testing.T) {
+	d := secproto.WinDefender{Present: true, Enabled: true, Realtime: true, SignatureDays: 1}
+	t0 := time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
+	until := t0.Add(24 * time.Hour)
+	old := secproto.WinBlockEntry{IP: "203.0.113.1", Since: t0.Add(-48 * time.Hour), Failed: 5}
+	prev := win(0, 0, nil, nil, nil, d)
+	prev.Win.Block = &secproto.WinBlock{Mode: secproto.BlockOn, Active: []secproto.WinBlockEntry{old}}
+	cur := win(0, 0, nil, nil, nil, d)
+	cur.Win.Block = &secproto.WinBlock{Mode: secproto.BlockOn,
+		Active: []secproto.WinBlockEntry{{IP: "198.51.100.7", Since: t0, Until: &until, Failed: 5}},
+		Would:  []secproto.WinBlockEntry{{IP: "198.51.100.8", Since: t0, Failed: 6}}}
+	ev := byType(Diff(secproto.CatWinsec, prev, cur))
+	if b := ev["winsec.ip_blocked"]; len(b) != 1 || b[0].Payload["ip"] != "198.51.100.7" || b[0].Severity != SevWarning || b[0].Payload["until"] == nil {
+		t.Errorf("blocked: %+v", ev["winsec.ip_blocked"])
+	}
+	if u := ev["winsec.ip_unblocked"]; len(u) != 1 || u[0].Payload["ip"] != "203.0.113.1" {
+		t.Errorf("unblocked: %+v", u)
+	}
+	if w := ev["winsec.ip_would_block"]; len(w) != 1 || w[0].Payload["ip"] != "198.51.100.8" || w[0].Severity != SevInfo {
+		t.Errorf("would: %+v", w)
+	}
+
+	// The first report that has a blocker in it says nothing about what was already there.
+	first := win(0, 0, nil, nil, nil, d)
+	if got := Diff(secproto.CatWinsec, first, cur); len(byType(got)["winsec.ip_blocked"]) != 0 {
+		t.Errorf("an agent that was just updated must not announce old blocks: %+v", got)
+	}
+	// And the same report twice says nothing new.
+	if got := byType(Diff(secproto.CatWinsec, cur, cur)); len(got["winsec.ip_blocked"])+len(got["winsec.ip_would_block"])+len(got["winsec.ip_unblocked"]) != 0 {
+		t.Errorf("a repeat: %+v", got)
+	}
+}

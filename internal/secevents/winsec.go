@@ -21,6 +21,7 @@ func diffWinsec(prev, cur Snap) []Event {
 		return out
 	}
 	p, c := prev.Win, cur.Win
+	out = append(out, diffBlock(p.Block, c.Block)...)
 	restarted := c.RemoteFailed < p.RemoteFailed || c.RemoteOK < p.RemoteOK
 
 	if delta := c.RemoteFailed - p.RemoteFailed; restarted || delta > 0 {
@@ -99,4 +100,45 @@ func failedEvent(ip string, n int) Event {
 	}
 	return Event{Category: secproto.CatWinsec, Type: "winsec.rdp_failed", Severity: sev, Key: "failed|" + ip,
 		Payload: map[string]any{"ip": ip, "count": n, "source": SourceStateDiff}}
+}
+
+// diffBlock turns what the address blocker did between two readings into events. Nothing is said about what was already
+// there when the blocker first showed up in a report (an agent that was just updated).
+func diffBlock(p, c *secproto.WinBlock) []Event {
+	if p == nil || c == nil {
+		return nil
+	}
+	key := func(e secproto.WinBlockEntry) string { return e.IP + "|" + strconv.FormatInt(e.Since.Unix(), 10) }
+	had := func(list []secproto.WinBlockEntry) map[string]secproto.WinBlockEntry {
+		m := map[string]secproto.WinBlockEntry{}
+		for _, e := range list {
+			m[key(e)] = e
+		}
+		return m
+	}
+	pa, pw, ca := had(p.Active), had(p.Would), had(c.Active)
+	var out []Event
+	payload := func(e secproto.WinBlockEntry) map[string]any {
+		m := map[string]any{"ip": e.IP, "failed": e.Failed, "source": SourceStateDiff}
+		if e.Until != nil {
+			m["until"] = e.Until.UTC().Format("2006-01-02T15:04:05Z")
+		}
+		return m
+	}
+	for _, e := range c.Active {
+		if _, ok := pa[key(e)]; !ok && len(out) < 20 {
+			out = append(out, Event{Category: secproto.CatWinsec, Type: "winsec.ip_blocked", Severity: SevWarning, Key: "blk|" + key(e), Payload: payload(e)})
+		}
+	}
+	for _, e := range p.Active {
+		if _, ok := ca[key(e)]; !ok && len(out) < 20 {
+			out = append(out, Event{Category: secproto.CatWinsec, Type: "winsec.ip_unblocked", Severity: SevInfo, Key: "unb|" + key(e), Payload: payload(e)})
+		}
+	}
+	for _, e := range c.Would {
+		if _, ok := pw[key(e)]; !ok && len(out) < 20 {
+			out = append(out, Event{Category: secproto.CatWinsec, Type: "winsec.ip_would_block", Severity: SevInfo, Key: "wb|" + key(e), Payload: payload(e)})
+		}
+	}
+	return out
 }

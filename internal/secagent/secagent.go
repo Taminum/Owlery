@@ -17,6 +17,7 @@ import (
 	"log/slog"
 	"math/big"
 	"net/http"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -163,7 +164,8 @@ func Run(ctx context.Context, cfg Config) error {
 	a.hw = seccollect.NewHardware(seccollect.ExecRunner{Timeout: 90 * time.Second})
 	if runtime.GOOS == "windows" {
 		a.winsec = seccollect.NewWinsec(seccollect.ExecRunner{})
-		a.winsec.SetBlocker(ipblock.New(ipblock.NewFirewall(), blockStatePath(cfg), ipblock.DefaultConfig(), cfg.AllowBlock))
+		a.blocker = ipblock.New(ipblock.NewFirewall(), blockStatePath(cfg), ipblock.DefaultConfig(), cfg.AllowBlock)
+		a.winsec.SetBlocker(a.blocker)
 	}
 	a.socks.Containers = func() map[int]string { return seccollect.ContainerPorts(cfg.ContainersFile) }
 	back := secshell.Dialer{BaseURL: strings.TrimRight(cfg.ServerURL, "/"), Token: a.token, Client: hc}
@@ -203,22 +205,23 @@ func Run(ctx context.Context, cfg Config) error {
 }
 
 type agent struct {
-	cfg    Config
-	url    string
-	hc     *http.Client
-	epoch  string
-	seq    int64
-	helper f2bhelper.Client
-	done   *executed
-	cmdMu  sync.Mutex // one command at a time, in the order they arrive
-	probes chan struct{}
-	admins chan struct{}
-	socks  *seccollect.SocketWatch
-	winsec *seccollect.Winsec // Windows only: sign-ins from other machines and Defender
-	hw     *seccollect.HardwareReader
-	host   *seccollect.HostReader
-	runCtx context.Context // lives as long as the agent: a terminal outlives a reconnect of the reports
-	shells *secshell.Runner
+	cfg     Config
+	url     string
+	hc      *http.Client
+	epoch   string
+	seq     int64
+	helper  f2bhelper.Client
+	done    *executed
+	cmdMu   sync.Mutex // one command at a time, in the order they arrive
+	probes  chan struct{}
+	admins  chan struct{}
+	socks   *seccollect.SocketWatch
+	winsec  *seccollect.Winsec // Windows only: sign-ins from other machines and Defender
+	blocker *ipblock.Engine    // Windows only: shuts out addresses that guess passwords
+	hw      *seccollect.HardwareReader
+	host    *seccollect.HostReader
+	runCtx  context.Context // lives as long as the agent: a terminal outlives a reconnect of the reports
+	shells  *secshell.Runner
 	// dialBack connects back to Owlery for one session (terminal or tunnel).
 	dialBack func(ctx context.Context, path, id string) (*websocket.Conn, error)
 }
@@ -510,6 +513,22 @@ func (a *agent) reader(ctx context.Context, c *websocket.Conn, ban bool, acks ch
 					a.cfg.Log.Warn("web service", "port", req.Port, "err", err)
 				}
 			}()
+		case "block_cfg":
+			var cfg secproto.BlockCfg
+			if len(b) > 16<<10 || json.Unmarshal(b, &cfg) != nil {
+				fail(errors.New("secagent: a bad blocker setting"))
+				return
+			}
+			a.applyBlockCfg(ctx, cfg)
+		case "block_unblock":
+			var req secproto.BlockUnblock
+			if json.Unmarshal(b, &req) != nil || len(req.IP) > 45 {
+				fail(errors.New("secagent: a bad unblock request"))
+				return
+			}
+			if a.blocker != nil && a.blocker.Unblock(ctx, req.IP) {
+				a.cfg.Log.Info("an address was unblocked from the server card", "ip", req.IP)
+			}
 		case "admin_req":
 			var req secproto.AdminReq
 			if json.Unmarshal(b, &req) != nil || req.ID == "" || len(req.ID) > 64 {
@@ -769,6 +788,27 @@ func bannedSet(s seccollect.Snapshot) map[string]bool {
 		}
 	}
 	return m
+}
+
+// applyBlockCfg sets the blocker up as the server says. A machine that has not been set up to block cannot be talked into
+// it: the engine drops block mode to watch on its own.
+func (a *agent) applyBlockCfg(ctx context.Context, m secproto.BlockCfg) {
+	if a.blocker == nil {
+		return
+	}
+	c := ipblock.Config{Mode: m.Mode, Threshold: m.Threshold, Window: time.Duration(m.WindowMin) * time.Minute, TTL: time.Duration(m.TTLHours) * time.Hour}
+	if len(m.Whitelist) > 200 {
+		m.Whitelist = m.Whitelist[:200]
+	}
+	for _, w := range m.Whitelist {
+		if p, err := netip.ParsePrefix(w); err == nil {
+			c.Whitelist = append(c.Whitelist, p.Masked())
+		} else if ip, err := netip.ParseAddr(w); err == nil {
+			ip = ip.Unmap()
+			c.Whitelist = append(c.Whitelist, netip.PrefixFrom(ip, ip.BitLen()))
+		}
+	}
+	a.blocker.SetConfig(ctx, c)
 }
 
 // blockStatePath is where the address blocker keeps what it blocked and how it is set up: next to the agent's other
