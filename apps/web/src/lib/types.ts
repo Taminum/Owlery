@@ -364,7 +364,7 @@ export interface FleetSummary extends FleetSummaryExtra {
   from: string; to: string
   bans: { total: number; servers: { name: string; count: number }[] }
   changes: { total: number; items: { server: string; type: string; at: string }[] }
-  win: { machines: number; rdp_failed: number; rdp_ok: number; threats: number; defender_off: number }
+  win: { machines: number; rdp_failed: number; rdp_ok: number; threats: number; defender_off: number; defender_down: number }
   tls: { problems: number; nearest_end: string | null; nearest_host: string }
   owlery: { logins: number; failed_logins: number; terminals: number; screens: number; desktops: number } | null
 }

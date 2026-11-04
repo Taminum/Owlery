@@ -281,9 +281,9 @@ export default function Home() {
               <>
                 <Tile to="/security" id="rdp" icon={Monitor} color={C.cyan} label={t('home.kpi.rdp')} value={formatInt(sum.win.rdp_failed)}
                   sub={t('home.kpi.rdpSub', { n: sum.win.rdp_ok })} series={series(sum, (h) => h.rdp)} />
-                <Tile to="/security" id="defender" icon={sum.win.defender_off > 0 || sum.win.threats > 0 ? ShieldOff : ShieldCheck} color={sum.win.defender_off > 0 || sum.win.threats > 0 ? C.red : C.green}
+                <Tile to="/security" id="defender" icon={sum.win.defender_down > 0 || sum.win.defender_off > 0 || sum.win.threats > 0 ? ShieldOff : ShieldCheck} color={sum.win.threats > 0 || sum.win.defender_off > 0 ? C.red : sum.win.defender_down > 0 ? C.amber : C.green}
                   label={t('home.kpi.defender')} value={formatInt(sum.win.threats)}
-                  sub={sum.win.defender_off > 0 ? t('home.kpi.defenderOff', { n: sum.win.defender_off }) : sum.win.threats > 0 ? t('home.kpi.defenderFound') : t('home.kpi.defenderClean', { n: sum.win.machines })} />
+                  sub={sum.win.defender_down > 0 ? t('home.kpi.defenderDown', { n: sum.win.defender_down }) : sum.win.defender_off > 0 ? t('home.kpi.defenderOff', { n: sum.win.defender_off }) : sum.win.threats > 0 ? t('home.kpi.defenderFound') : t('home.kpi.defenderClean', { n: sum.win.machines })} />
               </>
             )}
           </div>

@@ -36,7 +36,7 @@ const server = (over: object) => ({
 const hours = (bans: number[]) => bans.map((b, i) => ({ at: new Date(Date.UTC(2026, 10, 3, i)).toISOString(), bans: b, changes: 0, rdp: 0, alerts: 0, access: 0 }))
 const summary = (over: object = {}) => ({
   from: '2026-11-03T00:00:00Z', to: '2026-11-04T00:00:00Z', hourly: hours([0, 0, 0]), top_ips: [], jails: [], recent: [],
-  win: { machines: 0, rdp_failed: 0, rdp_ok: 0, threats: 0, defender_off: 0 },
+  win: { machines: 0, rdp_failed: 0, rdp_ok: 0, threats: 0, defender_off: 0, defender_down: 0 },
   bans: { total: 0, servers: [] }, changes: { total: 0, items: [] }, tls: { problems: 0, nearest_end: null, nearest_host: '' },
   owlery: { logins: 3, failed_logins: 1, terminals: 1, screens: 0, desktops: 0 }, ...over,
 })
@@ -103,7 +103,7 @@ describe('Home', () => {
 
   it('shows the Windows tiles only when some machine reports them, and marks a Defender find in red', async () => {
     backend([server({})], summary({
-      win: { machines: 2, rdp_failed: 41, rdp_ok: 3, threats: 1, defender_off: 0 },
+      win: { machines: 2, rdp_failed: 41, rdp_ok: 3, threats: 1, defender_off: 0, defender_down: 0 },
       jails: [{ name: 'rdp', count: 41 }],
     }))
     renderHome()
@@ -126,5 +126,14 @@ describe('Home', () => {
     backend([])
     renderHome()
     expect(await screen.findByRole('link', { name: 'Добавить первую' })).toHaveAttribute('href', '/servers')
+  })
+})
+
+describe('Home Defender', () => {
+  it('says so when Defender is the antivirus on a machine and its protection is off now, even if nothing was found', async () => {
+    backend([server({})], summary({ win: { machines: 2, rdp_failed: 0, rdp_ok: 0, threats: 0, defender_off: 0, defender_down: 1 } }))
+    renderHome()
+    const def = (await screen.findByText('Защитник Windows')).closest('a') as HTMLElement
+    expect(within(def).getByText('защита выключена на машинах: 1')).toBeInTheDocument()
   })
 })
