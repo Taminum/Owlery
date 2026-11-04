@@ -190,6 +190,7 @@ func applyCombo(id byte) {
 
 // typeText types text as Unicode characters, whatever the machine's keyboard layout is.
 func typeText(text string) {
+	slog.Info("typing text", "chars", len([]rune(text)))
 	var ins []input
 	for _, u := range utf16.Encode([]rune(text)) {
 		ins = append(ins, keybdUnicode(u, 0), keybdUnicode(u, keyKeyUp))

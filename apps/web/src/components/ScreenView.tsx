@@ -28,6 +28,8 @@ const MSG_SELECT = 8 // one byte: the monitor to show
 const MSG_QUALITY = 9 // one byte: 0 auto, 1 high, 2 medium, 3 low
 const MSG_COMBO = 10 // one byte: 1 Win, 2 Alt+Tab, 3 Ctrl+Alt+Del
 const MSG_TEXT = 11 // UTF-8 text to type
+const MSG_NOTICE = 21 // a note to show over the picture while the machine cannot give one (empty clears it)
+const TYPE_CHUNK = 600 // characters per message, so that Russian text stays under the helper's limit
 
 function message(type: number, payload: Uint8Array): Uint8Array<ArrayBuffer> {
   const out = new Uint8Array(5 + payload.length)
@@ -61,6 +63,8 @@ export function ScreenView({ serverId }: { serverId: string }) {
   const pickFile = useRef<HTMLInputElement>(null)
   const [client, setClient] = useState<FsClient | null>(null) // the same client as fs, for rendering
   const [files, setFiles] = useState(false)
+  const [notice, setNotice] = useState('')
+  const [typing, setTyping] = useState<string | null>(null) // the text being prepared for typing, or null when the box is closed
   const [transfer, setTransfer] = useState('')
 
   useEffect(() => {
@@ -74,7 +78,7 @@ export function ScreenView({ serverId }: { serverId: string }) {
     let buf = new Uint8Array(0)
     let told = '' // the helper's own explanation, shown when the connection ends
     let drawing = Promise.resolve()
-    const finish = (key: string) => { if (!disposed) { setState('closed'); setReason(told || key); setSession(0) } }
+    const finish = (key: string) => { if (!disposed) { setState('closed'); setReason(told || key); setSession(0); setNotice('') } }
 
     // H.264 goes through the browser's own decoder (hardware where there is one); the still pictures are the fallback of
     // a machine without a video encoder.
@@ -133,6 +137,8 @@ export function ScreenView({ serverId }: { serverId: string }) {
             shown()
           } catch { /* a broken frame is skipped */ }
         })
+      } else if (type === MSG_NOTICE) {
+        setNotice(new TextDecoder().decode(p))
       } else if (type === MSG_ERROR) {
         told = new TextDecoder().decode(p)
       } else if (type === MSG_END) {
@@ -189,6 +195,7 @@ export function ScreenView({ serverId }: { serverId: string }) {
     // Keys go to the machine only while the screen has focus, so the rest of the page keeps its keyboard.
     const host = box.current
     const key = (down: boolean) => (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLElement && e.target.closest('textarea, input')) return // typing in the page's own boxes stays in the page
       e.preventDefault()
       const code = new TextEncoder().encode(e.code)
       if (code.length === 0 || code.length > 40) return
@@ -243,9 +250,17 @@ export function ScreenView({ serverId }: { serverId: string }) {
   }
   const stop = () => { setState('closed'); setReason(t('scr.ended')); setSession(0) }
   const combo = (id: number) => { sender.current(MSG_COMBO, new Uint8Array([id])); box.current?.focus() }
+  // Opens the box for text to be typed on the machine, with the clipboard already in it where the browser allows reading
+  // it; otherwise the person pastes into the box, which a browser always allows.
   const pasteText = async () => {
-    const text = await navigator.clipboard.readText().catch(() => window.prompt(t('scr.pasteAsk')) ?? '')
-    if (text) sender.current(MSG_TEXT, new TextEncoder().encode(text.slice(0, 4000)))
+    setTyping(await navigator.clipboard.readText().catch(() => ''))
+  }
+  const typeIt = () => {
+    const text = typing ?? ''
+    // Sent in pieces by characters (not bytes), so that long and Cyrillic text never meets the helper's size limit.
+    const chars = Array.from(text)
+    for (let i = 0; i < chars.length; i += TYPE_CHUNK) sender.current(MSG_TEXT, new TextEncoder().encode(chars.slice(i, i + TYPE_CHUNK).join('')))
+    setTyping(null)
     box.current?.focus()
   }
   // "Файл": the page sends one file into the person's Downloads folder, without opening the file browser.
@@ -319,6 +334,17 @@ export function ScreenView({ serverId }: { serverId: string }) {
             <button type="button" className="h-7 rounded-control border border-line px-2 text-fg hover:border-red" aria-label={t('scr.close')} onClick={stop}><X size={14} aria-hidden /></button>
           </div>
           <div ref={box} tabIndex={0} className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden outline-none">
+            {notice && <p className="absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-control border border-line bg-surface px-3 py-1.5 text-xs text-fg shadow" role="status">{notice}</p>}
+            {typing !== null && (
+              <div className="absolute inset-x-0 top-0 z-20 mx-auto mt-3 w-[min(32rem,92%)] rounded-control border border-line bg-surface p-3 shadow">
+                <p className="mb-2 text-xs text-muted">{t('scr.pasteHint')}</p>
+                <textarea autoFocus className="h-28 w-full rounded-control border border-line bg-bg p-2 text-[13px] text-fg" value={typing} onChange={(e) => setTyping(e.target.value)} aria-label={t('scr.paste')} />
+                <div className="mt-2 flex items-center justify-end gap-2">
+                  <button type="button" className={btn} onClick={() => { setTyping(null); box.current?.focus() }}>{t('common.cancel')}</button>
+                  <button type="button" className={btn} disabled={!typing} onClick={typeIt}>{t('scr.type')}</button>
+                </div>
+              </div>
+            )}
             {files && client && <ScreenFiles fs={client} onClose={() => setFiles(false)} />}
             <canvas ref={canvas} className="max-h-full max-w-full cursor-default object-contain" />
           </div>

@@ -275,6 +275,7 @@ func stillPictures(ctx context.Context, stop context.CancelFunc, c net.Conn) {
 	var foll follower
 	defer foll.close()
 	failures := 0
+	everOK, noticed := false, false
 	tick := time.NewTicker(frameInterval)
 	defer tick.Stop()
 	var prev []byte
@@ -288,6 +289,15 @@ func stillPictures(ctx context.Context, stop context.CancelFunc, c net.Conn) {
 		img, err := captureScreen()
 		if err != nil {
 			foll.forget() // the desktop the thread was bound to may be gone (a session that was reconnected)
+			if everOK && connectState(mySession()) != wtsDisconnected {
+				// The screen was shown a moment ago and the session is still connected: its client has most likely
+				// stopped drawing (a minimised remote-desktop window). Keep the view and wait for pictures to return.
+				if !noticed {
+					noticed = true
+					_ = writeNotice(c, "Экран сейчас не отдаёт картинку (возможно, окно удалённого рабочего стола свёрнуто). Жду…")
+				}
+				continue
+			}
 			if failures == 4 && attachToConsole(&foll) {
 				failures = 0 // give the console's display a fresh set of attempts
 			}
@@ -297,6 +307,11 @@ func stillPictures(ctx context.Context, stop context.CancelFunc, c net.Conn) {
 			continue // a single failed capture is not worth ending the session over
 		}
 		failures = 0
+		everOK = true
+		if noticed {
+			noticed = false
+			_ = writeNotice(c, "")
+		}
 		if bytes.Equal(prev, img.Pix) {
 			continue // nothing moved on the screen: nothing to send
 		}
@@ -322,6 +337,7 @@ func streamVideo(ctx context.Context, c net.Conn, ffmpeg string) error {
 	defer foll.close()
 
 	failures := 0
+	everOK, noticed := false, false
 	var cmd *exec.Cmd
 	var stdin io.WriteCloser
 	var curW, curH, curQ int
@@ -347,6 +363,15 @@ func streamVideo(ctx context.Context, c net.Conn, ffmpeg string) error {
 		raw, w, h, err := captureRaw()
 		if err != nil || w == 0 || h == 0 {
 			foll.forget()
+			if everOK && connectState(mySession()) != wtsDisconnected {
+				// The screen was shown a moment ago and the session is still connected: its client has most likely
+				// stopped drawing (a minimised remote-desktop window). Keep the view and wait for pictures to return.
+				if !noticed {
+					noticed = true
+					_ = writeNotice(c, "Экран сейчас не отдаёт картинку (возможно, окно удалённого рабочего стола свёрнуто). Жду…")
+				}
+				continue
+			}
 			if failures == 4 && attachToConsole(&foll) {
 				failures = 0 // give the console's display a fresh set of attempts
 			}
@@ -356,6 +381,11 @@ func streamVideo(ctx context.Context, c net.Conn, ffmpeg string) error {
 			continue // a single failed capture is not worth ending the session over
 		}
 		failures = 0
+		everOK = true
+		if noticed {
+			noticed = false
+			_ = writeNotice(c, "")
+		}
 		if q := int(quality.Load()); cmd == nil || w != curW || h != curH || q != curQ {
 			stopEncoder()
 			var stdout io.ReadCloser
