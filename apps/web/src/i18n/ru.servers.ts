@@ -322,6 +322,7 @@ export const serversText = {
   'home.kpi.rdp': 'Неудачные входы по RDP',
   'home.kpi.rdpSub': 'успешных входов: {n}',
   'home.kpi.defender': 'Защитник Windows',
+  'home.kpi.defenderDown': 'защита выключена на машинах: {n}',
   'home.kpi.defenderOff': 'защита выключалась: {n}',
   'home.kpi.defenderFound': 'находки за сутки',
   'home.kpi.defenderClean': 'угроз нет, машин: {n}',

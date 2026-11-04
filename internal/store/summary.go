@@ -30,11 +30,12 @@ type FleetSummary struct {
 		Items []SummaryChange `json:"items"`
 	} `json:"changes"`
 	Win struct {
-		Machines    int `json:"machines"`     // Windows machines whose agent reads the event log
-		RDPFailed   int `json:"rdp_failed"`   // failed remote sign-ins in the window
-		RDPOK       int `json:"rdp_ok"`       // remote-desktop sign-ins that worked
-		Threats     int `json:"threats"`      // things Defender found
-		DefenderOff int `json:"defender_off"` // times Defender's live protection was seen switched off
+		Machines     int `json:"machines"`      // Windows machines whose agent reads the event log
+		RDPFailed    int `json:"rdp_failed"`    // failed remote sign-ins in the window
+		RDPOK        int `json:"rdp_ok"`        // remote-desktop sign-ins that worked
+		Threats      int `json:"threats"`       // things Defender found
+		DefenderOff  int `json:"defender_off"`  // times Defender's live protection was seen switched off
+		DefenderDown int `json:"defender_down"` // machines where Defender is the antivirus and its live protection is off now
 	} `json:"win"`
 	TLS struct {
 		Problems    int        `json:"problems"`
@@ -116,6 +117,10 @@ func (s *Store) FleetSummary(ctx context.Context, sc Scope, from, to time.Time) 
 		return out, err
 	}
 	if out.Win.Machines > 0 {
+		if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM security_snapshot_state st JOIN security_vps v ON v.id = st.vps_id WHERE `+pred+` AND st.category = 'winsec' AND st.status = 'ok'
+			AND st.data->'defender'->>'present' = 'true' AND st.data->'defender'->>'realtime' = 'false'`, args[:n]...).Scan(&out.Win.DefenderDown); err != nil {
+			return out, err
+		}
 		if err := s.pool.QueryRow(ctx, `SELECT COALESCE(sum(CASE WHEN e.type = 'winsec.rdp_failed' THEN COALESCE((e.payload->>'count')::int, 0) END), 0)::int,
 				(count(*) FILTER (WHERE e.type = 'winsec.rdp_ok'))::int, (count(*) FILTER (WHERE e.type = 'winsec.defender_threat'))::int, (count(*) FILTER (WHERE e.type = 'winsec.defender_off'))::int`+
 			` FROM security_events e JOIN security_vps v ON v.id = e.vps_id WHERE `+pred+win+` AND e.category = 'winsec'`, args...).Scan(&out.Win.RDPFailed, &out.Win.RDPOK, &out.Win.Threats, &out.Win.DefenderOff); err != nil {
