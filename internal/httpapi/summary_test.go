@@ -100,8 +100,8 @@ func TestFleetSummaryCountsTheWindowAndHidesSignInsFromPeople(t *testing.T) {
 	if len(got.Jails) != 2 || got.Jails[0].Name != "sshd" || got.Jails[0].Count != 8 || got.Jails[1].Name != "rdp" || got.Jails[1].Count != 1 || got.Jails[1].Attempts != 7 {
 		t.Errorf("jails: %s", body)
 	}
-	if len(got.Recent) != 4 || got.Recent[len(got.Recent)-1].Type != "firewall.rules_changed" {
-		t.Errorf("recent should skip single bans: %s", body)
+	if len(got.Recent) != 5 || got.Recent[len(got.Recent)-1].Type != "firewall.rules_changed" {
+		t.Errorf("recent should skip single bans but show a block by the address blocker: %s", body)
 	}
 
 	// A person who is not the owner sees the machines they may see, but never the sign-in counts.
