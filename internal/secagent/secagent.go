@@ -29,6 +29,7 @@ import (
 
 	"github.com/Taminum/Owlery/internal/adminops"
 	"github.com/Taminum/Owlery/internal/f2bhelper"
+	"github.com/Taminum/Owlery/internal/ipblock"
 	"github.com/Taminum/Owlery/internal/seccollect"
 	"github.com/Taminum/Owlery/internal/secproto"
 	"github.com/Taminum/Owlery/internal/secshell"
@@ -83,6 +84,9 @@ type Config struct {
 	// services, startup entries, sessions, the event log and connections. The agent is the system account there, so this
 	// is as strong as a terminal and is off unless the machine was set up for it.
 	AllowAdmin bool
+	// AllowBlock is the machine's explicit permission to shut out addresses that guess passwords with Windows Firewall
+	// rules. Without it the blocker only watches and says what it would have blocked.
+	AllowBlock bool
 	// RemoteSecretFile is the screen-sharing helper's shared secret (Windows). The agent (a system service) launches the
 	// helper — this same binary, run as "screen-helper" — into the signed-in person's own session as the system account,
 	// so it can see and drive that screen including the secure desktop (UAC and the lock screen); the secret, which only
@@ -159,6 +163,7 @@ func Run(ctx context.Context, cfg Config) error {
 	a.hw = seccollect.NewHardware(seccollect.ExecRunner{Timeout: 90 * time.Second})
 	if runtime.GOOS == "windows" {
 		a.winsec = seccollect.NewWinsec(seccollect.ExecRunner{})
+		a.winsec.SetBlocker(ipblock.New(ipblock.NewFirewall(), blockStatePath(cfg), ipblock.DefaultConfig(), cfg.AllowBlock))
 	}
 	a.socks.Containers = func() map[int]string { return seccollect.ContainerPorts(cfg.ContainersFile) }
 	back := secshell.Dialer{BaseURL: strings.TrimRight(cfg.ServerURL, "/"), Token: a.token, Client: hc}
@@ -292,6 +297,9 @@ func (a *agent) capabilities(ban bool) []string {
 	}
 	if a.cfg.AllowWeb {
 		caps = append(caps, secproto.CapWeb)
+	}
+	if a.cfg.AllowBlock && a.winsec != nil {
+		caps = append(caps, secproto.CapBlock)
 	}
 	if a.remoteReady() {
 		caps = append(caps, secproto.CapRemote)
@@ -761,6 +769,18 @@ func bannedSet(s seccollect.Snapshot) map[string]bool {
 		}
 	}
 	return m
+}
+
+// blockStatePath is where the address blocker keeps what it blocked and how it is set up: next to the agent's other
+// files on Windows, in the state directory when one was given.
+func blockStatePath(cfg Config) string {
+	if cfg.StateDir != "" {
+		return filepath.Join(cfg.StateDir, "ipblock.json")
+	}
+	if pd := os.Getenv("ProgramData"); pd != "" {
+		return filepath.Join(pd, "Owlery", "ipblock.json")
+	}
+	return ""
 }
 
 func newHostReader(cfg Config) *seccollect.HostReader {

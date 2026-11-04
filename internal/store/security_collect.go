@@ -234,6 +234,25 @@ func ParseSnapshotData(category, status string, raw json.RawMessage) (secevents.
 		if v.RemoteFailed < 0 || v.RemoteOK < 0 || v.ThreatsTotal < 0 {
 			return snap, nil, "", ErrBadSnapshot
 		}
+		if b := v.Block; b != nil {
+			if len(b.Active) > secproto.MaxWinBlocks || len(b.Would) > secproto.MaxWinBlocks || len(b.Error) > 200 || b.Total < 0 ||
+				(b.Mode != secproto.BlockOff && b.Mode != secproto.BlockWatch && b.Mode != secproto.BlockOn) {
+				return snap, nil, "", ErrBadSnapshot
+			}
+			for _, list := range [][]secproto.WinBlockEntry{b.Active, b.Would} {
+				for _, e := range list {
+					if len(e.IP) > 45 || e.Failed < 0 {
+						return snap, nil, "", ErrBadSnapshot
+					}
+				}
+			}
+			if b.Active == nil {
+				b.Active = []secproto.WinBlockEntry{}
+			}
+			if b.Would == nil {
+				b.Would = []secproto.WinBlockEntry{}
+			}
+		}
 		if v.Sources == nil {
 			v.Sources = []secproto.WinSource{}
 		}

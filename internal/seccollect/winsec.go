@@ -12,6 +12,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/Taminum/Owlery/internal/ipblock"
 	"github.com/Taminum/Owlery/internal/secproto"
 )
 
@@ -32,6 +33,7 @@ type Winsec struct {
 	defender                 secproto.WinDefender
 	defAt                    time.Time
 	defOK                    bool // the Defender log exists on this machine
+	block                    *ipblock.Engine
 }
 
 const (
@@ -41,6 +43,9 @@ const (
 	defenderEvery    = 5 * time.Minute
 	maxSources       = 2000
 )
+
+// SetBlocker gives the reader an address blocker to feed with what it sees in the log. Without one it only counts.
+func (w *Winsec) SetBlocker(b *ipblock.Engine) { w.block = b }
 
 // NewWinsec makes a reader that runs commands through r. Tests give it a scripted one.
 func NewWinsec(r Runner) *Winsec {
@@ -196,7 +201,7 @@ func (w *Winsec) readSecurity(ctx context.Context) (denied bool, failed bool) {
 		if e.Rec > w.secN {
 			w.secN = e.Rec
 		}
-		w.count(e)
+		w.count(ctx, e)
 	}
 	// Text came back but nothing could be read from it: step over it rather than meet the same batch every time.
 	if len(evs) == 0 && strings.TrimSpace(res.Stdout) != "" {
@@ -218,7 +223,7 @@ func (w *Winsec) readSecurity(ctx context.Context) (denied bool, failed bool) {
 	return false, false
 }
 
-func (w *Winsec) count(e winEvent) {
+func (w *Winsec) count(ctx context.Context, e winEvent) {
 	lt := e.Data["LogonType"]
 	ip, remote := remoteAddr(e.Data["IpAddress"])
 	switch e.ID {
@@ -231,9 +236,19 @@ func (w *Winsec) count(e winEvent) {
 		if len(w.sources) > maxSources {
 			w.trimSources()
 		}
+		if w.block != nil {
+			w.block.Fail(ctx, ip, e.At)
+		}
 	case 4624:
 		user := e.Data["TargetUserName"]
-		if lt != "10" || !remote || user == "" || strings.HasSuffix(user, "$") {
+		if !remote || user == "" || strings.HasSuffix(user, "$") || strings.EqualFold(user, "ANONYMOUS LOGON") {
+			return
+		}
+		// Somebody really signed in from there, over the network or remote desktop: that address is a person's.
+		if w.block != nil && (lt == "3" || lt == "10") {
+			w.block.OK(ip, e.At)
+		}
+		if lt != "10" {
 			return
 		}
 		w.ok++
@@ -336,6 +351,9 @@ func (w *Winsec) Collect(ctx context.Context) Snapshot {
 		return snap
 	}
 	now := w.now()
+	if w.block != nil {
+		w.block.Tick(ctx)
+	}
 	w.readDefenderLog(ctx)
 	w.readDefenderStatus(ctx, now)
 
@@ -353,6 +371,11 @@ func (w *Winsec) Collect(ctx context.Context) Snapshot {
 	snap.Data = secproto.Winsec{
 		RemoteFailed: w.failed, RemoteOK: w.ok, Sources: src, RecentOK: append([]secproto.WinLogon{}, w.recentOK...),
 		Defender: w.defender, Threats: append([]secproto.WinThreat{}, w.threats...), ThreatsTotal: w.threatsTotal,
+	}
+	if w.block != nil {
+		d := snap.Data.(secproto.Winsec)
+		d.Block = w.block.Snapshot()
+		snap.Data = d
 	}
 	return snap
 }

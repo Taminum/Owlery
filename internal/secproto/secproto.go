@@ -519,6 +519,43 @@ type Winsec struct {
 	Defender     WinDefender `json:"defender"`
 	Threats      []WinThreat `json:"threats"` // the latest, newest first
 	ThreatsTotal int64       `json:"threats_total"`
+	Block        *WinBlock   `json:"block,omitempty"` // the address blocker; absent from agents that do not have one
+}
+
+// --- Blocking addresses that guess passwords (Windows) ---------------------------------------------------
+//
+// The agent counts failed remote sign-ins per address and, past a limit, shuts that address out with a Windows Firewall
+// rule for a while. It only does so on a machine installed with -allow-block, and a machine starts in "watch" mode, where
+// it says what it would have blocked and changes nothing. Addresses that signed in successfully in the last day, private
+// networks and the whitelist are never blocked.
+
+const (
+	CapBlock     = "ip_block"
+	MaxWinBlocks = 200
+
+	BlockOff   = "off"   // counts nothing, blocks nothing
+	BlockWatch = "watch" // says what it would block
+	BlockOn    = "block" // blocks
+)
+
+// WinBlockEntry is one address the blocker acted on or would have acted on.
+type WinBlockEntry struct {
+	IP     string     `json:"ip"`
+	Since  time.Time  `json:"since"`
+	Until  *time.Time `json:"until,omitempty"` // nil: no end
+	Failed int        `json:"failed"`          // the failures that crossed the limit
+}
+
+// WinBlock is the state of the blocker: its settings as they are now, what it blocks, what it would have blocked.
+type WinBlock struct {
+	Mode      string          `json:"mode"`
+	Threshold int             `json:"threshold"`  // failures...
+	WindowMin int             `json:"window_min"` // ...within this many minutes
+	TTLHours  int             `json:"ttl_hours"`  // how long a block lasts; 0 is for good
+	Active    []WinBlockEntry `json:"active"`
+	Would     []WinBlockEntry `json:"would"`
+	Total     int64           `json:"total"` // blocks made since the agent started
+	Error     string          `json:"error,omitempty"`
 }
 
 // --- Hardware (the "hardware" category) ---------------------------------------------------------------
