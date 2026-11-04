@@ -14,6 +14,7 @@ type alertOut struct {
 	PanelID    string     `json:"panel_id"`
 	PanelName  string     `json:"panel_name"`
 	Kind       string     `json:"kind"`
+	Subject    string     `json:"subject"`
 	Label      string     `json:"label"`
 	Detail     string     `json:"detail"`
 	OpenedAt   time.Time  `json:"opened_at"`
@@ -68,7 +69,7 @@ func (s *Server) listAlerts(w http.ResponseWriter, r *http.Request, a auth.Actor
 					name = "Сетевая разведка"
 				}
 			}
-			out.Alerts = append(out.Alerts, alertOut{ID: x.ID, PanelID: x.PanelID, PanelName: name, Kind: x.Kind, Label: x.Label, Detail: x.Detail,
+			out.Alerts = append(out.Alerts, alertOut{ID: x.ID, PanelID: x.PanelID, PanelName: name, Kind: x.Kind, Subject: x.Subject, Label: x.Label, Detail: x.Detail,
 				OpenedAt: x.OpenedAt.UTC(), LastSeenAt: x.LastSeenAt.UTC(), ResolvedAt: x.ResolvedAt})
 		}
 	}

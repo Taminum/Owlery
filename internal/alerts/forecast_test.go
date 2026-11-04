@@ -93,3 +93,72 @@ func TestDaysTextIsRussian(t *testing.T) {
 		}
 	}
 }
+
+func TestAMachinesOwnRulesChangeWhatIsReported(t *testing.T) {
+	base := store.HostAlertState{VPSID: "v1", Name: "home-pc", Online: true, MainMount: "C:", DiskTotal: 100 * gigabyte,
+		Disks: []secproto.HostDisk{{Mount: "C:", Used: 95 * gigabyte, Total: 100 * gigabyte}, {Mount: "D:", Used: 99 * gigabyte, Total: 100 * gigabyte}}}
+	kinds := func(h store.HostAlertState) map[string]int {
+		m := map[string]int{}
+		for _, c := range HostConditions([]store.HostAlertState{h}) {
+			m[c.Subject]++
+		}
+		return m
+	}
+	// By default: C: at 95% is reported, the archive drive D: is not watched.
+	if got := kinds(base); got["v1:C:"] != 1 || got["v1:D:"] != 0 {
+		t.Fatalf("defaults: %v", got)
+	}
+	// This machine's C: may go to 97%; its D: is watched on request.
+	h := base
+	h.Rules = map[string]store.AlertRule{"disk:C:": {Rule: "disk:C:", Enabled: true, Threshold: intp(97)}, "disk:D:": {Rule: "disk:D:", Enabled: true}}
+	if got := kinds(h); got["v1:C:"] != 0 || got["v1:D:"] != 1 {
+		t.Errorf("rules: %v", got)
+	}
+	// A switched-off alert is not reported, a processor threshold is held to.
+	cpu := 85.0
+	h = base
+	h.CPUAvg = &cpu
+	if got := kinds(h); got["v1"] != 0 {
+		t.Errorf("85%% is under the default 90%%: %v", got)
+	}
+	h.Rules = map[string]store.AlertRule{"cpu": {Rule: "cpu", Enabled: true, Threshold: intp(80)}}
+	if got := kinds(h); got["v1"] != 1 {
+		t.Errorf("a threshold of 80%% must report 85%%: %v", got)
+	}
+	h.Rules = map[string]store.AlertRule{"cpu": {Rule: "cpu", Enabled: false}}
+	if got := kinds(h); got["v1"] != 0 {
+		t.Errorf("a switched-off alert: %v", got)
+	}
+}
+
+func TestForecastFollowsItsOwnRules(t *testing.T) {
+	trend := hourly(96, 52*gigabyte, 6*gigabyte, nil)
+	h := store.HostAlertState{VPSID: "v1", Name: "Autocad", Online: true, MainMount: "C:", DiskTrend: trend, DiskTotal: 100 * gigabyte,
+		Disks: []secproto.HostDisk{{Mount: "C:", Used: 58 * gigabyte, Total: 100 * gigabyte}}}
+	count := func(h store.HostAlertState) int {
+		n := 0
+		for _, c := range HostConditions([]store.HostAlertState{h}) {
+			if c.Kind == store.AlertHostDiskForecast {
+				n++
+			}
+		}
+		return n
+	}
+	if count(h) != 1 {
+		t.Fatal("about 7 days left must be reported under the default 14")
+	}
+	h.Rules = map[string]store.AlertRule{"forecast": {Rule: "forecast", Enabled: true, Threshold: intp(3)}}
+	if count(h) != 0 {
+		t.Error("7 days left is no alert when the limit is 3 days")
+	}
+	h.Rules = map[string]store.AlertRule{"forecast": {Rule: "forecast", Enabled: false}}
+	if count(h) != 0 {
+		t.Error("a switched-off forecast is not reported")
+	}
+	h.Rules = map[string]store.AlertRule{"disk:C:": {Rule: "disk:C:", Enabled: false}}
+	if count(h) != 0 {
+		t.Error("a disk that is not watched has no forecast either")
+	}
+}
+
+func intp(n int) *int { return &n }

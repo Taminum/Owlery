@@ -15,8 +15,8 @@ const (
 	HostMemPercent = 95
 )
 
-// watchedDisk says whether a full disk is worth an alert. On Windows only the system drive is: the other drives of
-// a workstation are usually archives kept full on purpose. Per-machine and per-disk settings come later.
+// watchedDisk says whether a full disk is worth an alert by default. On Windows only the system drive is: the other
+// drives of a workstation are usually archives kept full on purpose. A machine's own rule for a drive overrides this.
 func watchedDisk(mount string) bool {
 	if len(mount) == 2 && mount[1] == ':' {
 		return strings.EqualFold(mount, "C:")
@@ -24,10 +24,27 @@ func watchedDisk(mount string) bool {
 	return true
 }
 
+// WatchedByDefault is watchedDisk for the settings page, which shows what a machine does when nobody changed anything.
+func WatchedByDefault(mount string) bool { return watchedDisk(mount) }
+
 func gb(b int64) string { return fmt.Sprintf("%.1f ГБ", float64(b)/(1<<30)) }
 
+// rule says whether a resource alert is on for this machine and at what threshold: what somebody set for it, else the
+// defaults handed in.
+func rule(h store.HostAlertState, name string, defOn bool, def int) (on bool, threshold int) {
+	on, threshold = defOn, def
+	if r, ok := h.Rules[name]; ok {
+		on = r.Enabled
+		if r.Threshold != nil {
+			threshold = *r.Threshold
+		}
+	}
+	return on, threshold
+}
+
 // HostConditions lists the monitored servers that are running out of disk, processor or memory. A server that
-// has stopped reporting is the security agent's alert, not this one.
+// has stopped reporting is the security agent's alert, not this one. What each machine's owner changed for it
+// (a threshold, a switch) is taken into account.
 func HostConditions(states []store.HostAlertState) []store.Condition {
 	var out []store.Condition
 	for _, h := range states {
@@ -35,7 +52,8 @@ func HostConditions(states []store.HostAlertState) []store.Condition {
 			continue
 		}
 		for _, d := range h.Disks {
-			if d.Total <= 0 || d.Used*100 < d.Total*HostDiskPercent || !watchedDisk(d.Mount) {
+			on, th := rule(h, "disk:"+d.Mount, watchedDisk(d.Mount), HostDiskPercent)
+			if !on || d.Total <= 0 || d.Used*100 < d.Total*int64(th) {
 				continue
 			}
 			pct := int(d.Used * 100 / d.Total)
@@ -43,11 +61,11 @@ func HostConditions(states []store.HostAlertState) []store.Condition {
 				Detail: fmt.Sprintf("занято %d%%: %s из %s", pct, gb(d.Used), gb(d.Total))})
 		}
 		out = append(out, diskForecast(h)...)
-		if h.CPUAvg != nil && *h.CPUAvg >= HostCPUPercent {
+		if on, th := rule(h, "cpu", true, HostCPUPercent); on && h.CPUAvg != nil && *h.CPUAvg >= float64(th) {
 			out = append(out, store.Condition{Kind: store.AlertHostCPU, Subject: h.VPSID, Label: "Процессор загружен: " + h.Name,
 				Detail: fmt.Sprintf("в среднем %.0f%% за последние десять минут", *h.CPUAvg)})
 		}
-		if h.MemAvg != nil && *h.MemAvg >= HostMemPercent {
+		if on, th := rule(h, "mem", true, HostMemPercent); on && h.MemAvg != nil && *h.MemAvg >= float64(th) {
 			out = append(out, store.Condition{Kind: store.AlertHostMem, Subject: h.VPSID, Label: "Память почти кончилась: " + h.Name,
 				Detail: fmt.Sprintf("занято в среднем %.0f%% за последние пять минут", *h.MemAvg)})
 		}
@@ -76,16 +94,24 @@ func daysText(days float64) string {
 // diskForecast reports a main disk that is not nearly full yet but fills steadily and will be within HostDiskForecastDays.
 // Once it is nearly full the "almost full" alert says it.
 func diskForecast(h store.HostAlertState) []store.Condition {
-	if h.MainMount == "" || !watchedDisk(h.MainMount) {
+	if h.MainMount == "" {
 		return nil
 	}
+	if watched, _ := rule(h, "disk:"+h.MainMount, watchedDisk(h.MainMount), HostDiskPercent); !watched {
+		return nil
+	}
+	if on, _ := rule(h, "forecast", true, HostDiskForecastDays); !on {
+		return nil
+	}
+	_, nearly := rule(h, "disk:"+h.MainMount, true, HostDiskPercent)
 	for _, d := range h.Disks {
-		if d.Mount == h.MainMount && d.Total > 0 && d.Used*100 >= d.Total*HostDiskPercent {
+		if d.Mount == h.MainMount && d.Total > 0 && d.Used*100 >= d.Total*int64(nearly) {
 			return nil
 		}
 	}
+	_, limit := rule(h, "forecast", true, HostDiskForecastDays)
 	days, perDay, ok := DiskDaysLeft(h.DiskTrend, h.DiskTotal)
-	if !ok || days >= HostDiskForecastDays {
+	if !ok || days >= float64(limit) {
 		return nil
 	}
 	var free int64
