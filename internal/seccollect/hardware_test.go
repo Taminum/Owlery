@@ -104,3 +104,17 @@ func TestHardwareIsReadOnceInAWhileAndAFailedReadKeepsWhatWasKnown(t *testing.T)
 		t.Errorf("a failed read must not wipe what was known: %d reads, %+v", calls, again)
 	}
 }
+
+func TestWinHardwareLeavesOutVirtualDisplaysAndTheFourGigabyteLie(t *testing.T) {
+	h, err := ParseWinHardware(`{"gpus":[
+		{"name":"Parsec Virtual Display Adapter","mem":0,"driver":"0.45"},
+		{"name":"Microsoft Basic Display Adapter","mem":0,"driver":"10"},
+		{"name":"NVIDIA GeForce RTX 5060 Ti","mem":4293918720,"driver":"32.0"},
+		{"name":"AMD Radeon(TM) Graphics","mem":2147483648,"driver":"32.1"}]}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(h.GPUs) != 2 || h.GPUs[0].Name != "NVIDIA GeForce RTX 5060 Ti" || h.GPUs[0].Mem != 0 || h.GPUs[1].Mem != 2147483648 {
+		t.Errorf("gpus: %+v", h.GPUs)
+	}
+}
