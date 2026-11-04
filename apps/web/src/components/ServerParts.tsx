@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { t, type MsgKey } from '../i18n'
 import { api } from '../lib/api'
 import { errorText } from '../lib/errors'
-import type { Hardware, ServerAlert, ServerNode, ServerRole, VPS } from '../lib/types'
+import type { DockerInfo, Hardware, ServerAlert, ServerNode, ServerRole, VPS } from '../lib/types'
 import { Chip } from './ui'
 import { Field, GhostButton, Modal, PrimaryButton, inputCls } from './Modal'
 import type { Host } from './HostView'
@@ -17,6 +17,7 @@ export interface Server extends VPS {
   alerts_critical: number
   alerts?: ServerAlert[]
   hardware?: Hardware | null
+  docker?: DockerInfo | null
 }
 
 export const ROLES: ServerRole[] = ['entry', 'exit', 'panel', 'service', 'workstation', 'home', 'hypervisor', 'router']

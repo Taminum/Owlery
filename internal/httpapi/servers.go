@@ -120,11 +120,14 @@ func (s *Server) serverCard(w http.ResponseWriter, r *http.Request, a auth.Actor
 		return
 	}
 	// What the machine is made of, as its agent last read it; nil until it has.
-	var hw json.RawMessage
+	var hw, dk json.RawMessage // the hardware, and the containers when the agent listed them a moment ago
 	if states, err := s.Store.SnapshotStates(r.Context(), a.Scope(), v.ID); err == nil {
 		for _, st := range states {
 			if st.Category == secproto.CatHardware && st.Status == secproto.StatusOK && len(st.Data) > 2 {
 				hw = st.Data
+			}
+			if st.Category == secproto.CatDocker && st.Status == secproto.StatusOK && len(st.Data) > 2 && time.Since(st.ReceivedAt) < 5*time.Minute {
+				dk = st.Data
 			}
 		}
 	}
@@ -132,5 +135,6 @@ func (s *Server) serverCard(w http.ResponseWriter, r *http.Request, a auth.Actor
 	writeJSON(w, http.StatusOK, struct {
 		serverOut
 		Hardware json.RawMessage `json:"hardware"`
-	}{out[0], hw})
+		Docker   json.RawMessage `json:"docker"`
+	}{out[0], hw, dk})
 }

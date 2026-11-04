@@ -162,6 +162,10 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 	a := &agent{cfg: cfg, url: url, hc: hc, epoch: newEpoch(), probes: make(chan struct{}, maxProbes), admins: make(chan struct{}, 4), socks: seccollect.NewSocketWatch(10 * time.Minute), host: newHostReader(cfg), runCtx: ctx}
 	a.hw = seccollect.NewHardware(seccollect.ExecRunner{Timeout: 90 * time.Second})
+	if runtime.GOOS == "linux" && cfg.ContainersFile != "" {
+		// The unit that lists the containers lists their details beside it; a machine without the unit has no such file.
+		a.docker = seccollect.NewDocker(filepath.Join(filepath.Dir(cfg.ContainersFile), "docker.jsonl"))
+	}
 	if runtime.GOOS == "windows" {
 		a.winsec = seccollect.NewWinsec(seccollect.ExecRunner{})
 		a.blocker = ipblock.New(ipblock.NewFirewall(), blockStatePath(cfg), ipblock.DefaultConfig(), cfg.AllowBlock)
@@ -219,6 +223,7 @@ type agent struct {
 	winsec  *seccollect.Winsec // Windows only: sign-ins from other machines and Defender
 	blocker *ipblock.Engine    // Windows only: shuts out addresses that guess passwords
 	hw      *seccollect.HardwareReader
+	docker  *seccollect.DockerReader // nil off Linux or without a containers list
 	host    *seccollect.HostReader
 	runCtx  context.Context // lives as long as the agent: a terminal outlives a reconnect of the reports
 	shells  *secshell.Runner
@@ -591,6 +596,11 @@ func (a *agent) collect(ctx context.Context) []seccollect.Snapshot {
 		out = append(out, a.winsec.Collect(ctx))
 	}
 	out = append(out, a.hw.Collect(ctx, time.Now()))
+	if a.docker != nil {
+		if s := a.docker.Collect(time.Now()); s.Status != secproto.StatusNotInstalled {
+			out = append(out, s) // a machine without Docker says nothing about it
+		}
+	}
 	return out
 }
 

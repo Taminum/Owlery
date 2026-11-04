@@ -19,3 +19,26 @@ umask 0027
 chgrp remnascope-sec "$tmp" 2>/dev/null
 chmod 0640 "$tmp"
 mv -f "$tmp" "$OUT"
+
+# The same run also lists every container (stopped ones too) with the few fields the Docker page shows, and the load of
+# the running ones. The template picks fields one by one: environment variables, commands and mounts are never read, as
+# they hold secrets. The agent checks every field again.
+DETAILS="$(dirname "$OUT")/docker.jsonl"
+STATS="$(dirname "$OUT")/docker-stats.jsonl"
+ids="$("$DOCKER" ps -aq --no-trunc 2>/dev/null)" || exit 0
+tmp="$DETAILS.tmp"
+if [ -n "$ids" ]; then
+  # shellcheck disable=SC2086
+  "$DOCKER" inspect --format '{"id":{{json .Id}},"name":{{json .Name}},"image":{{json .Config.Image}},"state":{{json .State.Status}},"exit":{{json .State.ExitCode}},"started":{{json .State.StartedAt}},"finished":{{json .State.FinishedAt}},"restarts":{{json .RestartCount}},"health":{{with index .State "Health"}}{{json .Status}}{{else}}""{{end}},"policy":{{json .HostConfig.RestartPolicy.Name}},"ports":{{json .NetworkSettings.Ports}}}' $ids > "$tmp" 2>/dev/null || exit 0
+else
+  : > "$tmp"
+fi
+chgrp remnascope-sec "$tmp" 2>/dev/null
+chmod 0640 "$tmp"
+# The load goes first: the details file is the one whose age says the list is fresh.
+tmp="$STATS.tmp"
+"$DOCKER" stats --no-stream --no-trunc --format '{{json .}}' > "$tmp" 2>/dev/null || : > "$tmp"
+chgrp remnascope-sec "$tmp" 2>/dev/null
+chmod 0640 "$tmp"
+mv -f "$tmp" "$STATS"
+mv -f "$DETAILS.tmp" "$DETAILS"

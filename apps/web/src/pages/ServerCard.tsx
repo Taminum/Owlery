@@ -21,9 +21,10 @@ import { ManageView } from '../components/ManageView'
 import { ServicesView } from '../components/ServicesView'
 import { RdpProtect } from '../components/RdpProtect'
 import { AlertRules } from '../components/AlertRules'
+import { DockerView } from '../components/DockerView'
 
-type Tab = 'overview' | 'resources' | 'terminal' | 'desktop' | 'screen' | 'manage' | 'services' | 'security' | 'protect' | 'alerts' | 'network' | 'history'
-const TABS: Tab[] = ['overview', 'resources', 'terminal', 'desktop', 'screen', 'manage', 'services', 'security', 'protect', 'alerts', 'network', 'history']
+type Tab = 'overview' | 'resources' | 'terminal' | 'desktop' | 'screen' | 'manage' | 'services' | 'security' | 'protect' | 'docker' | 'alerts' | 'network' | 'history'
+const TABS: Tab[] = ['overview', 'resources', 'terminal', 'desktop', 'screen', 'manage', 'services', 'security', 'protect', 'docker', 'alerts', 'network', 'history']
 
 function AlertList({ items, empty }: { items: ServerAlert[]; empty: string }) {
   if (items.length === 0) return <p className="text-[13px] text-muted">{empty}</p>
@@ -152,7 +153,7 @@ export default function ServerCard() {
       <PageHead title={s.name} subtitle={[s.os || s.host?.os, s.provider, placeText(s)].filter(Boolean).join(' · ') || t('srv.subtitle')} right={<div className="flex items-center gap-3"><About s={s} onEdit={() => setEditing(true)} /><StatusChip s={s} /></div>} />
 
       <div role="tablist" aria-label={s.name} className="flex flex-wrap gap-2">
-        {TABS.filter((x) => ((x !== 'terminal' && x !== 'desktop' && x !== 'screen' && x !== 'manage' && x !== 'services') || s.can_edit) && (x !== 'protect' || isWindows) && (x !== 'alerts' || s.host?.has_data)).map((x) => (
+        {TABS.filter((x) => ((x !== 'terminal' && x !== 'desktop' && x !== 'screen' && x !== 'manage' && x !== 'services') || s.can_edit) && (x !== 'protect' || isWindows) && (x !== 'docker' || !!s.docker) && (x !== 'alerts' || s.host?.has_data)).map((x) => (
           <button key={x} role="tab" type="button" aria-selected={tab === x} onClick={() => setTab(x)}
             className={`h-8 rounded-control border px-3 text-[13px] ${tab === x ? 'border-cyan bg-elevated text-fg' : 'border-line text-muted hover:text-fg'}`}>
             {t(`srv.tab.${x}` as MsgKey)}{x === 'history' && open.length > 0 && <span className="ml-1.5 text-amber">{open.length}</span>}
@@ -178,6 +179,7 @@ export default function ServerCard() {
         </div>
       )}
       {tab === 'protect' && isWindows && <RdpProtect serverId={s.id} />}
+      {tab === 'docker' && <DockerView info={s.docker} />}
       {tab === 'alerts' && <AlertRules serverId={s.id} name={s.name} />}
       {tab === 'terminal' && s.can_edit && <TerminalView serverId={s.id} />}
       {tab === 'desktop' && s.can_edit && <DesktopView serverId={s.id} />}
