@@ -382,3 +382,8 @@ export interface Hardware {
   gpus: { name: string; mem?: number; driver?: string }[]
   nics: { name: string; speed_mbps?: number; ips?: string[] }[]
 }
+
+export interface BlockSettings { mode: 'off' | 'watch' | 'block'; threshold: number; window_min: number; ttl_hours: number; whitelist: string[]; share: boolean }
+export interface BlockEntry { ip: string; since: string; until?: string; failed: number }
+export interface BlockState { mode: string; threshold: number; window_min: number; ttl_hours: number; active: BlockEntry[]; would: BlockEntry[]; total: number; error?: string }
+export interface BlockView { settings: BlockSettings; state: BlockState | null; supported: boolean; can_block: boolean; online: boolean; can_edit: boolean }

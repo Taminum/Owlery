@@ -19,9 +19,10 @@ import { DesktopView } from '../components/DesktopView'
 import { ScreenView } from '../components/ScreenView'
 import { ManageView } from '../components/ManageView'
 import { ServicesView } from '../components/ServicesView'
+import { RdpProtect } from '../components/RdpProtect'
 
-type Tab = 'overview' | 'resources' | 'terminal' | 'desktop' | 'screen' | 'manage' | 'services' | 'security' | 'network' | 'history'
-const TABS: Tab[] = ['overview', 'resources', 'terminal', 'desktop', 'screen', 'manage', 'services', 'security', 'network', 'history']
+type Tab = 'overview' | 'resources' | 'terminal' | 'desktop' | 'screen' | 'manage' | 'services' | 'security' | 'protect' | 'network' | 'history'
+const TABS: Tab[] = ['overview', 'resources', 'terminal', 'desktop', 'screen', 'manage', 'services', 'security', 'protect', 'network', 'history']
 
 function AlertList({ items, empty }: { items: ServerAlert[]; empty: string }) {
   if (items.length === 0) return <p className="text-[13px] text-muted">{empty}</p>
@@ -143,13 +144,14 @@ export default function ServerCard() {
   if (q.error) return <p role="alert" className="text-[13px] text-red">{q.error}</p>
   if (!s) return <TableSkeleton />
   const open = (s.alerts ?? []).filter((a) => !a.resolved_at)
+  const isWindows = /windows/i.test(s.os || s.host?.os || '')
   return (
     <div className="space-y-4">
       <Link to="/servers" className="inline-flex items-center gap-2 text-[13px] text-muted hover:text-fg"><ArrowLeft size={15} aria-hidden />{t('srv.back')}</Link>
       <PageHead title={s.name} subtitle={[s.os || s.host?.os, s.provider, placeText(s)].filter(Boolean).join(' · ') || t('srv.subtitle')} right={<div className="flex items-center gap-3"><About s={s} onEdit={() => setEditing(true)} /><StatusChip s={s} /></div>} />
 
       <div role="tablist" aria-label={s.name} className="flex flex-wrap gap-2">
-        {TABS.filter((x) => (x !== 'terminal' && x !== 'desktop' && x !== 'screen' && x !== 'manage' && x !== 'services') || s.can_edit).map((x) => (
+        {TABS.filter((x) => ((x !== 'terminal' && x !== 'desktop' && x !== 'screen' && x !== 'manage' && x !== 'services') || s.can_edit) && (x !== 'protect' || isWindows)).map((x) => (
           <button key={x} role="tab" type="button" aria-selected={tab === x} onClick={() => setTab(x)}
             className={`h-8 rounded-control border px-3 text-[13px] ${tab === x ? 'border-cyan bg-elevated text-fg' : 'border-line text-muted hover:text-fg'}`}>
             {t(`srv.tab.${x}` as MsgKey)}{x === 'history' && open.length > 0 && <span className="ml-1.5 text-amber">{open.length}</span>}
@@ -174,6 +176,7 @@ export default function ServerCard() {
           <p className="text-[13px] text-muted">{t('srv.security.full')}: <Link to={`/security/${s.id}`} className="text-cyan underline-offset-2 hover:underline">{t('srv.security.open')}</Link></p>
         </div>
       )}
+      {tab === 'protect' && isWindows && <RdpProtect serverId={s.id} />}
       {tab === 'terminal' && s.can_edit && <TerminalView serverId={s.id} />}
       {tab === 'desktop' && s.can_edit && <DesktopView serverId={s.id} />}
       {tab === 'screen' && s.can_edit && <ScreenView serverId={s.id} />}

@@ -616,3 +616,22 @@ type Hardware struct {
 	GPUs       []HWGPU  `json:"gpus"`
 	NICs       []HWNic  `json:"nics"`
 }
+
+// BlockCfg is how the server tells an agent to set up its address blocker: on connecting, and whenever somebody changes
+// the settings. The agent keeps what it was told, so it keeps protecting when the server is out of reach. It is a
+// setting, not a command: blocking itself still needs the machine's own -allow-block.
+type BlockCfg struct {
+	Type      string   `json:"type"` // "block_cfg"
+	Mode      string   `json:"mode"`
+	Threshold int      `json:"threshold"`
+	WindowMin int      `json:"window_min"`
+	TTLHours  int      `json:"ttl_hours"`
+	Whitelist []string `json:"whitelist"`
+}
+
+// BlockUnblock asks the agent to lift one block (or forget one "would have blocked"). The agent leaves that address
+// alone for a day afterwards.
+type BlockUnblock struct {
+	Type string `json:"type"` // "block_unblock"
+	IP   string `json:"ip"`
+}

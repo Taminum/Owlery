@@ -1,0 +1,62 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { RdpProtect } from '../components/RdpProtect'
+import { setCsrf } from '../lib/api'
+import { mockApi, owner, type Req } from './helpers'
+
+afterEach(() => vi.unstubAllGlobals())
+
+const settings = { mode: 'watch', threshold: 5, window_min: 10, ttl_hours: 24, whitelist: ['203.0.113.0/24'], share: true }
+const view = (over: object = {}) => ({
+  settings, supported: true, can_block: false, online: true, can_edit: true,
+  state: { mode: 'watch', threshold: 5, window_min: 10, ttl_hours: 24, total: 0, active: [], would: [{ ip: '198.51.100.7', since: '2026-11-04T10:00:00Z', failed: 6 }] },
+  ...over,
+})
+
+function backend(v: object, extra?: (r: Req) => { status: number; body?: unknown } | undefined) {
+  setCsrf('')
+  return mockApi({ me: owner, handler: (r) => {
+    if (r.method === 'GET' && r.path === '/api/v1/servers/s1/block') return { status: 200, body: v }
+    return extra?.(r)
+  } })
+}
+
+describe('Защита RDP', () => {
+  it('shows what the blocker would have done and warns that this machine may not block', async () => {
+    backend(view({ settings: { ...settings, mode: 'block' } }))
+    render(<RdpProtect serverId="s1" />)
+    expect(await screen.findByText('198.51.100.7')).toBeInTheDocument()
+    expect(screen.getByText('6 неудач за 10 мин')).toBeInTheDocument()
+    expect(screen.getByText(/не разрешает блокировку/)).toBeInTheDocument()
+    expect(screen.getByText('203.0.113.0/24')).toBeInTheDocument()
+  })
+
+  it('saves what was changed, with the whitelist as it was edited', async () => {
+    const api = backend(view(), (r) => (r.method === 'PUT' ? { status: 200, body: view() } : undefined))
+    render(<RdpProtect serverId="s1" />)
+    await screen.findByText('198.51.100.7')
+    fireEvent.click(screen.getByRole('radio', { name: 'Блокирует' }))
+    fireEvent.change(screen.getByLabelText('неудач за'), { target: { value: '3' } })
+    fireEvent.change(screen.getByLabelText('Белый список'), { target: { value: '198.51.100.9' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Добавить' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(api.find('PUT', '/api/v1/servers/s1/block')).toHaveLength(1))
+    expect(api.find('PUT', '/api/v1/servers/s1/block')[0].body).toMatchObject({ mode: 'block', threshold: 3, whitelist: ['203.0.113.0/24', '198.51.100.9'] })
+  })
+
+  it('lets only someone who can edit change it, and lifts a block through the agent', async () => {
+    const blocked = { mode: 'block', threshold: 5, window_min: 10, ttl_hours: 24, total: 1, would: [], active: [{ ip: '198.51.100.8', since: '2026-11-04T10:00:00Z', failed: 5 }] }
+    const api = backend(view({ state: blocked, can_block: true }), (r) => (r.method === 'POST' ? { status: 200, body: { ok: true } } : undefined))
+    render(<RdpProtect serverId="s1" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Разблокировать' }))
+    await waitFor(() => expect(api.find('POST', '/api/v1/servers/s1/block/unblock')).toHaveLength(1))
+    expect(api.find('POST', '/api/v1/servers/s1/block/unblock')[0].body).toEqual({ ip: '198.51.100.8' })
+  })
+
+  it('is read-only for somebody who cannot edit', async () => {
+    backend(view({ can_edit: false }))
+    render(<RdpProtect serverId="s1" />)
+    await screen.findByText('198.51.100.7')
+    expect(screen.queryByRole('button', { name: 'Сохранить' })).toBeNull()
+    expect(screen.getByRole('radio', { name: 'Блокирует' })).toBeDisabled()
+  })
+})
