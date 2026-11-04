@@ -135,6 +135,20 @@ func (m *many[T]) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+// winAdapterRAMCap is what Win32_VideoController.AdapterRAM shows for every card with 4 GB or more.
+const winAdapterRAMCap = 4293918720
+
+// notAVideoCard is true for the virtual displays that remote-desktop programs and Windows itself add: they are not hardware.
+func notAVideoCard(name string) bool {
+	n := strings.ToLower(name)
+	for _, m := range []string{"virtual display", "basic display", "basic render", "remote display", "indirect display", "mirage"} {
+		if strings.Contains(n, m) {
+			return true
+		}
+	}
+	return false
+}
+
 var memTypes = map[int]string{20: "DDR", 21: "DDR2", 24: "DDR3", 26: "DDR4", 34: "DDR5"}
 
 // ParseWinHardware reads what the PowerShell script in hardware_windows.go prints.
@@ -193,6 +207,13 @@ func ParseWinHardware(out string) (secproto.Hardware, error) {
 		h.Disks = append(h.Disks, secproto.HWDisk{Model: d.Name, Size: d.Size, Kind: kind})
 	}
 	for _, g := range v.GPUs {
+		if notAVideoCard(g.Name) {
+			continue
+		}
+		// Windows keeps this number in 32 bits: a card with 4 GB or more reports just under 4 GB, which is not its memory.
+		if g.Mem >= winAdapterRAMCap {
+			g.Mem = 0
+		}
 		h.GPUs = append(h.GPUs, secproto.HWGPU{Name: g.Name, Mem: g.Mem, Driver: g.Driver})
 	}
 	for _, n := range v.NICs {
