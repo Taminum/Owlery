@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { X } from 'lucide-react'
 import { t } from '../i18n'
 import { api } from '../lib/api'
@@ -52,20 +52,19 @@ function EntryTable({ rows, action, label, windowMin }: { rows: BlockEntry[]; ac
 /** The "Защита RDP" tab: how the machine's address blocker is set up, what it has done, and the buttons to change both. */
 export function RdpProtect({ serverId }: { serverId: string }) {
   const q = useLoad((sig) => api.get<BlockView>(`/api/v1/servers/${serverId}/block`, sig), [serverId], 20_000)
-  const [draft, setDraft] = useState<BlockSettings | null>(null)
+  const [edits, setEdits] = useState<Partial<BlockSettings>>({})
   const [entry, setEntry] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
   const [err, setErr] = useState('')
   const v = q.data
+  const draft = v ? { ...v.settings, ...edits } : null
 
-  // The draft follows the server until somebody starts editing; after a save it follows again.
-  useEffect(() => { if (v && !draft) setDraft(v.settings) }, [v, draft])
   if (q.error) return <p role="alert" className="text-[13px] text-red">{q.error}</p>
   if (!v || !draft) return <p className="text-[13px] text-muted">…</p>
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(v.settings)
-  const edit = (p: Partial<BlockSettings>) => { setMsg(''); setDraft({ ...draft, ...p }) }
+  const edit = (p: Partial<BlockSettings>) => { setMsg(''); setEdits({ ...edits, ...p }) }
   const num = (s: string) => Math.max(0, Math.floor(Number(s) || 0))
 
   async function save() {
@@ -73,7 +72,7 @@ export function RdpProtect({ serverId }: { serverId: string }) {
     setErr('')
     try {
       await api.put<BlockView>(`/api/v1/servers/${serverId}/block`, draft)
-      setDraft(null)
+      setEdits({})
       setMsg(t('prot.saved'))
       q.reload()
     } catch (e) {
