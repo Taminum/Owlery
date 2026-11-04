@@ -70,6 +70,10 @@ only process that touches Fail2ban's socket.
    ```
    It runs `docker ps` and writes `/run/remnascope-sec/containers.tsv` (short id and name, nothing else, names
    checked against a strict pattern), readable by the agent's group. Without it everything else works.
+   The same run also writes `docker.jsonl` (every container, stopped ones too: name, image, state, restart count and
+   policy, published ports) and `docker-stats.jsonl` (processor and memory of the running ones) beside it. They feed
+   the "Docker" tab of the machine and the alerts about a container that keeps restarting or has stopped. Only those
+   fields are read: never environment variables, commands or mounts. After updating the script, no unit changes.
 
 The binary and the units are attached to each release (`deploy/secagent` in the deploy-files archive).
 

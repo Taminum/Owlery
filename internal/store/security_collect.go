@@ -280,6 +280,37 @@ func ParseSnapshotData(category, status string, raw json.RawMessage) (secevents.
 			v.NICs = []secproto.HWNic{}
 		}
 		canon, err = json.Marshal(v)
+	case secproto.CatDocker:
+		var v secproto.Docker
+		if err = dec(&v); err != nil || len(v.Containers) > secproto.MaxContainers {
+			return snap, nil, "", ErrBadSnapshot
+		}
+		for _, c := range v.Containers {
+			if len(c.ID) != 12 || len(c.Name) == 0 || len(c.Name) > 80 || len(c.Image) > 120 || len(c.State) > 16 || len(c.Ports) > 8 {
+				return snap, nil, "", ErrBadSnapshot
+			}
+		}
+		if v.Containers == nil {
+			v.Containers = []secproto.DockerContainer{}
+		}
+		for i := range v.Containers {
+			if v.Containers[i].Ports == nil {
+				v.Containers[i].Ports = []string{}
+			}
+		}
+		canon, err = json.Marshal(v)
+		if err == nil {
+			// The load figures change every half minute and are not a change of what runs, so they stay out of the hash:
+			// the history keeps a line only when a container appeared, went, stopped or restarted.
+			still := make([]secproto.DockerContainer, len(v.Containers))
+			for i, c := range v.Containers {
+				c.CPU, c.Mem, c.Restarts1h = nil, 0, 0
+				still[i] = c
+			}
+			hb, _ := json.Marshal(still)
+			snap.Hash = hashOf(status, hb)
+			return snap, canon, snap.Hash, nil
+		}
 	case secproto.CatFirewall:
 		var w secproto.Firewall
 		if err = dec(&w); err != nil || len(w.Rules) > secproto.MaxRulesBytes || len(w.Backend) > 16 {

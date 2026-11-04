@@ -31,10 +31,11 @@ const (
 	CatFirewall = "firewall"
 	CatWinsec   = "winsec"
 	CatHardware = "hardware"
+	CatDocker   = "docker"
 )
 
 func ValidCategory(c string) bool {
-	return c == CatFail2ban || c == CatSockets || c == CatFirewall || c == CatWinsec || c == CatHardware
+	return c == CatFail2ban || c == CatSockets || c == CatFirewall || c == CatWinsec || c == CatHardware || c == CatDocker
 }
 
 // EventCategories are the categories the journal can be filtered by: the agent's three plus the
@@ -619,6 +620,34 @@ type Hardware struct {
 	Disks      []HWDisk `json:"disks"`
 	GPUs       []HWGPU  `json:"gpus"`
 	NICs       []HWNic  `json:"nics"`
+}
+
+// --- Docker (the "docker" category) --------------------------------------------------------------------
+//
+// The containers of a Linux machine, as a small root unit lists them for the agent (which has no access to Docker). What
+// is passed on is what the page shows: no environment variables, no commands, no mounts, since those hold secrets.
+
+const MaxContainers = 200
+
+type DockerContainer struct {
+	ID         string     `json:"id"` // the short id, 12 characters
+	Name       string     `json:"name"`
+	Image      string     `json:"image"`
+	State      string     `json:"state"` // running | restarting | paused | created | exited | dead | removing | unknown
+	Health     string     `json:"health,omitempty"`
+	Policy     string     `json:"policy,omitempty"` // the restart policy: no | always | unless-stopped | on-failure
+	Restarts   int        `json:"restarts"`         // how many times Docker has restarted it since it was created
+	Restarts1h int        `json:"restarts_1h"`      // and how many of those the agent saw in the last hour
+	Exit       int        `json:"exit,omitempty"`   // the exit code of the last run
+	Started    *time.Time `json:"started,omitempty"`
+	Finished   *time.Time `json:"finished,omitempty"`
+	CPU        *float64   `json:"cpu,omitempty"` // percent of one core, as docker stats says it; nil when it did not say
+	Mem        int64      `json:"mem,omitempty"` // bytes in use
+	Ports      []string   `json:"ports"`         // published on the host: "8081" or "UDP 55424"
+}
+
+type Docker struct {
+	Containers []DockerContainer `json:"containers"`
 }
 
 // BlockCfg is how the server tells an agent to set up its address blocker: on connecting, and whenever somebody changes

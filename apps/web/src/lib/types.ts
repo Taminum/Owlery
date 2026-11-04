@@ -390,3 +390,11 @@ export interface BlockView { settings: BlockSettings; state: BlockState | null; 
 
 export interface RuleRow { rule: string; kind: 'disk' | 'forecast' | 'cpu' | 'mem'; mount?: string; enabled: boolean; threshold: number; default_enabled: boolean; default_threshold: number; changed: boolean }
 export interface RulesView { rows: RuleRow[]; can_edit: boolean }
+
+export interface DockerContainer {
+  id: string; name: string; image: string
+  state: 'running' | 'restarting' | 'paused' | 'created' | 'exited' | 'dead' | 'removing' | 'unknown'
+  health?: string; policy?: string; restarts: number; restarts_1h: number; exit?: number
+  started?: string; finished?: string; cpu?: number; mem?: number; ports: string[]
+}
+export interface DockerInfo { containers: DockerContainer[] }
