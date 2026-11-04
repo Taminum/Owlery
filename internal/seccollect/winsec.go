@@ -302,7 +302,7 @@ func cut(s string, n int) string {
 	return s
 }
 
-const defenderScript = `try { $s = Get-MpComputerStatus -ErrorAction Stop; ConvertTo-Json -Compress @{ e = [bool]$s.AntivirusEnabled; r = [bool]$s.RealTimeProtectionEnabled; a = [int]$s.AntivirusSignatureAge } } catch { 'none' }`
+const defenderScript = `[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false); try { $s = Get-MpComputerStatus -ErrorAction Stop; ConvertTo-Json -Compress @{ e = [bool]$s.AntivirusEnabled; r = [bool]$s.RealTimeProtectionEnabled; a = [int]$s.AntivirusSignatureAge } } catch { 'none' }`
 
 func (w *Winsec) readDefenderStatus(ctx context.Context, now time.Time) {
 	if !w.defAt.IsZero() && now.Sub(w.defAt) < defenderEvery {
