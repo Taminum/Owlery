@@ -42,6 +42,7 @@ func HostConditions(states []store.HostAlertState) []store.Condition {
 			out = append(out, store.Condition{Kind: store.AlertHostDisk, Subject: h.VPSID + ":" + d.Mount, Label: "Диск почти полон: " + h.Name + " " + d.Mount,
 				Detail: fmt.Sprintf("занято %d%%: %s из %s", pct, gb(d.Used), gb(d.Total))})
 		}
+		out = append(out, diskForecast(h)...)
 		if h.CPUAvg != nil && *h.CPUAvg >= HostCPUPercent {
 			out = append(out, store.Condition{Kind: store.AlertHostCPU, Subject: h.VPSID, Label: "Процессор загружен: " + h.Name,
 				Detail: fmt.Sprintf("в среднем %.0f%% за последние десять минут", *h.CPUAvg)})
@@ -52,4 +53,46 @@ func HostConditions(states []store.HostAlertState) []store.Condition {
 		}
 	}
 	return out
+}
+
+// daysText says a number of days the way a person would.
+func daysText(days float64) string {
+	switch {
+	case days < 1:
+		return "меньше суток"
+	case days < 1.5:
+		return "около суток"
+	}
+	n := int(days + 0.5)
+	if n%10 == 1 && n%100 != 11 {
+		return fmt.Sprintf("%d день", n)
+	}
+	if n%10 >= 2 && n%10 <= 4 && (n%100 < 12 || n%100 > 14) {
+		return fmt.Sprintf("%d дня", n)
+	}
+	return fmt.Sprintf("%d дней", n)
+}
+
+// diskForecast reports a main disk that is not nearly full yet but fills steadily and will be within HostDiskForecastDays.
+// Once it is nearly full the "almost full" alert says it.
+func diskForecast(h store.HostAlertState) []store.Condition {
+	if h.MainMount == "" || !watchedDisk(h.MainMount) {
+		return nil
+	}
+	for _, d := range h.Disks {
+		if d.Mount == h.MainMount && d.Total > 0 && d.Used*100 >= d.Total*HostDiskPercent {
+			return nil
+		}
+	}
+	days, perDay, ok := DiskDaysLeft(h.DiskTrend, h.DiskTotal)
+	if !ok || days >= HostDiskForecastDays {
+		return nil
+	}
+	var free int64
+	if n := len(h.DiskTrend); n > 0 {
+		free = h.DiskTotal - h.DiskTrend[n-1].Used
+	}
+	return []store.Condition{{Kind: store.AlertHostDiskForecast, Subject: h.VPSID + ":" + h.MainMount,
+		Label:  "Диск кончится через " + daysText(days) + ": " + h.Name + " " + h.MainMount,
+		Detail: fmt.Sprintf("растёт на %s в сутки, свободно %s", gb(int64(perDay)), gb(free))}}
 }

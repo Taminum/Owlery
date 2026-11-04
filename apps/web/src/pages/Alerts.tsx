@@ -8,7 +8,7 @@ import type { AlertsResponse } from '../lib/types'
 import { Card, Chip } from '../components/ui'
 import { PageHead, TableSkeleton } from '../components/Analyzer'
 
-const ICON = { agent_silent: ServerOff, panel_sync: Waypoints, sec_agent_silent: ShieldAlert, sec_tls: FileWarning, sec_port: Network, dns_check_failed: Radar, dns_change: Radar, user_expiry: CalendarClock, user_traffic: Gauge, bill_due: Wallet, awg_down: ShieldOff, awg_tools_old: ShieldQuestion, host_disk: HardDrive, host_cpu: Gauge, host_mem: MemoryStick, host_flood: Siren } as const
+const ICON = { agent_silent: ServerOff, panel_sync: Waypoints, sec_agent_silent: ShieldAlert, sec_tls: FileWarning, sec_port: Network, dns_check_failed: Radar, dns_change: Radar, user_expiry: CalendarClock, user_traffic: Gauge, bill_due: Wallet, awg_down: ShieldOff, awg_tools_old: ShieldQuestion, host_disk: HardDrive, host_disk_forecast: HardDrive, host_cpu: Gauge, host_mem: MemoryStick, host_flood: Siren } as const
 
 /** A short "what to do" for the kinds that have one, so a red card explains itself. */
 function TodoLine({ kind }: { kind: string }) {
