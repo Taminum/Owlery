@@ -135,7 +135,6 @@ export default function ServerCard() {
             <Inventory s={s} onEdit={() => setEditing(true)} />
             <div className="space-y-4">
               <Now s={s} />
-              <AgentBlock vpsId={s.id} canEdit={s.can_edit} hostOS={s.os || s.host?.os} />
               <Card title={t('srv.openAlerts')}><AlertList items={open} empty={t('srv.noAlerts')} /></Card>
             </div>
           </div>
