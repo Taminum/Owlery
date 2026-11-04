@@ -374,3 +374,11 @@ export interface FleetSummaryExtra {
   jails: { name: string; count: number }[]
   recent: { server: string; type: string; severity: string; at: string }[]
 }
+export interface Hardware {
+  vendor?: string; model?: string; bios?: string; virtual: boolean; hypervisor?: string; os_build?: string
+  cpu: { model?: string; cores: number; threads: number; mhz?: number; max_mhz?: number; cache_mb?: number }
+  memory: { slots?: number; slots_used?: number; type?: string; speed_mt?: number }
+  disks: { model: string; size: number; kind: string }[]
+  gpus: { name: string; mem?: number; driver?: string }[]
+  nics: { name: string; speed_mbps?: number; ips?: string[] }[]
+}

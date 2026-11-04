@@ -1,10 +1,12 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 
 	"github.com/Taminum/Owlery/internal/auth"
+	"github.com/Taminum/Owlery/internal/secproto"
 	"github.com/Taminum/Owlery/internal/store"
 )
 
@@ -117,6 +119,18 @@ func (s *Server) serverCard(w http.ResponseWriter, r *http.Request, a auth.Actor
 		s.writeErr(w, r, http.StatusInternalServerError, "internal", "internal error")
 		return
 	}
+	// What the machine is made of, as its agent last read it; nil until it has.
+	var hw json.RawMessage
+	if states, err := s.Store.SnapshotStates(r.Context(), a.Scope(), v.ID); err == nil {
+		for _, st := range states {
+			if st.Category == secproto.CatHardware && st.Status == secproto.StatusOK && len(st.Data) > 2 {
+				hw = st.Data
+			}
+		}
+	}
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, out[0])
+	writeJSON(w, http.StatusOK, struct {
+		serverOut
+		Hardware json.RawMessage `json:"hardware"`
+	}{out[0], hw})
 }

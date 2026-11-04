@@ -30,10 +30,11 @@ const (
 	CatSockets  = "sockets"
 	CatFirewall = "firewall"
 	CatWinsec   = "winsec"
+	CatHardware = "hardware"
 )
 
 func ValidCategory(c string) bool {
-	return c == CatFail2ban || c == CatSockets || c == CatFirewall || c == CatWinsec
+	return c == CatFail2ban || c == CatSockets || c == CatFirewall || c == CatWinsec || c == CatHardware
 }
 
 // EventCategories are the categories the journal can be filtered by: the agent's three plus the
@@ -518,4 +519,63 @@ type Winsec struct {
 	Defender     WinDefender `json:"defender"`
 	Threats      []WinThreat `json:"threats"` // the latest, newest first
 	ThreatsTotal int64       `json:"threats_total"`
+}
+
+// --- Hardware (the "hardware" category) ---------------------------------------------------------------
+//
+// What the machine is made of: it changes only when someone opens the case or moves a virtual machine, so the agent
+// reads it once and then every couple of hours. No serial numbers and no MAC addresses: they identify one piece of
+// hardware and nothing here needs them.
+
+const (
+	CapHardware = "hardware_read"
+	MaxHWItems  = 32
+)
+
+type HWCPU struct {
+	Model   string `json:"model,omitempty"`
+	Cores   int    `json:"cores,omitempty"`
+	Threads int    `json:"threads,omitempty"`
+	MHz     int    `json:"mhz,omitempty"`     // the base clock
+	MaxMHz  int    `json:"max_mhz,omitempty"` // the highest it boosts to, when it says
+	CacheMB int    `json:"cache_mb,omitempty"`
+}
+
+type HWMemory struct {
+	Slots     int    `json:"slots,omitempty"`      // sockets on the board, 0 when unknown
+	SlotsUsed int    `json:"slots_used,omitempty"` // sockets with a module in them
+	Type      string `json:"type,omitempty"`       // DDR4, DDR5, ...
+	SpeedMT   int    `json:"speed_mt,omitempty"`
+}
+
+type HWDisk struct {
+	Model string `json:"model"`
+	Size  int64  `json:"size"`
+	Kind  string `json:"kind"` // nvme | ssd | hdd | unknown
+}
+
+type HWGPU struct {
+	Name   string `json:"name"`
+	Mem    int64  `json:"mem,omitempty"`
+	Driver string `json:"driver,omitempty"`
+}
+
+type HWNic struct {
+	Name      string   `json:"name"`
+	SpeedMbps int      `json:"speed_mbps,omitempty"`
+	IPs       []string `json:"ips,omitempty"`
+}
+
+type Hardware struct {
+	Vendor     string   `json:"vendor,omitempty"`
+	Model      string   `json:"model,omitempty"`
+	BIOS       string   `json:"bios,omitempty"` // version and date, as the firmware says them
+	Virtual    bool     `json:"virtual"`
+	Hypervisor string   `json:"hypervisor,omitempty"`
+	OSBuild    string   `json:"os_build,omitempty"`
+	CPU        HWCPU    `json:"cpu"`
+	Memory     HWMemory `json:"memory"`
+	Disks      []HWDisk `json:"disks"`
+	GPUs       []HWGPU  `json:"gpus"`
+	NICs       []HWNic  `json:"nics"`
 }
