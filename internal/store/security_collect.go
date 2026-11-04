@@ -211,6 +211,40 @@ func ParseSnapshotData(category, status string, raw json.RawMessage) (secevents.
 			snap.Hash = hashOf(status, hb)
 			return snap, canon, snap.Hash, nil
 		}
+	case secproto.CatWinsec:
+		var v secproto.Winsec
+		if err = dec(&v); err != nil || len(v.Sources) > secproto.MaxWinsecSources || len(v.RecentOK) > secproto.MaxWinsecRecent || len(v.Threats) > secproto.MaxWinsecRecent {
+			return snap, nil, "", ErrBadSnapshot
+		}
+		for _, s := range v.Sources {
+			if len(s.IP) > 45 || s.Failed < 0 {
+				return snap, nil, "", ErrBadSnapshot
+			}
+		}
+		for _, l := range v.RecentOK {
+			if len(l.User) > 128 || len(l.IP) > 45 {
+				return snap, nil, "", ErrBadSnapshot
+			}
+		}
+		for _, th := range v.Threats {
+			if len(th.Name) > 120 || len(th.Severity) > 32 || len(th.Path) > 200 {
+				return snap, nil, "", ErrBadSnapshot
+			}
+		}
+		if v.RemoteFailed < 0 || v.RemoteOK < 0 || v.ThreatsTotal < 0 {
+			return snap, nil, "", ErrBadSnapshot
+		}
+		if v.Sources == nil {
+			v.Sources = []secproto.WinSource{}
+		}
+		if v.RecentOK == nil {
+			v.RecentOK = []secproto.WinLogon{}
+		}
+		if v.Threats == nil {
+			v.Threats = []secproto.WinThreat{}
+		}
+		snap.Win = &v
+		canon, err = json.Marshal(v)
 	case secproto.CatFirewall:
 		var w secproto.Firewall
 		if err = dec(&w); err != nil || len(w.Rules) > secproto.MaxRulesBytes || len(w.Backend) > 16 {
@@ -333,6 +367,10 @@ func decodeStoredSnap(category, status, hash string, data []byte) (secevents.Sna
 		var v secproto.Sockets
 		err = json.Unmarshal(data, &v)
 		s.Sock = &v
+	case secproto.CatWinsec:
+		var v secproto.Winsec
+		err = json.Unmarshal(data, &v)
+		s.Win = &v
 	case secproto.CatFirewall:
 		var v secproto.Firewall
 		err = json.Unmarshal(data, &v)

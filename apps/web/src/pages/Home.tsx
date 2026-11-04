@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { Bell, CircleCheck, DoorOpen, KeyRound, Lock, OctagonAlert, Server as ServerIcon, ShieldAlert, TriangleAlert } from 'lucide-react'
+import { Bell, CircleCheck, DoorOpen, KeyRound, Lock, Monitor, OctagonAlert, Server as ServerIcon, ShieldAlert, ShieldCheck, ShieldOff, TriangleAlert } from 'lucide-react'
 import { ru, type MsgKey } from '../i18n/ru'
 import { t } from '../i18n'
 import { api } from '../lib/api'
@@ -49,7 +49,7 @@ function ShareBar({ v, max, color }: { v: number; max: number; color: string }) 
 
 function HourTip({ active, payload, label, tz }: { active?: boolean; payload?: { dataKey: string; value: number; color: string }[]; label?: number; tz: string }) {
   if (!active || !payload?.length || label === undefined) return null
-  const names: Record<string, string> = { bans: t('home.chart.bans'), changes: t('home.chart.changes'), alerts: t('home.chart.alerts') }
+  const names: Record<string, string> = { bans: t('home.chart.bans'), changes: t('home.chart.changes'), rdp: t('home.chart.rdp'), alerts: t('home.chart.alerts') }
   return (
     <div className="rounded-control border border-line bg-elevated px-3 py-2 text-xs shadow-lg">
       <div className="tnum mb-1 font-medium text-fg">{formatDateTime(label, tz)}</div>
@@ -64,11 +64,11 @@ function HourTip({ active, payload, label, tz }: { active?: boolean; payload?: {
 }
 
 function HoursCard({ sum, tz }: { sum: FleetSummary; tz: string }) {
-  const data = sum.hourly.map((h) => ({ ts: Math.floor(new Date(h.at).getTime() / 1000), bans: h.bans, changes: h.changes, alerts: h.alerts }))
+  const data = sum.hourly.map((h) => ({ ts: Math.floor(new Date(h.at).getTime() / 1000), bans: h.bans, changes: h.changes, rdp: h.rdp, alerts: h.alerts }))
   const nothing = data.every((d) => d.bans + d.changes + d.alerts === 0)
   return (
     <Card title={t('home.chart.title')} note={t('home.chart.note')} className="h-full"
-      right={<ul className="flex items-center gap-3 text-xs text-muted">{[[C.red, 'home.chart.bans'], [C.amber, 'home.chart.changes'], [C.blue, 'home.chart.alerts']].map(([c, k]) => (
+      right={<ul className="flex items-center gap-3 text-xs text-muted">{[[C.red, 'home.chart.bans'], [C.amber, 'home.chart.changes'], [C.cyan, 'home.chart.rdp'], [C.blue, 'home.chart.alerts']].map(([c, k]) => (
         <li key={k} className="flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: c }} aria-hidden />{t(k as MsgKey)}</li>))}</ul>}>
       {nothing ? <p className="py-10 text-center text-[13px] text-muted">{t('home.chart.none')}</p> : (
         <div className="h-[220px]" role="img" aria-label={t('home.chart.title')}>
@@ -80,6 +80,7 @@ function HoursCard({ sum, tz }: { sum: FleetSummary; tz: string }) {
               <Tooltip content={<HourTip tz={tz} />} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
               <Bar dataKey="bans" stackId="a" fill={C.red} fillOpacity={0.8} isAnimationActive={false} />
               <Bar dataKey="changes" stackId="a" fill={C.amber} isAnimationActive={false} />
+              <Bar dataKey="rdp" stackId="a" fill={C.cyan} isAnimationActive={false} />
               <Bar dataKey="alerts" stackId="a" fill={C.blue} isAnimationActive={false} />
             </BarChart>
           </ResponsiveContainer>
@@ -261,7 +262,7 @@ export default function Home() {
             {noAgent > 0 && <span>{t('home.hero.noAgent', { n: noAgent })}</span>}
           </div>
 
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+          <div className={`grid grid-cols-2 gap-3 md:grid-cols-3 ${sum && sum.win.machines > 0 ? 'xl:grid-cols-4' : 'xl:grid-cols-6'}`}>
             <Tile to="/servers" id="srv" icon={ServerIcon} color={C.blue} label={t('home.kpi.machines')} value={`${ok} / ${list.length}`}
               sub={warn + bad > 0 ? t('home.hero.asking', { n: warn + bad }) : t('home.kpi.machinesOk')} />
             <Tile to="/security" id="bans" icon={ShieldAlert} color={C.red} label={t('home.sum.bans')} value={sum ? formatInt(sum.bans.total) : '—'}
@@ -276,6 +277,15 @@ export default function Home() {
             )}
             <Tile to="/security" id="tls" icon={Lock} color={C.green} label={t('home.sum.tls')} value={nearest === null ? '—' : `${nearest} ${plural(nearest, 'день', 'дня', 'дней')}`}
               sub={sum && sum.tls.problems > 0 ? t('home.sum.tlsProblems', { n: sum.tls.problems }) : sum?.tls.nearest_host || t('home.sum.tlsNone')} />
+            {sum && sum.win.machines > 0 && (
+              <>
+                <Tile to="/security" id="rdp" icon={Monitor} color={C.cyan} label={t('home.kpi.rdp')} value={formatInt(sum.win.rdp_failed)}
+                  sub={t('home.kpi.rdpSub', { n: sum.win.rdp_ok })} series={series(sum, (h) => h.rdp)} />
+                <Tile to="/security" id="defender" icon={sum.win.defender_off > 0 || sum.win.threats > 0 ? ShieldOff : ShieldCheck} color={sum.win.defender_off > 0 || sum.win.threats > 0 ? C.red : C.green}
+                  label={t('home.kpi.defender')} value={formatInt(sum.win.threats)}
+                  sub={sum.win.defender_off > 0 ? t('home.kpi.defenderOff', { n: sum.win.defender_off }) : sum.win.threats > 0 ? t('home.kpi.defenderFound') : t('home.kpi.defenderClean', { n: sum.win.machines })} />
+              </>
+            )}
           </div>
 
           {summary.error && <p role="alert" className="text-[13px] text-red">{summary.error}</p>}

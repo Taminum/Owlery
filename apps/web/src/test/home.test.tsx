@@ -33,9 +33,10 @@ const server = (over: object) => ({
   id: 's1', name: 'exit-nl', roles: ['exit'], status: 'ok', reason: '', host: host(10), nodes: [], alerts_open: 0, alerts_critical: 0, ...over,
 })
 
-const hours = (bans: number[]) => bans.map((b, i) => ({ at: new Date(Date.UTC(2026, 10, 3, i)).toISOString(), bans: b, changes: 0, alerts: 0, access: 0 }))
+const hours = (bans: number[]) => bans.map((b, i) => ({ at: new Date(Date.UTC(2026, 10, 3, i)).toISOString(), bans: b, changes: 0, rdp: 0, alerts: 0, access: 0 }))
 const summary = (over: object = {}) => ({
   from: '2026-11-03T00:00:00Z', to: '2026-11-04T00:00:00Z', hourly: hours([0, 0, 0]), top_ips: [], jails: [], recent: [],
+  win: { machines: 0, rdp_failed: 0, rdp_ok: 0, threats: 0, defender_off: 0 },
   bans: { total: 0, servers: [] }, changes: { total: 0, items: [] }, tls: { problems: 0, nearest_end: null, nearest_host: '' },
   owlery: { logins: 3, failed_logins: 1, terminals: 1, screens: 0, desktops: 0 }, ...over,
 })
@@ -98,6 +99,27 @@ describe('Home', () => {
     expect(await screen.findByText('Ночью было спокойно')).toBeInTheDocument()
     expect(screen.getByText('За сутки ничего не происходило.')).toBeInTheDocument()
     expect(screen.queryByText('Доступ к машинам')).toBeNull()
+  })
+
+  it('shows the Windows tiles only when some machine reports them, and marks a Defender find in red', async () => {
+    backend([server({})], summary({
+      win: { machines: 2, rdp_failed: 41, rdp_ok: 3, threats: 1, defender_off: 0 },
+      jails: [{ name: 'rdp', count: 41 }],
+    }))
+    renderHome()
+    const rdp = (await screen.findByText('Неудачные входы по RDP')).closest('a') as HTMLElement
+    expect(within(rdp).getByText('41')).toBeInTheDocument()
+    expect(within(rdp).getByText('успешных входов: 3')).toBeInTheDocument()
+    const def = screen.getByText('Защитник Windows').closest('a') as HTMLElement
+    expect(within(def).getByText('находки за сутки')).toBeInTheDocument()
+    expect(screen.getByText('Удалённый рабочий стол (RDP)')).toBeInTheDocument() // the jail list names it too
+  })
+
+  it('has no Windows tiles on a farm of Linux machines', async () => {
+    backend([server({})], summary())
+    renderHome()
+    expect(await screen.findByText('Атаки за сутки')).toBeInTheDocument()
+    expect(screen.queryByText('Защитник Windows')).toBeNull()
   })
 
   it('invites to add the first machine when there are none', async () => {
