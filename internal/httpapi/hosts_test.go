@@ -160,3 +160,44 @@ func TestOnboardingCountsAreTheOwnersAndSayWhatIsSetUp(t *testing.T) {
 		t.Fatalf("%s", b)
 	}
 }
+
+func TestDiskForecastAlertOpensForADiskThatFillsSteadilyAndNotForOneThatIsFlat(t *testing.T) {
+	w := newWorld(t)
+	ctx := context.Background()
+	gb := int64(1 << 30)
+	now := time.Now().UTC().Truncate(time.Minute)
+	mk := func(name string, startUsed, perDay int64) store.VPS {
+		v, err := w.h.st.CreateVPS(ctx, "", name, "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// four days of one reading an hour, the disk growing by perDay a day
+		for i := 96; i >= 0; i-- {
+			at := now.Add(-time.Duration(i) * time.Hour)
+			used := startUsed + perDay*int64(96-i)/24
+			h := secproto.Host{Type: "host", At: at, OS: "Ubuntu", CPUs: 2, MemTotal: 4 * gb, MemUsed: gb, CPUPct: 5, Load1: 0.1, UptimeSec: 3600,
+				Disks: []secproto.HostDisk{{Mount: "/", FS: "ext4", Total: 100 * gb, Used: used}}}
+			if err := w.h.st.SaveHost(ctx, v.ID, h, at); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return v
+	}
+	filling := mk("filling", 50*gb, 6*gb) // about 26 GB left of a 100 GB disk after 24 GB of growth: days away
+	flat := mk("flat", 50*gb, 0)
+
+	states, err := w.h.st.HostAlertStates(ctx, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var kinds = map[string][]string{}
+	for _, c := range alerts.HostConditions(states) {
+		kinds[c.Subject] = append(kinds[c.Subject], c.Kind)
+	}
+	if got := kinds[filling.ID+":/"]; len(got) != 1 || got[0] != store.AlertHostDiskForecast {
+		t.Errorf("a disk filling 6 GB a day must get the forecast alert: %v", kinds)
+	}
+	if len(kinds[flat.ID+":/"]) != 0 {
+		t.Errorf("a flat disk must get none: %v", kinds)
+	}
+}

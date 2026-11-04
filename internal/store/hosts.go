@@ -13,10 +13,12 @@ import (
 
 // Alert kinds about the load of a monitored server. They are the owner's, like the servers' own list.
 const (
-	AlertHostDisk  = "host_disk"  // a file system is nearly full
-	AlertHostCPU   = "host_cpu"   // the processor has been busy for a long time
-	AlertHostMem   = "host_mem"   // memory has been nearly used up for a while
-	AlertHostFlood = "host_flood" // traffic or connections far above the usual, or the kernel's queues overflowing
+	AlertHostDisk = "host_disk" // a file system is nearly full
+	// AlertHostDiskForecast: the main disk is not full yet, but is filling steadily and will be within a couple of weeks.
+	AlertHostDiskForecast = "host_disk_forecast"
+	AlertHostCPU          = "host_cpu"   // the processor has been busy for a long time
+	AlertHostMem          = "host_mem"   // memory has been nearly used up for a while
+	AlertHostFlood        = "host_flood" // traffic or connections far above the usual, or the kernel's queues overflowing
 )
 
 // SaveHost keeps what a security agent said about its host: the machine, the latest reading, and one sample a
@@ -396,7 +398,11 @@ type HostAlertState struct {
 	Online bool
 	Disks  []secproto.HostDisk
 	CPUAvg *float64 // the mean of the last ten minutes, when there are at least eight samples
-	MemAvg *float64 // the mean memory use in percent over the last five minutes, when there are at least four samples
+	// DiskTrend is the week of the main disk, by the hour, and MainMount which file system it is (the root, else the first).
+	DiskTrend []DiskPoint
+	DiskTotal int64
+	MainMount string
+	MemAvg    *float64 // the mean memory use in percent over the last five minutes, when there are at least four samples
 }
 
 func (s *Store) HostAlertStates(ctx context.Context, now time.Time) ([]HostAlertState, error) {
@@ -429,6 +435,10 @@ func (s *Store) HostAlertStates(ctx context.Context, now time.Time) ([]HostAlert
 	}
 	for i := range out {
 		vid, _ := uuid.Parse(out[i].VPSID)
+		out[i].MainMount = mainMount(out[i].Disks)
+		if pts, total, err := s.DiskTrend(ctx, out[i].VPSID, now); err == nil {
+			out[i].DiskTrend, out[i].DiskTotal = pts, total
+		}
 		var cpu *float64
 		var n int
 		if err := s.pool.QueryRow(ctx, `SELECT avg(cpu)::float8, count(cpu) FROM host_samples WHERE vps_id=$1 AND at > $2 AND cpu IS NOT NULL`, vid, now.Add(-10*time.Minute)).Scan(&cpu, &n); err == nil && n >= 8 {
@@ -507,4 +517,50 @@ func (s *Store) HostFloodStates(ctx context.Context, now time.Time) ([]HostFlood
 		}
 	}
 	return out, nil
+}
+
+// DiskPoint is how much of the machine's main disk was used at one hour, for the forecast.
+type DiskPoint struct {
+	At   time.Time
+	Used int64
+}
+
+// DiskTrend gives hourly means of the main disk's use over the last week (oldest first); it is what the forecast of
+// "days until full" is drawn from. Hours with no reading are left out.
+func (s *Store) DiskTrend(ctx context.Context, vpsID string, now time.Time) ([]DiskPoint, int64, error) {
+	vid, err := ParseID(vpsID)
+	if err != nil {
+		return nil, 0, ErrNotFound
+	}
+	rows, err := s.pool.Query(ctx, `SELECT date_trunc('hour', at) AS h, avg(disk_used)::bigint, max(disk_total) FROM host_samples
+		WHERE vps_id=$1 AND at > $2 AND disk_total > 0 GROUP BY 1 ORDER BY 1`, vid, now.Add(-7*24*time.Hour))
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	var out []DiskPoint
+	var total int64
+	for rows.Next() {
+		var p DiskPoint
+		if err := rows.Scan(&p.At, &p.Used, &total); err != nil {
+			return nil, 0, err
+		}
+		out = append(out, p)
+	}
+	return out, total, rows.Err()
+}
+
+// mainMount is the file system whose use is kept as a sample every minute: the root, else the first one. It is the same
+// choice SaveHost makes when it writes the sample.
+func mainMount(disks []secproto.HostDisk) string {
+	if len(disks) == 0 {
+		return ""
+	}
+	m := disks[0].Mount
+	for _, d := range disks {
+		if d.Mount == "/" {
+			m = d.Mount
+		}
+	}
+	return m
 }
