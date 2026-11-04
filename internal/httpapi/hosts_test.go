@@ -201,3 +201,88 @@ func TestDiskForecastAlertOpensForADiskThatFillsSteadilyAndNotForOneThatIsFlat(t
 		t.Errorf("a flat disk must get none: %v", kinds)
 	}
 }
+
+func TestAlertRulesAreSavedPerMachineAndAnAlertCanBePutOff(t *testing.T) {
+	w := newAgentWorld(t)
+	ctx := context.Background()
+	gb := int64(1 << 30)
+	id := mkVPS(t, w, "home-pc", "203.0.113.60", w.work.ID)
+	h := secproto.Host{Type: "host", At: time.Now(), OS: "Windows", CPUs: 4, MemTotal: 16 * gb, MemUsed: 4 * gb, CPUPct: 5, Load1: 0.1, UptimeSec: 3600,
+		Disks: []secproto.HostDisk{{Mount: "C:", FS: "NTFS", Total: 100 * gb, Used: 95 * gb}, {Mount: "D:", FS: "NTFS", Total: 100 * gb, Used: 99 * gb}}}
+	if err := w.h.st.SaveHost(ctx, id, h, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	type view struct {
+		Rows []struct {
+			Rule      string `json:"rule"`
+			Enabled   bool   `json:"enabled"`
+			Threshold int    `json:"threshold"`
+			Changed   bool   `json:"changed"`
+		} `json:"rows"`
+		CanEdit bool `json:"can_edit"`
+	}
+	st, b := w.owner.get("/api/v1/servers/" + id + "/alert-rules")
+	if st != 200 {
+		t.Fatalf("get: %d %s", st, b)
+	}
+	got := parse[view](t, b)
+	names := map[string]bool{}
+	for _, r := range got.Rows {
+		names[r.Rule] = r.Enabled
+	}
+	// By default C: is watched, the archive drive D: is not; the forecast, processor and memory are.
+	if !names["disk:C:"] || names["disk:D:"] || !names["forecast"] || !names["cpu"] || !names["mem"] || len(got.Rows) != 5 {
+		t.Errorf("defaults: %s", b)
+	}
+
+	put := map[string]any{"rules": []map[string]any{{"rule": "disk:C:", "enabled": true, "threshold": 97}, {"rule": "disk:D:", "enabled": true}}}
+	if st, b := w.owner.do("PUT", "/api/v1/servers/"+id+"/alert-rules", put); st != 200 {
+		t.Fatalf("put: %d %s", st, b)
+	}
+	_, b = w.owner.get("/api/v1/servers/" + id + "/alert-rules")
+	got = parse[view](t, b)
+	for _, r := range got.Rows {
+		if r.Rule == "disk:C:" && (r.Threshold != 97 || !r.Changed) || r.Rule == "disk:D:" && (!r.Enabled || !r.Changed) {
+			t.Errorf("saved rule: %+v", r)
+		}
+	}
+	for name, bad := range map[string][]map[string]any{
+		"unknown rule":   {{"rule": "gpu", "enabled": true}},
+		"threshold":      {{"rule": "cpu", "enabled": true, "threshold": 0}},
+		"forecast range": {{"rule": "forecast", "enabled": true, "threshold": 400}},
+		"twice":          {{"rule": "cpu", "enabled": true}, {"rule": "cpu", "enabled": false}},
+	} {
+		if st, b := w.owner.do("PUT", "/api/v1/servers/"+id+"/alert-rules", map[string]any{"rules": bad}); st != 422 || errCode(b) != "invalid_rules" {
+			t.Errorf("%s must be refused: %d %s", name, st, b)
+		}
+	}
+	if st, _ := w.viewer.do("PUT", "/api/v1/servers/"+id+"/alert-rules", put); st != 403 {
+		t.Errorf("a viewer must not change the rules: %d", st)
+	}
+
+	// Put an alert off: it closes, and the same condition is not reported while the time lasts.
+	if _, err := w.h.st.Pool().Exec(ctx, `INSERT INTO alerts (kind, subject, label, opened_at) VALUES ('host_disk', $1, 'Диск почти полон', now())`, id+":C:"); err != nil {
+		t.Fatal(err)
+	}
+	var alertID string
+	if err := w.h.st.Pool().QueryRow(ctx, `SELECT id::text FROM alerts WHERE kind='host_disk' AND subject=$1`, id+":C:").Scan(&alertID); err != nil {
+		t.Fatal(err)
+	}
+	if st, b := w.viewer.do("POST", "/api/v1/alerts/"+alertID+"/snooze", map[string]any{"hours": 24}); st != 403 {
+		t.Errorf("only the owner puts an alert off: %d %s", st, b)
+	}
+	if st, b := w.owner.do("POST", "/api/v1/alerts/"+alertID+"/snooze", map[string]any{"hours": 0}); st != 422 {
+		t.Errorf("hours out of range: %d %s", st, b)
+	}
+	if st, b := w.owner.do("POST", "/api/v1/alerts/"+alertID+"/snooze", map[string]any{"hours": 24}); st != 200 {
+		t.Fatalf("snooze: %d %s", st, b)
+	}
+	var open int
+	if err := w.h.st.Pool().QueryRow(ctx, `SELECT count(*) FROM alerts WHERE id=$1 AND resolved_at IS NULL`, alertID).Scan(&open); err != nil || open != 0 {
+		t.Errorf("a put-off alert is closed: %d %v", open, err)
+	}
+	snoozed, err := w.h.st.ActiveSnoozes(ctx, time.Now())
+	if err != nil || !snoozed["host_disk\x00"+id+":C:"] {
+		t.Errorf("the snooze must be recorded: %v %v", snoozed, err)
+	}
+}

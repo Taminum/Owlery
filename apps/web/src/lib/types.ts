@@ -207,7 +207,7 @@ export interface SiteDetailResponse {
 }
 export interface SubjectA { subject: string; kind: 'user' | 'raw' | 'device' | 'path' | 'awg'; label: string; panel_name: string; connections: number }
 export interface SubjectsResponse { subjects: SubjectA[] }
-export interface AlertRow { id: string; panel_id: string; panel_name: string; kind: string; label: string; detail: string; opened_at: string; last_seen_at: string; resolved_at: string | null }
+export interface AlertRow { id: string; panel_id: string; panel_name: string; kind: string; subject?: string; label: string; detail: string; opened_at: string; last_seen_at: string; resolved_at: string | null }
 export interface AlertsResponse { alerts: AlertRow[]; open: number }
 export interface RuleRow { id: string; pattern: string; service: string; category: string; source: string; created_at: string | null }
 export interface RulesResponse { rules: RuleRow[]; categories: string[]; can_edit: boolean }
@@ -387,3 +387,6 @@ export interface BlockSettings { mode: 'off' | 'watch' | 'block'; threshold: num
 export interface BlockEntry { ip: string; since: string; until?: string; failed: number; shared?: boolean }
 export interface BlockState { mode: string; threshold: number; window_min: number; ttl_hours: number; active: BlockEntry[]; would: BlockEntry[]; total: number; error?: string }
 export interface BlockView { settings: BlockSettings; state: BlockState | null; supported: boolean; can_block: boolean; updated: boolean; online: boolean; can_edit: boolean }
+
+export interface RuleRow { rule: string; kind: 'disk' | 'forecast' | 'cpu' | 'mem'; mount?: string; enabled: boolean; threshold: number; default_enabled: boolean; default_threshold: number; changed: boolean }
+export interface RulesView { rows: RuleRow[]; can_edit: boolean }

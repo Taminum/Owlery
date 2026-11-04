@@ -137,7 +137,23 @@ func Evaluate(ctx context.Context, st *store.Store, now time.Time) (opened, clos
 	conds = append(conds, AWGConditions(awgs, now)...)
 	conds = append(conds, DNSConditions(dns, now)...)
 	conds = append(conds, UserConditions(users, now)...)
-	return st.ApplyConditions(ctx, Kinds, append(conds, BillConditions(bills, now)...), now)
+	conds = append(conds, BillConditions(bills, now)...)
+	// What somebody put off is not reported while the time lasts, so nothing is sent and nothing shows as open; when it
+	// ends and the cause is still there the alert opens again.
+	snoozed, err := st.ActiveSnoozes(ctx, now)
+	if err != nil {
+		return 0, 0, err
+	}
+	if len(snoozed) > 0 {
+		kept := conds[:0]
+		for _, c := range conds {
+			if !snoozed[c.Kind+"\x00"+c.Subject] {
+				kept = append(kept, c)
+			}
+		}
+		conds = kept
+	}
+	return st.ApplyConditions(ctx, Kinds, conds, now)
 }
 
 // Run evaluates every interval until ctx ends.

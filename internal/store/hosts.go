@@ -3,10 +3,12 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"math"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/Taminum/Owlery/internal/secproto"
 )
@@ -398,6 +400,8 @@ type HostAlertState struct {
 	Online bool
 	Disks  []secproto.HostDisk
 	CPUAvg *float64 // the mean of the last ten minutes, when there are at least eight samples
+	// Rules are what somebody set for this machine, by rule name; a rule that is not there is at its default.
+	Rules map[string]AlertRule
 	// DiskTrend is the week of the main disk, by the hour, and MainMount which file system it is (the root, else the first).
 	DiskTrend []DiskPoint
 	DiskTotal int64
@@ -433,9 +437,14 @@ func (s *Store) HostAlertStates(ctx context.Context, now time.Time) ([]HostAlert
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	rules, rerr := s.allAlertRules(ctx)
+	if rerr != nil {
+		return nil, rerr
+	}
 	for i := range out {
 		vid, _ := uuid.Parse(out[i].VPSID)
 		out[i].MainMount = mainMount(out[i].Disks)
+		out[i].Rules = rules[out[i].VPSID]
 		if pts, total, err := s.DiskTrend(ctx, out[i].VPSID, now); err == nil {
 			out[i].DiskTrend, out[i].DiskTotal = pts, total
 		}
@@ -563,4 +572,24 @@ func mainMount(disks []secproto.HostDisk) string {
 		}
 	}
 	return m
+}
+
+// HostDisks is the file systems a machine last reported, for the page where its alert rules are set.
+func (s *Store) HostDisks(ctx context.Context, vpsID string) ([]secproto.HostDisk, error) {
+	vid, err := ParseID(vpsID)
+	if err != nil {
+		return nil, ErrNotFound
+	}
+	var last []byte
+	if err := s.pool.QueryRow(ctx, `SELECT COALESCE(last, '{}'::jsonb) FROM host_info WHERE vps_id=$1`, vid).Scan(&last); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var l struct {
+		Disks []secproto.HostDisk `json:"disks"`
+	}
+	_ = json.Unmarshal(last, &l)
+	return l.Disks, nil
 }

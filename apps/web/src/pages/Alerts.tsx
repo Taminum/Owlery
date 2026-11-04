@@ -1,14 +1,49 @@
+import { Link } from 'react-router-dom'
+import { useState } from 'react'
 import { AlertTriangle, CheckCircle2, FileWarning, CalendarClock, Gauge, Wallet, ShieldOff, ShieldQuestion, HardDrive, MemoryStick, Siren, Network, Radar, ServerOff, ShieldAlert, Waypoints } from 'lucide-react'
 import { t, type MsgKey } from '../i18n'
 import { api } from '../lib/api'
 import { useApp } from '../lib/context'
 import { formatDateTime } from '../lib/format'
 import { useLoad } from '../hooks/useLoad'
+import { useAuth } from '../lib/auth'
+import { errorText } from '../lib/errors'
+import { GhostButton } from '../components/Modal'
 import type { AlertsResponse } from '../lib/types'
 import { Card, Chip } from '../components/ui'
 import { PageHead, TableSkeleton } from '../components/Analyzer'
 
 const ICON = { agent_silent: ServerOff, panel_sync: Waypoints, sec_agent_silent: ShieldAlert, sec_tls: FileWarning, sec_port: Network, dns_check_failed: Radar, dns_change: Radar, user_expiry: CalendarClock, user_traffic: Gauge, bill_due: Wallet, awg_down: ShieldOff, awg_tools_old: ShieldQuestion, host_disk: HardDrive, host_disk_forecast: HardDrive, host_cpu: Gauge, host_mem: MemoryStick, host_flood: Siren } as const
+
+// What can be put off: the resource and security alerts of machines, which are the owner's. The others (a panel that
+// does not answer, a server that went silent) say something is down, and are not put off.
+const SNOOZABLE = (kind: string) => kind.startsWith('host_') || kind.startsWith('sec_') || kind === 'awg_down'
+
+/** Buttons on an open alert: put it off for a day or a week, or go and set this machine's threshold. */
+function AlertActions({ a, onDone }: { a: { id: string; kind: string; subject?: string }; onDone: () => void }) {
+  const auth = useAuth()
+  const owner = auth.state.status === 'authed' && auth.state.me.account.is_owner
+  const [err, setErr] = useState('')
+  if (!owner || !SNOOZABLE(a.kind)) return null
+  const machine = a.kind.startsWith('host_') ? (a.subject ?? '').split(':')[0] : ''
+  async function snooze(hours: number) {
+    setErr('')
+    try {
+      await api.post(`/api/v1/alerts/${a.id}/snooze`, { hours })
+      onDone()
+    } catch (e) {
+      setErr(errorText(e))
+    }
+  }
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2">
+      <GhostButton onClick={() => void snooze(24)}>{t('al.snooze.day')}</GhostButton>
+      <GhostButton onClick={() => void snooze(168)}>{t('al.snooze.week')}</GhostButton>
+      {machine && a.kind !== 'host_flood' && <Link to={`/servers/${machine}?view=alerts`} className="text-[13px] text-cyan underline-offset-2 hover:underline">{t('al.snooze.tune')}</Link>}
+      {err && <span role="alert" className="text-[13px] text-red">{err}</span>}
+    </div>
+  )
+}
 
 /** A short "what to do" for the kinds that have one, so a red card explains itself. */
 function TodoLine({ kind }: { kind: string }) {
@@ -21,7 +56,7 @@ function TodoLine({ kind }: { kind: string }) {
 export default function Alerts() {
   const { filters, update } = useApp()
   const q = filters.panels.length ? `&panel_ids=${filters.panels.join(',')}` : ''
-  const { data, error } = useLoad((s) => api.get<AlertsResponse>(`/api/v1/alerts?state=all${q}`, s), [q], 30_000)
+  const { data, error, reload } = useLoad((s) => api.get<AlertsResponse>(`/api/v1/alerts?state=all${q}`, s), [q], 30_000)
   // With a panel picked, the page shows that panel's alerts only, while the counter in the menu counts every open one
   // (servers, DNS and the like belong to no panel). Say so instead of letting the two disagree.
   const filtered = filters.panels.length > 0
@@ -63,6 +98,7 @@ export default function Alerts() {
                       </div>
                       <p className="mt-0.5 text-[13px] text-fg/90">{a.detail}</p>
                       <TodoLine kind={a.kind} />
+                      <AlertActions a={a} onDone={reload} />
                       <p className="tnum mt-1 text-xs text-muted">{t('al.since')} {formatDateTime(a.opened_at, tz)}</p>
                     </div>
                   </div>
