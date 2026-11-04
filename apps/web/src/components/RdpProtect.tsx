@@ -41,7 +41,7 @@ function EntryTable({ rows, action, label, windowMin }: { rows: BlockEntry[]; ac
         {rows.map((e) => (
           <tr key={e.ip + e.since} className="border-t border-line/60">
             <td className="py-1.5 font-mono">{e.ip}</td>
-            <td>{t('prot.why', { n: e.failed, m: windowMin })}</td>
+            <td>{e.shared ? t('prot.why.shared') : t('prot.why', { n: e.failed, m: windowMin })}</td>
             <td className="tnum text-muted">{e.until ? formatDateTime(e.until, 'local') : t('prot.forever')}</td>
             <td className="text-right">{action && <GhostButton onClick={() => action(e.ip)}>{label}</GhostButton>}</td>
           </tr>
@@ -112,10 +112,11 @@ export function RdpProtect({ serverId }: { serverId: string }) {
       {st?.error && <Notice>{st.error}</Notice>}
       {err && <p role="alert" className="text-[13px] text-red">{err}</p>}
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <Tile label={t('prot.mode')} value={t(`prot.mode.${mode}` as 'prot.mode.off')} />
         <Tile label={t('prot.active')} value={st?.active.length ?? 0} />
         <Tile label={t('prot.total')} value={st?.total ?? 0} />
+        <Tile label={t('prot.received')} value={st?.active.filter((e) => e.shared).length ?? 0} />
         <Tile label={t('prot.would')} value={st?.would.length ?? 0} />
       </div>
 
@@ -141,6 +142,14 @@ export function RdpProtect({ serverId }: { serverId: string }) {
             <input aria-label={t('prot.ttl')} type="number" min={0} max={8760} className={`${numCls} w-24`} value={draft.ttl_hours} disabled={ro} onChange={(e) => edit({ ttl_hours: num(e.target.value) })} />
             {t('prot.ttl.h')}
           </span>
+          <span className="text-muted">{t('prot.share')}</span>
+          <div>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={draft.share} disabled={ro} onChange={(e) => edit({ share: e.target.checked })} />
+              {t('prot.share.label')}
+            </label>
+            <p className="mt-0.5 text-xs text-muted">{t('prot.share.hint')}</p>
+          </div>
         </div>
         {!ro && (
           <div className="mt-4 flex items-center gap-3">

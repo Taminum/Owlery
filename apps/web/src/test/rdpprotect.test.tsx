@@ -68,3 +68,17 @@ describe('Защита RDP, an agent that is too old', () => {
     expect(await screen.findByText(/старой версии/)).toBeInTheDocument()
   })
 })
+
+describe('Защита RDP, the shared list', () => {
+  it('counts what other machines passed on, says so in the table, and saves the choice to take part', async () => {
+    const shared = { mode: 'block', threshold: 5, window_min: 10, ttl_hours: 24, total: 0, would: [], active: [{ ip: '198.51.100.9', since: '2026-11-04T10:00:00Z', failed: 0, shared: true }] }
+    const api = backend(view({ state: shared, can_block: true }), (r) => (r.method === 'PUT' ? { status: 200, body: view() } : undefined))
+    render(<RdpProtect serverId="s1" />)
+    expect(await screen.findByText('заблокирован на другой машине парка')).toBeInTheDocument()
+    expect(screen.getByText('Получено от других машин').nextSibling).toHaveTextContent('1')
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(api.find('PUT', '/api/v1/servers/s1/block')).toHaveLength(1))
+    expect(api.find('PUT', '/api/v1/servers/s1/block')[0].body).toMatchObject({ share: false })
+  })
+})

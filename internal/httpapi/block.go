@@ -147,5 +147,7 @@ func (s *Server) unblock(w http.ResponseWriter, r *http.Request, a auth.Actor, _
 		}
 		return
 	}
+	// Off the shared list too, so that a machine that connects later is not asked to block it again.
+	_ = s.Store.DropSharedBlock(r.Context(), ip.String())
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }

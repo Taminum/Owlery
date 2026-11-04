@@ -257,3 +257,36 @@ func TestWindowAndLimitsAreHeldToSaneValues(t *testing.T) {
 		t.Errorf("%+v", c)
 	}
 }
+
+func TestASharedBlockIsMadeOnlyInBlockModeAndNeverOnWhatIsProtected(t *testing.T) {
+	fw := newFW()
+	e, _ := engine(fw, "", secproto.BlockOn, true)
+	if !e.AddShared(ctx, "203.0.113.50", 2*time.Hour) || !fw.rules[netip.MustParseAddr("203.0.113.50")] {
+		t.Fatal("a block that another machine made must be made here too")
+	}
+	s := e.Snapshot()
+	if len(s.Active) != 1 || !s.Active[0].Shared || s.Total != 0 || s.Active[0].Until == nil {
+		t.Errorf("a shared block is marked, is not counted as made here, and ends: %+v", s)
+	}
+	if e.AddShared(ctx, "203.0.113.50", time.Hour) {
+		t.Error("an address already blocked is not blocked twice")
+	}
+	e.OK("203.0.113.51", t0)
+	for _, ip := range []string{"10.0.0.5", "203.0.113.51", "127.0.0.1"} {
+		if e.AddShared(ctx, ip, time.Hour) {
+			t.Errorf("must not block %s: private, or somebody who signed in", ip)
+		}
+	}
+	// This machine's own limit is the longest a block may last.
+	e.AddShared(ctx, "203.0.113.52", 500*time.Hour)
+	for _, a := range e.Snapshot().Active {
+		if a.IP == "203.0.113.52" && a.Until.Sub(a.Since) > 24*time.Hour+time.Second {
+			t.Errorf("a shared block outlasts the local limit: %v", a.Until.Sub(a.Since))
+		}
+	}
+
+	watch, _ := engine(newFW(), "", secproto.BlockWatch, true)
+	if watch.AddShared(ctx, "203.0.113.53", time.Hour) {
+		t.Error("a machine that only watches must not block")
+	}
+}
