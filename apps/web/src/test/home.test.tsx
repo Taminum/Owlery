@@ -104,7 +104,7 @@ describe('Home', () => {
   it('shows the Windows tiles only when some machine reports them, and marks a Defender find in red', async () => {
     backend([server({})], summary({
       win: { machines: 2, rdp_failed: 41, rdp_ok: 3, threats: 1, defender_off: 0, defender_down: 0 },
-      jails: [{ name: 'rdp', count: 41 }],
+      jails: [{ name: 'rdp', count: 2, attempts: 41 }],
     }))
     renderHome()
     const rdp = (await screen.findByText('Неудачные входы по RDP')).closest('a') as HTMLElement
@@ -113,6 +113,7 @@ describe('Home', () => {
     const def = screen.getByText('Защитник Windows').closest('a') as HTMLElement
     expect(within(def).getByText('находки за сутки')).toBeInTheDocument()
     expect(screen.getByText('Удалённый рабочий стол (RDP)')).toBeInTheDocument() // the jail list names it too
+    expect(screen.getByText('неудачных входов: 41')).toBeInTheDocument() // beside the blocks, which are what the row counts
   })
 
   it('has no Windows tiles on a farm of Linux machines', async () => {

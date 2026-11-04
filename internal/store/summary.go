@@ -176,7 +176,9 @@ type SummaryIP struct {
 // SummaryJail is what was hit: a fail2ban jail with how many bans it made.
 type SummaryJail struct {
 	Name  string `json:"name"`
-	Count int    `json:"count"`
+	Count int    `json:"count"` // blocks: by Fail2ban, or by the address blocker on a Windows machine
+	// Attempts is how many failed sign-ins were seen behind the blocks (remote desktop only); it is shown beside the count.
+	Attempts int `json:"attempts,omitempty"`
 }
 
 // SummaryEvent is one line of the recent journal.
@@ -199,6 +201,9 @@ const banCount = `CASE WHEN e.type = 'fail2ban.ban' THEN 1 WHEN e.type = 'fail2b
 
 // rdpCount is how many failed remote sign-ins one winsec.rdp_failed event stands for.
 const rdpCount = `CASE WHEN e.type = 'winsec.rdp_failed' THEN COALESCE((e.payload->>'count')::int, 0) ELSE 0 END`
+
+// ipBlocked counts one block by the address blocker on a Windows machine.
+const ipBlocked = `CASE WHEN e.type = 'winsec.ip_blocked' THEN 1 ELSE 0 END`
 
 // FleetDetails fills the hour buckets (one per hour of the window, empty ones included) and the top lists. withAccess
 // adds the access sessions and the opened alerts, which belong to no machine and so only an owner sees.
@@ -260,14 +265,17 @@ func (s *Store) FleetDetails(ctx context.Context, sc Scope, from, to time.Time, 
 		return d, err
 	}
 
-	jr, err := s.pool.Query(ctx, `SELECT CASE WHEN e.type = 'winsec.rdp_failed' THEN 'rdp' ELSE COALESCE(e.payload->>'jail', '') END, sum(`+banCount+` + `+rdpCount+`)::int`+from2+`
-		AND e.type IN ('fail2ban.ban', 'fail2ban.bans_unobserved', 'winsec.rdp_failed') GROUP BY 1 HAVING sum(`+banCount+` + `+rdpCount+`) > 0 ORDER BY 2 DESC, 1 LIMIT 6`, args...)
+	// Remote desktop counts blocks, like the other jails; the failed sign-ins behind them ride along as "attempts".
+	jr, err := s.pool.Query(ctx, `SELECT CASE WHEN e.type IN ('winsec.rdp_failed', 'winsec.ip_blocked') THEN 'rdp' ELSE COALESCE(e.payload->>'jail', '') END,
+			sum(`+banCount+` + `+ipBlocked+`)::int, sum(`+rdpCount+`)::int`+from2+`
+		AND e.type IN ('fail2ban.ban', 'fail2ban.bans_unobserved', 'winsec.rdp_failed', 'winsec.ip_blocked') GROUP BY 1
+		HAVING sum(`+banCount+` + `+ipBlocked+` + `+rdpCount+`) > 0 ORDER BY 2 DESC, 3 DESC, 1 LIMIT 6`, args...)
 	if err != nil {
 		return d, err
 	}
 	for jr.Next() {
 		var x SummaryJail
-		if err := jr.Scan(&x.Name, &x.Count); err != nil {
+		if err := jr.Scan(&x.Name, &x.Count, &x.Attempts); err != nil {
 			jr.Close()
 			return d, err
 		}

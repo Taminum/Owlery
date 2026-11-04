@@ -145,7 +145,7 @@ function Jails({ sum }: { sum: FleetSummary }) {
         <ul className="space-y-3">
           {sum.jails.map((j) => (
             <li key={j.name} className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1 text-[13px]">
-              <span className="truncate" title={j.name}>{jailName(j.name)}</span><span className="tnum text-muted">{formatInt(j.count)}</span>
+              <span className="truncate" title={j.name}>{jailName(j.name)}</span><span className="tnum text-muted" title={j.attempts ? t('home.jails.attempts', { n: j.attempts }) : undefined}>{formatInt(j.count)}{j.attempts ? <span className="ml-2 text-xs">{t('home.jails.attempts', { n: formatInt(j.attempts) })}</span> : null}</span>
               <div className="col-span-2"><ShareBar v={j.count} max={max} color={C.red} /></div>
             </li>
           ))}
