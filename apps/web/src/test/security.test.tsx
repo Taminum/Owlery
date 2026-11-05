@@ -214,6 +214,46 @@ describe('Security page', () => {
     expect(screen.getByText(/Get-Process secagent .* Stop-Process -Force/)).toBeInTheDocument()
   })
 
+  describe('update of the agent from the card', () => {
+    const agentOf = (caps: string[], version = 'v0.5.14') => ({ id: 'a1', status: 'active', agent_version: version, hostname: 'box', capabilities: caps, last_seen: '2026-11-05T10:00:00Z', online: true })
+    const setup = (agent: ReturnType<typeof agentOf>, latest = 'v0.5.15') => mockApi({ me: owner, handler: (r: Req) => {
+      if (r.path === '/api/v1/security/vps/v1') return { status: 200, body: vps() }
+      if (r.path === '/api/v1/security/vps/v1/agent' && r.method === 'GET') return { status: 200, body: { agent } }
+      if (r.path === '/api/v1/agent/latest') return { status: 200, body: { version: latest } }
+      if (r.path === '/api/v1/security/vps/v1/agent/update') return { status: 200, body: { status: 'started', version: latest } }
+      if (r.path === '/api/v1/security/vps/v1/fail2ban') return { status: 200, body: { category: 'fail2ban', state: 'agent_required', observed_at: null, received_at: null, clock_skew_ms: 0, data: null, agent: null } }
+    } })
+
+    it('offers the update when a newer release exists and the machine allows it, and sends only the version', async () => {
+      const api = setup(agentOf(['shell', 'self_update']))
+      renderSec('/security/v1?tab=fail2ban')
+      expect(await screen.findByText('доступна v0.5.15')).toBeInTheDocument()
+      await userEvent.click(screen.getByRole('button', { name: 'Обновить до v0.5.15' }))
+      expect(await screen.findByText('обновляется')).toBeInTheDocument()
+      const sent = api.find('POST', '/api/v1/security/vps/v1/agent/update')
+      expect(sent).toHaveLength(1)
+      expect(sent[0].body).toEqual({ version: 'v0.5.15' })
+      expect(screen.queryByRole('button', { name: 'Обновить до v0.5.15' })).toBeNull()
+    })
+
+    it('says what is missing when the machine did not allow it, and offers the permissions instead', async () => {
+      setup(agentOf(['shell']))
+      renderSec('/security/v1?tab=fail2ban')
+      expect(await screen.findByText('доступна v0.5.15')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Обновить до/ })).toBeNull()
+      expect(screen.getByText(/не разрешила обновление с панели/)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Обновить или изменить разрешения' })).toBeInTheDocument()
+    })
+
+    it('offers nothing when the agent is already the newest', async () => {
+      setup(agentOf(['self_update'], 'v0.5.15'))
+      renderSec('/security/v1?tab=fail2ban')
+      expect(await screen.findByText(/^v0.5.15/)).toBeInTheDocument()
+      expect(screen.queryByText(/доступна/)).toBeNull()
+      expect(screen.queryByRole('button', { name: /Обновить до/ })).toBeNull()
+    })
+  })
+
   describe('ban and unban', () => {
     const f2b = (manage: object) => ({
       category: 'fail2ban', state: 'ok', status: 'ok', observed_at: '2026-10-15T12:00:00Z', received_at: '2026-10-15T12:00:00Z', clock_skew_ms: 0, agent: null, manage,

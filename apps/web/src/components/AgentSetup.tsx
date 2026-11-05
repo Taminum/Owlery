@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { t, type MsgKey } from '../i18n'
 import { api } from '../lib/api'
 import { errorText } from '../lib/errors'
+import { isNewer } from '../lib/semver'
 import { formatDateTime } from '../lib/format'
 import { useLoad } from '../hooks/useLoad'
 import type { SecAgent } from '../lib/types'
@@ -280,7 +281,7 @@ journalctl -u remnascope-secagent -n 5 --no-pager`}</Code>
 
 const PERMS: { key: keyof AgentOpts; label: MsgKey }[] = [
   { key: 'shell', label: 'agent.perm.shell' }, { key: 'web', label: 'agent.perm.web' }, { key: 'desk', label: 'agent.perm.desk' },
-  { key: 'scr', label: 'agent.perm.scr' }, { key: 'adm', label: 'agent.perm.adm' }, { key: 'blk', label: 'agent.perm.blk' }, { key: 'probe', label: 'agent.perm.probe' },
+  { key: 'scr', label: 'agent.perm.scr' }, { key: 'adm', label: 'agent.perm.adm' }, { key: 'blk', label: 'agent.perm.blk' }, { key: 'probe', label: 'agent.perm.probe' }, { key: 'upd', label: 'agent.perm.upd' },
 ]
 
 /**
@@ -293,7 +294,31 @@ export function AgentBlock({ vpsId, canEdit, hostOS }: { vpsId: string; canEdit:
   const [updating, setUpdating] = useState(false)
   const [confirm, setConfirm] = useState(false)
   const [err, setErr] = useState('')
+  // The newest release, asked of the server (which asks GitHub at most every ten minutes), and an update that is under way.
+  const latest = useLoad((s) => api.get<{ version: string }>('/api/v1/agent/latest', s), [], 600_000)
+  const [run, setRun] = useState<{ to: string; since: number; failed: boolean } | null>(null)
   const agent = data?.agent ?? null
+  const newest = latest.data?.version ?? ''
+  const hasNew = !!agent && isNewer(newest, agent.agent_version)
+  const canPush = hasNew && !!agent?.online && agent.capabilities.includes('self_update')
+  const done = !!run && !!agent && agent.agent_version === run.to
+  useEffect(() => {
+    if (!run || run.failed || done) return
+    const id = window.setInterval(() => {
+      reload()
+      setRun((r) => (r && Date.now() - r.since > 5 * 60_000 ? { ...r, failed: true } : r))
+    }, 3000)
+    return () => window.clearInterval(id)
+  }, [run, done, reload])
+  async function pushUpdate() {
+    setErr('')
+    try {
+      await api.post(`/api/v1/security/vps/${vpsId}/agent/update`, { version: newest })
+      setRun({ to: newest, since: Date.now(), failed: false })
+    } catch (e) {
+      setErr(errorText(e))
+    }
+  }
   const os: OS = /windows/i.test(hostOS ?? '') ? 'windows' : 'linux'
   const opts = optsFromCaps(agent?.capabilities ?? [])
 
@@ -327,7 +352,12 @@ export function AgentBlock({ vpsId, canEdit, hostOS }: { vpsId: string; canEdit:
           <div className="flex flex-wrap items-center gap-3">
             <Chip tone={agent.online ? 'green' : 'muted'}>{agent.last_seen ? (agent.online ? t('sec.agent.online') : t('sec.agent.offline')) : t('sec.agent.waiting')}</Chip>
             {agent.agent_version && <span className="text-muted">{agent.agent_version.startsWith('v') ? '' : 'v'}{agent.agent_version}{agent.hostname ? ` · ${agent.hostname}` : ''}</span>}
+            {hasNew && !run && <Chip tone="amber">{t('agent.newVersion', { v: newest })}</Chip>}
+            {run && !run.failed && !done && <Chip tone="amber">{t('agent.updating')}</Chip>}
+            {done && <Chip tone="green">{t('agent.updated', { v: run!.to })}</Chip>}
+            {run?.failed && !done && <Chip tone="red">{t('agent.updateFailed')}</Chip>}
           </div>
+          {run && !run.failed && !done && <p className="text-xs text-muted">{t('agent.updatingNote', { from: agent.agent_version ?? '', to: run.to })}</p>}
           {agent.last_seen && <p className="tnum text-muted">{t('sec.agent.lastSeen')}: {formatDateTime(agent.last_seen, 'local')}</p>}
           {agent.last_seen && (
             <div>
@@ -342,10 +372,13 @@ export function AgentBlock({ vpsId, canEdit, hostOS }: { vpsId: string; canEdit:
       {canEdit && data && (
         <div className="mt-3 flex flex-wrap gap-3">
           {!agent && <PrimaryButton onClick={() => void create()}>{t('sec.agent.create')}</PrimaryButton>}
-          {agent && <PrimaryButton onClick={() => setUpdating(true)}>{t('agent.update')}</PrimaryButton>}
+          {canPush && !run && <PrimaryButton onClick={() => void pushUpdate()}>{t('agent.updateTo', { v: newest })}</PrimaryButton>}
+          {agent && (canPush && !run ? <GhostButton onClick={() => setUpdating(true)}>{t('agent.update')}</GhostButton> : <PrimaryButton onClick={() => setUpdating(true)}>{t('agent.update')}</PrimaryButton>)}
           {agent && <GhostButton onClick={() => setConfirm(true)}>{t('sec.agent.revoke')}</GhostButton>}
         </div>
       )}
+      {canEdit && canPush && !run && <p className="mt-2 text-xs text-muted">{t('agent.updateHelp')}</p>}
+      {canEdit && hasNew && !canPush && !run && <p className="mt-2 text-xs text-muted">{t('agent.updateNeedsPermission')}</p>}
       {token && <AgentSetupDialog mode="install" token={token} initial={{ shell: true, web: true, desk: true, scr: false, adm: false, blk: false, probe: false, upd: true }} initialOS={os} onClose={() => setToken('')} />}
       {updating && <AgentSetupDialog mode="update" initial={opts} initialOS={os} onClose={() => setUpdating(false)} />}
       {confirm && (
