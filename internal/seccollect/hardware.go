@@ -247,10 +247,16 @@ func ParseLsblk(out string) []secproto.HWDisk {
 	}
 	var disks []secproto.HWDisk
 	for _, d := range v.Devices {
-		if d.Type != "disk" || strings.HasPrefix(d.Name, "zram") || strings.HasPrefix(d.Name, "loop") || strings.HasPrefix(d.Name, "ram") {
+		if d.Type != "disk" || strings.HasPrefix(d.Name, "zram") || strings.HasPrefix(d.Name, "loop") || strings.HasPrefix(d.Name, "ram") || strings.HasPrefix(d.Name, "nbd") {
 			continue
 		}
+		if strings.HasPrefix(d.Name, "mmcblk") && (strings.Contains(d.Name, "boot") || strings.HasSuffix(d.Name, "rpmb")) {
+			continue // the eMMC's own boot areas, a few megabytes each
+		}
 		size, _ := d.Size.Int64()
+		if size <= 0 {
+			continue // a device with no medium (network block devices, empty readers)
+		}
 		rota := strings.Trim(string(d.Rota), `"`) // 1, true or "1" depending on the version of lsblk
 		kind := "unknown"
 		switch {

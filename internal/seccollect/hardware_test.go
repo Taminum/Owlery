@@ -48,6 +48,10 @@ func TestParseLinuxHardware(t *testing.T) {
 		{"name":"sda","model":"ST4000DM004","size":"4000787030016","rota":true,"tran":"sata","type":"disk"},
 		{"name":"vda","model":null,"size":21474836480,"rota":"1","tran":null,"type":"disk"},
 		{"name":"zram0","model":null,"size":1,"rota":false,"tran":null,"type":"disk"},
+		{"name":"nbd0","model":null,"size":0,"rota":false,"tran":null,"type":"disk"},
+		{"name":"sdb","model":null,"size":0,"rota":true,"tran":"usb","type":"disk"},
+		{"name":"mmcblk0boot0","model":null,"size":4194304,"rota":false,"tran":null,"type":"disk"},
+		{"name":"mmcblk0rpmb","model":null,"size":4194304,"rota":false,"tran":null,"type":"disk"},
 		{"name":"sr0","model":"DVD","size":1,"rota":true,"tran":"sata","type":"rom"}]}`)
 	if len(disks) != 3 || disks[0].Kind != "nvme" || disks[0].Model != "Samsung SSD 980" || disks[1].Kind != "hdd" || disks[1].Size != 4000787030016 || disks[2].Model != "vda" {
 		t.Errorf("disks: %+v", disks)
