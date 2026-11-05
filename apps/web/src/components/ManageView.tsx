@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { t, type MsgKey } from '../i18n'
 import { request } from '../lib/api'
@@ -62,13 +62,75 @@ const sessionCols: Record<string, Getter<Session>> = { id: (s) => s.id, user: (s
 const eventCols: Record<string, Getter<Event>> = { time: (e) => e.time, level: (e) => e.level, source: (e) => e.source }
 const connCols: Record<string, Getter<Conn>> = { proto: (c) => c.proto, local: (c) => c.local, remote: (c) => c.remote ?? '', state: (c) => c.state ?? '', process: (c) => c.name ?? '' }
 
-function Table({ head, children, empty }: { head: ReactNode[]; children: ReactNode[]; empty: string }) {
+/** The widths of a table's columns, as percentages that add up to a hundred. Dragged ones are kept for the next visit. */
+function useColumns(id: string, def: number[]) {
+  const key = `owl.manage.cols.${id}`
+  const [w, setW] = useState<number[]>(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem(key) ?? 'null')
+      if (Array.isArray(v) && v.length === def.length && v.every((n) => typeof n === 'number' && n > 0)) return v
+    } catch { /* a convenience only */ }
+    return def
+  })
+  const save = (next: number[]) => {
+    setW(next)
+    try { localStorage.setItem(key, JSON.stringify(next)) } catch { /* a convenience only */ }
+  }
+  return [w, save] as const
+}
+
+const MIN_COL = 4
+
+function Table({ id, head, widths, children, empty }: { id: string; head: ReactNode[]; widths: number[]; children: ReactNode[]; empty: string }) {
+  const [w, save] = useColumns(id, widths)
+  const ref = useRef<HTMLTableElement>(null)
   if (children.length === 0) return <p className="py-3 text-[13px] text-muted">{empty}</p>
+  // A column's edge moves, and its neighbour takes up the difference, so the table keeps its width.
+  function drag(i: number, e: React.PointerEvent<HTMLElement>) {
+    e.preventDefault()
+    const total = ref.current?.offsetWidth || 1
+    const x0 = e.clientX
+    const start = [...w]
+    const move = (ev: PointerEvent) => {
+      const d = ((ev.clientX - x0) / total) * 100
+      const dd = Math.max(MIN_COL - start[i], Math.min(start[i + 1] - MIN_COL, d))
+      const next = [...start]
+      next[i] = start[i] + dd
+      next[i + 1] = start[i + 1] - dd
+      save(next)
+    }
+    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+  function reset(i: number) {
+    const next = [...w]
+    const sum = next[i] + next[i + 1]
+    next[i] = (sum * widths[i]) / (widths[i] + widths[i + 1])
+    next[i + 1] = sum - next[i]
+    save(next)
+  }
+  // A cell that is cut short shows its whole text when the pointer is on it.
+  function hint(e: React.MouseEvent<HTMLTableSectionElement>) {
+    const c = (e.target as HTMLElement).closest('td')
+    if (c && !c.title && c.scrollWidth > c.clientWidth) c.title = c.textContent ?? ''
+  }
   return (
     <div className="max-h-[65vh] overflow-auto rounded-control border border-line">
-      <table className="w-full text-[13px]">
-        <thead className="sticky top-0 bg-surface"><tr>{head.map((h, i) => <th key={i} className={th}>{h}</th>)}</tr></thead>
-        <tbody className="divide-y divide-line">{children}</tbody>
+      <table ref={ref} className="w-full table-fixed text-[13px]">
+        <colgroup>{w.map((x, i) => <col key={i} style={{ width: `${x}%` }} />)}</colgroup>
+        <thead className="sticky top-0 z-10 bg-surface">
+          <tr>{head.map((h, i) => (
+            <th key={i} className={`${th} relative overflow-hidden whitespace-nowrap`}>
+              {h}
+              {i < head.length - 1 && (
+                <span role="separator" aria-orientation="vertical" aria-label={t('mng.resize')} onPointerDown={(e) => drag(i, e)} onDoubleClick={() => reset(i)}
+                  className="absolute inset-y-0 right-0 w-2 cursor-col-resize touch-none hover:bg-blue/50" />
+              )}
+            </th>
+          ))}</tr>
+        </thead>
+        <tbody onMouseOver={hint} className="divide-y divide-line [&_td:not([data-wrap])]:overflow-hidden [&_td:not([data-wrap])]:text-ellipsis [&_td:not([data-wrap])]:whitespace-nowrap">{children}</tbody>
       </table>
     </div>
   )
@@ -81,8 +143,12 @@ function Table({ head, children, empty }: { head: ReactNode[]; children: ReactNo
  */
 export function ManageView({ serverId }: { serverId: string }) {
   const [section, setSection] = useState<Section>('procs')
+  const [help, setHelp] = useState(false)
   return (
-    <Card title={t('mng.title')} note={t('mng.note')}>
+    <Card title={t('mng.title')} right={
+      <button type="button" onClick={() => setHelp((v) => !v)} aria-expanded={help} aria-label={t('mng.help')} title={t('mng.help')}
+        className="grid h-6 w-6 place-items-center rounded-full border border-line text-xs text-muted hover:text-fg">?</button>}>
+      {help && <p className="mb-3 text-xs text-muted">{t('mng.note')}</p>}
       <div role="tablist" aria-label={t('mng.title')} className="mb-3 flex flex-wrap gap-2">
         {SECTIONS.map((s) => (
           <button key={s} role="tab" type="button" aria-selected={section === s} onClick={() => setSection(s)}
@@ -157,7 +223,7 @@ function Procs({ serverId }: { serverId: string }) {
   return (
     <>
       <Bar filter={f} setFilter={setF} reload={l.reload} note={l.note} error={l.error} loadError={l.loadError} loading={l.loading} />
-      <Table head={[h(t('mng.name'), 'name'), h('PID', 'pid'), h(t('mng.user'), 'user'), h(t('mng.cpu'), 'cpu'), h(t('mng.mem'), 'mem'), h(t('mng.started'), 'started'), '']} empty={t('mng.empty')}>
+      <Table id="procs" widths={[26, 8, 22, 8, 10, 16, 10]} head={[h(t('mng.name'), 'name'), h('PID', 'pid'), h(t('mng.user'), 'user'), h(t('mng.cpu'), 'cpu'), h(t('mng.mem'), 'mem'), h(t('mng.started'), 'started'), '']} empty={t('mng.empty')}>
         {rows.map((p) => (
           <tr key={p.pid}>
             <td className={td} title={p.path}>{p.name}</td>
@@ -166,7 +232,7 @@ function Procs({ serverId }: { serverId: string }) {
             <td className={`${td} tnum`}>{p.cpu.toFixed(1)}%</td>
             <td className={`${td} tnum`}>{formatBytes(p.rss)}</td>
             <td className={`${td} tnum text-muted`}>{p.started ? formatDateTime(p.started, 'local') : ''}</td>
-            <td className={td}><DangerButton onClick={() => void l.act(t('mng.killAsk', { n: p.name, p: String(p.pid) }), 'proc_kill', { pid: p.pid })}>{t('mng.kill')}</DangerButton></td>
+            <td data-wrap className={td}><DangerButton onClick={() => void l.act(t('mng.killAsk', { n: p.name, p: String(p.pid) }), 'proc_kill', { pid: p.pid })}>{t('mng.kill')}</DangerButton></td>
           </tr>
         ))}
       </Table>
@@ -184,13 +250,13 @@ function Services({ serverId }: { serverId: string }) {
   return (
     <>
       <Bar filter={f} setFilter={setF} reload={l.reload} note={l.note} error={l.error} loadError={l.loadError} loading={l.loading} />
-      <Table head={[h(t('mng.name'), 'name'), h(t('mng.state'), 'state'), h(t('mng.startType'), 'start'), '']} empty={t('mng.empty')}>
+      <Table id="services" widths={[34, 13, 20, 33]} head={[h(t('mng.name'), 'name'), h(t('mng.state'), 'state'), h(t('mng.startType'), 'start'), '']} empty={t('mng.empty')}>
         {rows.map((s) => (
           <tr key={s.name}>
             <td className={td}>{s.display || s.name}<span className="block font-mono text-xs text-muted">{s.name}</span></td>
             <td className={td}><Chip tone={STATE_TONE[s.state] ?? 'amber'}>{label('st', s.state)}</Chip></td>
             <td className={td}>
-              <select className={`${inputCls} h-8 w-40`} value={s.start === 'auto-delayed' ? 'auto' : s.start} aria-label={t('mng.startType')}
+              <select className={`${inputCls} h-8 w-full min-w-0`} value={s.start === 'auto-delayed' ? 'auto' : s.start} aria-label={t('mng.startType')}
                 onChange={(e) => void l.act(t('mng.startAsk', { n: s.name }), 'svc_startup', { name: s.name, start: e.target.value })}>
                 <option value="auto">{t('mng.start.auto')}</option>
                 <option value="manual">{t('mng.start.manual')}</option>
@@ -198,7 +264,7 @@ function Services({ serverId }: { serverId: string }) {
                 {!['auto', 'auto-delayed', 'manual', 'disabled'].includes(s.start) && <option value={s.start} disabled>{s.start}</option>}
               </select>
             </td>
-            <td className={`${td} space-x-1 whitespace-nowrap`}>
+            <td data-wrap className={`${td} space-x-1`}>
               {s.state !== 'running' && <GhostButton onClick={() => void l.act(t('mng.svcAsk', { n: s.name, a: t('mng.start') }), 'svc_start', { name: s.name })}>{t('mng.start')}</GhostButton>}
               {s.state === 'running' && <GhostButton onClick={() => void l.act(t('mng.svcAsk', { n: s.name, a: t('mng.stop') }), 'svc_stop', { name: s.name })}>{t('mng.stop')}</GhostButton>}
               {s.state === 'running' && <GhostButton onClick={() => void l.act(t('mng.svcAsk', { n: s.name, a: t('mng.restart') }), 'svc_restart', { name: s.name })}>{t('mng.restart')}</GhostButton>}
@@ -220,13 +286,13 @@ function StartupList({ serverId }: { serverId: string }) {
   return (
     <>
       <Bar filter={f} setFilter={setF} reload={l.reload} note={l.note} error={l.error} loadError={l.loadError} loading={l.loading} />
-      <Table head={[h(t('mng.name'), 'name'), h(t('mng.command'), 'command'), h(t('mng.where'), 'where'), '']} empty={t('mng.empty')}>
+      <Table id="startup" widths={[20, 40, 24, 16]} head={[h(t('mng.name'), 'name'), h(t('mng.command'), 'command'), h(t('mng.where'), 'where'), '']} empty={t('mng.empty')}>
         {rows.map((s) => (
           <tr key={`${s.where}|${s.name}`}>
             <td className={td}>{s.name}</td>
-            <td className={`${td} break-all font-mono text-xs`}>{s.command}</td>
-            <td className={`${td} break-all text-xs text-muted`}>{s.kind === 'file' ? t('mng.folder') : s.where}</td>
-            <td className={td}><DangerButton onClick={() => void l.act(t('mng.removeAsk', { n: s.name }), 'startup_remove', { kind: s.kind, where: s.where, name: s.name })}>{t('mng.remove')}</DangerButton></td>
+            <td data-wrap className={`${td} break-all font-mono text-xs`}>{s.command}</td>
+            <td data-wrap className={`${td} break-all text-xs text-muted`}>{s.kind === 'file' ? t('mng.folder') : s.where}</td>
+            <td data-wrap className={td}><DangerButton onClick={() => void l.act(t('mng.removeAsk', { n: s.name }), 'startup_remove', { kind: s.kind, where: s.where, name: s.name })}>{t('mng.remove')}</DangerButton></td>
           </tr>
         ))}
       </Table>
@@ -248,14 +314,14 @@ function Sessions({ serverId }: { serverId: string }) {
   return (
     <>
       <Bar reload={l.reload} note={l.note} error={l.error} loadError={l.loadError} loading={l.loading} />
-      <Table head={[h('ID', 'id'), h(t('mng.user'), 'user'), h(t('mng.state'), 'state'), h(t('mng.client'), 'client'), '']} empty={t('mng.empty')}>
+      <Table id="sessions" widths={[8, 22, 22, 24, 24]} head={[h('ID', 'id'), h(t('mng.user'), 'user'), h(t('mng.state'), 'state'), h(t('mng.client'), 'client'), '']} empty={t('mng.empty')}>
         {sessions.map((s) => (
           <tr key={s.id}>
             <td className={`${td} tnum`}>{s.id}</td>
             <td className={td}>{s.user || '—'}</td>
             <td className={td}>{label('sess', s.state)}{s.name ? <span className="block text-xs text-muted">{s.name}</span> : null}</td>
             <td className={`${td} text-muted`}>{s.client}</td>
-            <td className={`${td} space-x-1 whitespace-nowrap`}>
+            <td data-wrap className={`${td} space-x-1`}>
               <GhostButton onClick={() => void l.act(t('mng.disconnectAsk', { n: s.user || String(s.id) }), 'session_disconnect', { id: s.id })}>{t('mng.disconnect')}</GhostButton>
               <DangerButton onClick={() => void l.act(t('mng.logoffAsk', { n: s.user || String(s.id) }), 'session_logoff', { id: s.id })}>{t('mng.logoff')}</DangerButton>
             </td>
@@ -289,13 +355,13 @@ function Events({ serverId }: { serverId: string }) {
             <option value={4}>{t('mng.lv.4')}</option>
           </select>
         </>} />
-      <Table head={[h(t('mng.time'), 'time'), h(t('mng.level'), 'level'), h(t('mng.source'), 'source'), t('mng.message')]} empty={t('mng.empty')}>
+      <Table id="events" widths={[16, 10, 22, 52]} head={[h(t('mng.time'), 'time'), h(t('mng.level'), 'level'), h(t('mng.source'), 'source'), t('mng.message')]} empty={t('mng.empty')}>
         {rows.map((e, i) => (
           <tr key={i}>
             <td className={`${td} tnum whitespace-nowrap text-muted`}>{formatDateTime(e.time, 'local')}</td>
             <td className={td}>{e.level}</td>
             <td className={td}>{e.source}<span className="block text-xs text-muted">ID {e.id}</span></td>
-            <td className={`${td} whitespace-pre-wrap break-words text-xs`}>{e.message}</td>
+            <td data-wrap className={`${td} whitespace-pre-wrap break-words text-xs`}>{e.message}</td>
           </tr>
         ))}
       </Table>
@@ -311,7 +377,7 @@ function Conns({ serverId }: { serverId: string }) {
   return (
     <>
       <Bar filter={f} setFilter={setF} reload={l.reload} note={l.note} error={l.error} loadError={l.loadError} loading={l.loading} />
-      <Table head={[h(t('mng.proto'), 'proto'), h(t('mng.local'), 'local'), h(t('mng.remote'), 'remote'), h(t('mng.state'), 'state'), h(t('mng.process'), 'process'), '']} empty={t('mng.empty')}>
+      <Table id="conns" widths={[8, 22, 22, 14, 20, 14]} head={[h(t('mng.proto'), 'proto'), h(t('mng.local'), 'local'), h(t('mng.remote'), 'remote'), h(t('mng.state'), 'state'), h(t('mng.process'), 'process'), '']} empty={t('mng.empty')}>
         {rows.map((c, i) => (
           <tr key={i}>
             <td className={td}>{c.proto}</td>
