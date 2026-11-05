@@ -44,7 +44,66 @@ function linuxShell(host: string, on: boolean): string {
   return on
     ? `sed 's#wss://SCOPE_HOST#wss://${host}#' deploy/secagent/remnascope-shell.service > /etc/systemd/system/remnascope-shell.service
 systemctl daemon-reload && systemctl enable --now remnascope-shell`
-    : `systemctl disable --now remnascope-shell 2>/dev/null; rm -f /etc/systemd/system/remnascope-shell.service`
+    : `systemctl disable --now remnascope-shell 2>/dev/null || true; rm -f /etc/systemd/system/remnascope-shell.service`
+}
+
+/**
+ * The whole Linux install as one block: one `sudo`, so the password is asked once. It is safe to run again: users and files
+ * that exist are kept, and Fail2ban is only touched when the machine has it.
+ */
+function linuxInstallBlock(host: string, token: string, o: AgentOpts): string {
+  return `sudo bash <<'OWLERY'
+set -e
+id remnascope-sec >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin remnascope-sec
+id remnascope-f2b >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin remnascope-f2b
+install -d -m 0755 /etc/remnascope && umask 077 && echo '${token}' > /etc/remnascope/secagent.token
+chown root:remnascope-sec /etc/remnascope/secagent.token && chmod 0640 /etc/remnascope/secagent.token
+cd /tmp
+case "$(uname -m)" in x86_64) A=amd64 ;; aarch64) A=arm64 ;; *) echo "unsupported processor"; exit 1 ;; esac
+curl -fLO ${RELEASES}/remnascope-secagent-linux-$A
+curl -fLO ${RELEASES}/remnascope-deploy-files.tar.gz
+tar -xzf remnascope-deploy-files.tar.gz
+install -m 0755 remnascope-secagent-linux-$A /usr/local/bin/remnascope-secagent
+sed 's#wss://SCOPE_HOST#wss://${host}${o.web ? ' -allow-web' : ''}#' deploy/secagent/remnascope-secagent.service > /etc/systemd/system/remnascope-secagent.service
+cp deploy/secagent/remnascope-secagent-f2b.service /etc/systemd/system/
+if systemctl cat fail2ban >/dev/null 2>&1; then
+mkdir -p /etc/systemd/system/fail2ban.service.d
+cat > /etc/systemd/system/fail2ban.service.d/remnascope.conf <<'EOF'
+[Service]
+ExecStartPost=/bin/sh -c "for i in 1 2 3 4 5 6 7 8 9 10; do [ -S /run/fail2ban/fail2ban.sock ] && break; sleep 1; done; chgrp remnascope-f2b /run/fail2ban/fail2ban.sock && chmod 0660 /run/fail2ban/fail2ban.sock"
+EOF
+systemctl daemon-reload && systemctl restart fail2ban
+fi
+install -m 0755 deploy/secagent/remnascope-containers-list /usr/local/sbin/
+cp deploy/secagent/remnascope-containers-list.service deploy/secagent/remnascope-containers-list.timer /etc/systemd/system/
+${o.shell ? linuxShell(host, true) : ''}
+systemctl daemon-reload
+systemctl enable --now remnascope-containers-list.timer remnascope-secagent-f2b remnascope-secagent
+systemctl restart remnascope-secagent${o.shell ? ' remnascope-shell' : ''}
+sleep 3
+systemctl is-active remnascope-secagent
+OWLERY`
+}
+
+function CopyCode({ children }: { children: string }) {
+  const [done, setDone] = useState(false)
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(children)
+      setDone(true)
+      window.setTimeout(() => setDone(false), 2000)
+    } catch {
+      setDone(false)
+    }
+  }
+  return (
+    <div className="relative">
+      <button type="button" onClick={() => void copy()} className="absolute right-2 top-2 h-7 rounded-control border border-line bg-surface px-2.5 text-xs text-muted hover:text-fg">
+        {done ? t('agent.copied') : t('agent.copy')}
+      </button>
+      <Code>{children}</Code>
+    </div>
+  )
 }
 
 function Check({ on, set, label, hint }: { on: boolean; set: (v: boolean) => void; label: MsgKey; hint: MsgKey }) {
@@ -92,16 +151,20 @@ export function AgentSetupDialog({ mode, token, initial, initialOS, onClose }: {
         {mode === 'update' && os === 'linux' && (
           <>
             <p>{t('agent.update.linux')}</p>
-            <Code>{`cd /tmp
+            <CopyCode>{`sudo bash <<'OWLERY'
+set -e
+cd /tmp
 case "$(uname -m)" in x86_64) A=amd64 ;; aarch64) A=arm64 ;; *) echo "unsupported processor"; exit 1 ;; esac
 curl -fLO ${RELEASES}/remnascope-secagent-linux-$A
 curl -fLO ${RELEASES}/remnascope-deploy-files.tar.gz
 tar -xzf remnascope-deploy-files.tar.gz
 install -m 0755 remnascope-secagent-linux-$A /usr/local/bin/remnascope-secagent
+install -m 0755 deploy/secagent/remnascope-containers-list /usr/local/sbin/
 ${linuxDropIn(host, o)}
 ${linuxShell(host, o.shell)}
 systemctl daemon-reload && systemctl restart remnascope-secagent-f2b remnascope-secagent
-systemctl is-active remnascope-secagent`}</Code>
+systemctl is-active remnascope-secagent
+OWLERY`}</CopyCode>
             <p className="text-muted">{t('agent.update.keeps')}</p>
           </>
         )}
@@ -146,6 +209,12 @@ Get-Content "$env:ProgramData\\Owlery\\secagent.log" -Tail 5`}</Code>
         )}
         {mode === 'install' && os === 'linux' && (
           <>
+            <p>{t('sec.onb.one')}</p>
+            <CopyCode>{linuxInstallBlock(host, token ?? '', o)}</CopyCode>
+            <p className="text-xs text-muted">{t('sec.onb.oneHint')}</p>
+            <details className="border-t border-line pt-3">
+              <summary className="cursor-pointer text-muted hover:text-fg">{t('sec.onb.stepwise')}</summary>
+              <div className="mt-3 space-y-3">
             <p className="text-muted">{t('sec.onb.intro')}</p>
             <p>{t('sec.onb.s1')}</p>
             <Code>{'useradd --system --no-create-home --shell /usr/sbin/nologin remnascope-sec\nuseradd --system --no-create-home --shell /usr/sbin/nologin remnascope-f2b'}</Code>
@@ -184,6 +253,8 @@ systemctl daemon-reload && systemctl enable --now remnascope-containers-list.tim
             <Code>{`systemctl is-active remnascope-secagent
 journalctl -u remnascope-secagent -n 5 --no-pager`}</Code>
             <p className="text-muted">{t('sec.onb.done')}</p>
+              </div>
+            </details>
           </>
         )}
       </div>
