@@ -66,6 +66,13 @@ jobs:
           done
           tar -czf dist/remnascope-deploy-files.tar.gz deploy/agent deploy/router deploy/secagent
           (cd dist && sha256sum * > SHA256SUMS)
+      - name: Sign the list of hashes
+        env:
+          OWL_SIGN_KEY: ${{ secrets.OWL_SIGN_KEY }}
+        run: |
+          test -n "$OWL_SIGN_KEY" || { echo "the secret OWL_SIGN_KEY is not set: a release must be signed"; exit 1; }
+          go run ./cmd/owlsign sign -in dist/SHA256SUMS -out dist/SHA256SUMS.sig
+          go run ./cmd/owlsign verify -pub "nvZn9o2pnogEHvEog3unuB8YBrIEmVoRdqqR91RdhXA=" -in dist/SHA256SUMS -sig dist/SHA256SUMS.sig
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*
