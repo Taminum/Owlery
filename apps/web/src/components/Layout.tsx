@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import { FlaskConical } from 'lucide-react'
 import { t } from '../i18n'
 import { useAuth } from '../lib/auth'
@@ -10,7 +10,7 @@ import type { AppContext } from '../lib/context'
 import Login from '../pages/Login'
 import { PAGE_WIDTH } from '../lib/layout'
 import { Sidebar } from './Sidebar'
-import { TopBar } from './TopBar'
+import { TopBar, pageUsesFilters } from './TopBar'
 import { FailureState, OverviewSkeleton } from './States'
 import { Mascot } from '../ember/Mascot'
 import { BusyBar } from './BusyBar'
@@ -27,6 +27,7 @@ export function Layout() {
 
 function Shell() {
   const [menu, setMenu] = useState(false)
+  const { pathname } = useLocation()
   const { panels, failure: panelsFailure, retry } = usePanels()
   const { filters, update, demoState } = useFilters(panels)
   const overview = useOverview(filters, demoState)
@@ -50,7 +51,7 @@ function Shell() {
             <span><strong className="font-semibold tracking-wide">{t('demo.banner')}.</strong> {t('demo.bannerText')}</span>
           </div>
         )}
-        {ctx && <TopBar filters={ctx.filters} panels={ctx.panels} update={ctx.update} onRefresh={overview.refresh} loading={overview.loading} onMenu={() => setMenu(true)} />}
+        {ctx && <TopBar filters={ctx.filters} panels={ctx.panels} update={ctx.update} onRefresh={overview.refresh} loading={overview.loading} onMenu={() => setMenu(true)} slim={!pageUsesFilters(pathname)} />}
         <main id="main" className={`${PAGE_WIDTH} flex-1 py-5`}>
           {ctx ? <Outlet context={ctx} /> : panelsFailure ? <FailureState failure={panelsFailure} onRetry={retry} onReset={retry} /> : <OverviewSkeleton />}
         </main>

@@ -21,7 +21,7 @@ export const hostsText = {
   'host.net.title': 'Скорость за последнюю минуту и число TCP-соединений',
   'host.conns': '{n} соед.',
   'host.synShort': 'полуоткрытых {n}',
-  'host.loadAvg': 'load {n}',
+  'host.loadOf': 'нагрузка {n} из {c} ядер',
   'host.cores': 'яд.',
   'host.up': 'работает',
   'host.up.days': '{d} д {h} ч',

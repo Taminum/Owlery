@@ -24,6 +24,12 @@ export function tone(p: number): 'green' | 'amber' | 'red' {
 }
 const BAR = { green: 'bg-green', amber: 'bg-amber', red: 'bg-red' } as const
 
+/** The note under the processor bar. Windows has no load average (the number would always be zero), so it says nothing there. */
+export function loadDetail(h: Pick<Host, 'os' | 'load1' | 'cpus'>): string {
+  if (/windows/i.test(h.os ?? '')) return ''
+  return t('host.loadOf', { n: h.load1.toFixed(2).replace('.', ','), c: Math.max(1, h.cpus) })
+}
+
 export function Meter({ label, pct, detail }: { label: string; pct: number | null; detail: string }) {
   const v = pct === null ? 0 : Math.max(0, Math.min(100, pct))
   return (
@@ -33,7 +39,7 @@ export function Meter({ label, pct, detail }: { label: string; pct: number | nul
         <span className="tnum">{pct === null ? '—' : `${Math.round(pct)}%`} <span className="text-muted">{detail}</span></span>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-elevated" role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(v)}>
-        <div className={`h-full rounded-full ${BAR[tone(v)]}`} style={{ width: `${v}%` }} />
+        <div className={`h-full rounded-full transition-[width] duration-700 ${BAR[tone(v)]}`} style={{ width: `${v}%` }} />
       </div>
     </div>
   )
