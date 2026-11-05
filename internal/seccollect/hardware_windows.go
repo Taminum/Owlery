@@ -23,7 +23,9 @@ $dimm = @(Get-CimInstance Win32_PhysicalMemory)
 $gpu = @(Get-CimInstance Win32_VideoController)
 $pd = @(Get-PhysicalDisk)
 $nic = @(Get-NetAdapter | Where-Object { $_.Status -eq 'Up' -and -not $_.Virtual })
-$ips = @(Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike '169.254.*' -and $_.IPAddress -ne '127.0.0.1' })
+$ips = @(Get-NetIPAddress | Where-Object { $_.IPAddress -notlike '169.254.*' -and $_.IPAddress -ne '127.0.0.1' -and $_.IPAddress -ne '::1' -and $_.IPAddress -notlike 'fe80*' })
+$gw = @(Get-NetRoute -DestinationPrefix '0.0.0.0/0' | Where-Object { $_.NextHop -ne '0.0.0.0' })
+$dns = @(Get-DnsClientServerAddress -AddressFamily IPv4)
 $d = $null
 if ($bios.ReleaseDate) { $d = $bios.ReleaseDate.ToString('dd.MM.yyyy') }
 ConvertTo-Json -Depth 5 -Compress ([pscustomobject]@{
@@ -46,7 +48,7 @@ ConvertTo-Json -Depth 5 -Compress ([pscustomobject]@{
   }
   disks = @($pd | ForEach-Object { [pscustomobject]@{ name = $_.FriendlyName; size = [int64]$_.Size; media = [string]$_.MediaType; bus = [string]$_.BusType } })
   gpus = @($gpu | ForEach-Object { [pscustomobject]@{ name = $_.Name; mem = [int64]$_.AdapterRAM; driver = $_.DriverVersion } })
-  nics = @($nic | ForEach-Object { $n = $_; [pscustomobject]@{ name = $n.Name; speed = [int64]$n.Speed; ips = @($ips | Where-Object { $_.InterfaceAlias -eq $n.Name } | ForEach-Object { $_.IPAddress }) } })
+  nics = @($nic | ForEach-Object { $n = $_; [pscustomobject]@{ name = $n.Name; speed = [int64]$n.Speed; ips = @($ips | Where-Object { $_.InterfaceAlias -eq $n.Name } | ForEach-Object { $_.IPAddress }); gateway = [string](($gw | Where-Object { $_.InterfaceAlias -eq $n.Name } | Sort-Object RouteMetric | Select-Object -First 1).NextHop); dns = @($dns | Where-Object { $_.InterfaceAlias -eq $n.Name } | ForEach-Object { $_.ServerAddresses }) } })
 })`
 
 func readHardware(ctx context.Context, r Runner) (secproto.Hardware, error) {

@@ -62,5 +62,26 @@ func readHardware(ctx context.Context, r Runner) (secproto.Hardware, error) {
 			}
 		}
 	}
+	if len(h.NICs) > 0 {
+		var gw map[string]string
+		main := ""
+		if res := r.Run(ctx, "ip", "-j", "route", "show", "default"); res.Err == nil && res.ExitCode == 0 {
+			gw, main = ParseDefaultRoutes(res.Stdout)
+		}
+		var dns []string
+		for _, f := range []string{"/run/systemd/resolve/resolv.conf", "/etc/resolv.conf"} {
+			if b, err := os.ReadFile(f); err == nil {
+				if dns = ParseResolv(string(b)); len(dns) > 0 {
+					break
+				}
+			}
+		}
+		for i, n := range h.NICs {
+			h.NICs[i].Gateway = gw[n.Name]
+			if n.Name == main {
+				h.NICs[i].DNS = dns // the name servers are the machine's, shown with the interface it goes out through
+			}
+		}
+	}
 	return h, nil
 }

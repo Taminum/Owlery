@@ -82,8 +82,13 @@ func tidyHardware(h secproto.Hardware) secproto.Hardware {
 	}
 	for i := range h.NICs {
 		h.NICs[i].Name = cut(h.NICs[i].Name, 64)
-		if len(h.NICs[i].IPs) > 8 {
-			h.NICs[i].IPs = h.NICs[i].IPs[:8]
+		h.NICs[i].IPs = limitIPs(h.NICs[i].IPs)
+		h.NICs[i].Gateway = cut(h.NICs[i].Gateway, 64)
+		if len(h.NICs[i].DNS) > 4 {
+			h.NICs[i].DNS = h.NICs[i].DNS[:4]
+		}
+		for j := range h.NICs[i].DNS {
+			h.NICs[i].DNS[j] = cut(h.NICs[i].DNS[j], 64)
 		}
 	}
 	if h.Disks == nil {
@@ -184,9 +189,11 @@ func ParseWinHardware(out string) (secproto.Hardware, error) {
 			Driver string `json:"driver"`
 		}] `json:"gpus"`
 		NICs many[struct {
-			Name  string       `json:"name"`
-			Speed int64        `json:"speed"`
-			IPs   many[string] `json:"ips"`
+			Name    string       `json:"name"`
+			Speed   int64        `json:"speed"`
+			IPs     many[string] `json:"ips"`
+			Gateway string       `json:"gateway"`
+			DNS     many[string] `json:"dns"`
 		}] `json:"nics"`
 	}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &v); err != nil {
@@ -218,7 +225,7 @@ func ParseWinHardware(out string) (secproto.Hardware, error) {
 		h.GPUs = append(h.GPUs, secproto.HWGPU{Name: g.Name, Mem: g.Mem, Driver: g.Driver})
 	}
 	for _, n := range v.NICs {
-		h.NICs = append(h.NICs, secproto.HWNic{Name: n.Name, SpeedMbps: int(n.Speed / 1_000_000), IPs: n.IPs})
+		h.NICs = append(h.NICs, secproto.HWNic{Name: n.Name, SpeedMbps: int(n.Speed / 1_000_000), IPs: n.IPs, Gateway: n.Gateway, DNS: n.DNS})
 	}
 	return h, nil
 }
@@ -386,4 +393,70 @@ func ParseCPUInfo(s string) secproto.HWCPU {
 		c.Cores = c.Threads
 	}
 	return c
+}
+
+// ParseDefaultRoutes reads `ip -j route show default` and gives, for each interface, the gateway of its best default route,
+// and the interface that carries the main one (the lowest metric).
+func ParseDefaultRoutes(out string) (gateways map[string]string, main string) {
+	var v []struct {
+		Gateway string `json:"gateway"`
+		Dev     string `json:"dev"`
+		Metric  int    `json:"metric"`
+	}
+	gateways = map[string]string{}
+	if json.Unmarshal([]byte(out), &v) != nil {
+		return gateways, ""
+	}
+	best := -1
+	metrics := map[string]int{}
+	for _, r := range v {
+		if r.Dev == "" || r.Gateway == "" {
+			continue
+		}
+		if m, seen := metrics[r.Dev]; !seen || r.Metric < m {
+			metrics[r.Dev] = r.Metric
+			gateways[r.Dev] = r.Gateway
+		}
+		if best < 0 || r.Metric < best {
+			best, main = r.Metric, r.Dev
+		}
+	}
+	return gateways, main
+}
+
+// ParseResolv reads the name servers of a resolv.conf. The local stub of the system resolver (127.x, ::1) says nothing about
+// where names are really asked, so it is left out.
+func ParseResolv(text string) []string {
+	var out []string
+	for _, line := range strings.Split(text, "\n") {
+		f := strings.Fields(line)
+		if len(f) < 2 || f[0] != "nameserver" {
+			continue
+		}
+		if strings.HasPrefix(f[1], "127.") || f[1] == "::1" {
+			continue
+		}
+		out = append(out, f[1])
+	}
+	return out
+}
+
+// limitIPs keeps the IPv4 addresses first, then at most two IPv6 ones: a Wi-Fi interface carries a dozen temporary IPv6
+// addresses that change by the hour, and they must not push the one address people look for off the list.
+func limitIPs(in []string) []string {
+	var v4, v6 []string
+	for _, a := range in {
+		if strings.Contains(a, ":") {
+			v6 = append(v6, a)
+		} else {
+			v4 = append(v4, a)
+		}
+	}
+	if len(v4) > 6 {
+		v4 = v4[:6]
+	}
+	if len(v6) > 2 {
+		v6 = v6[:2]
+	}
+	return append(v4, v6...)
 }

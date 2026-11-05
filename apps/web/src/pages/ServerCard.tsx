@@ -6,7 +6,7 @@ import { api } from '../lib/api'
 import { formatBytes, formatDateTime, formatRate } from '../lib/format'
 import { useLoad } from '../hooks/useLoad'
 import type { ServerAlert } from '../lib/types'
-import { Card, Chip } from '../components/ui'
+import { Card } from '../components/ui'
 import { PageHead, TableSkeleton } from '../components/Analyzer'
 import { GhostButton } from '../components/Modal'
 import { HardwareSection } from '../components/HardwareView'
@@ -22,6 +22,7 @@ import { ServicesView } from '../components/ServicesView'
 import { RdpProtect } from '../components/RdpProtect'
 import { AlertRules } from '../components/AlertRules'
 import { DockerView } from '../components/DockerView'
+import { NetworkView } from '../components/NetworkView'
 
 type Tab = 'overview' | 'resources' | 'terminal' | 'desktop' | 'screen' | 'manage' | 'services' | 'security' | 'protect' | 'docker' | 'alerts' | 'network' | 'history'
 const TABS: Tab[] = ['overview', 'resources', 'terminal', 'desktop', 'screen', 'manage', 'services', 'security', 'protect', 'docker', 'alerts', 'network', 'history']
@@ -127,26 +128,6 @@ function Now({ s }: { s: Server }) {
   )
 }
 
-function Network({ s }: { s: Server }) {
-  return (
-    <Card title={t('srv.nodes.title')}>
-      {s.nodes.length === 0 ? <p className="text-[13px] text-muted">{t('srv.nodes.empty')}</p> : (
-        <ul className="divide-y divide-line">
-          {s.nodes.map((n) => (
-            <li key={n.node_id} className="flex flex-wrap items-center justify-between gap-3 py-2 text-[13px]">
-              <span>{n.name} <span className="text-xs text-muted">· {n.panel_name}{n.xray && ` · Xray ${n.xray}`}</span></span>
-              <span className="flex items-center gap-3 text-xs text-muted">
-                {t('srv.nodes.users', { n: n.users_online })}
-                <Chip tone={n.online ? 'green' : 'red'}>{n.online ? t('srv.nodes.on') : t('srv.nodes.off')}</Chip>
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Card>
-  )
-}
-
 export default function ServerCard() {
   const { id = '' } = useParams()
   const [params, setParams] = useSearchParams()
@@ -170,7 +151,7 @@ export default function ServerCard() {
         {TABS.filter((x) => ((x !== 'terminal' && x !== 'desktop' && x !== 'screen' && x !== 'manage' && x !== 'services') || s.can_edit) && (x !== 'protect' || isWindows) && (x !== 'docker' || !!s.docker) && (x !== 'alerts' || s.host?.has_data)).map((x) => (
           <button key={x} role="tab" type="button" aria-selected={tab === x} onClick={() => setTab(x)}
             className={`h-8 rounded-control border px-3 text-[13px] ${tab === x ? 'border-cyan bg-elevated text-fg' : 'border-line text-muted hover:text-fg'}`}>
-            {t(`srv.tab.${x}` as MsgKey)}{x === 'history' && open.length > 0 && <span className="ml-1.5 text-amber">{open.length}</span>}
+            {t((x === 'network' && s.nodes.length === 0 ? 'srv.tab.net' : `srv.tab.${x}`) as MsgKey)}{x === 'history' && open.length > 0 && <span className="ml-1.5 text-amber">{open.length}</span>}
           </button>
         ))}
       </div>
@@ -200,7 +181,7 @@ export default function ServerCard() {
       {tab === 'screen' && s.can_edit && <ScreenView serverId={s.id} />}
       {tab === 'manage' && s.can_edit && <ManageView serverId={s.id} />}
       {tab === 'services' && s.can_edit && <ServicesView serverId={s.id} serverName={s.name} />}
-      {tab === 'network' && <Network s={s} />}
+      {tab === 'network' && <NetworkView s={s} />}
       {tab === 'history' && <Card title={t('srv.history.title')}><AlertList items={s.alerts ?? []} empty={t('srv.history.empty')} /></Card>}
 
       {editing && <InventoryDialog s={s} onClose={() => setEditing(false)} onDone={() => { setEditing(false); q.reload() }} />}

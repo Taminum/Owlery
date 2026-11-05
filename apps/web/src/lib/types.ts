@@ -383,7 +383,7 @@ export interface Hardware {
   memory: { slots?: number; slots_used?: number; type?: string; speed_mt?: number }
   disks: { model: string; size: number; kind: string }[]
   gpus: { name: string; mem?: number; driver?: string }[]
-  nics: { name: string; speed_mbps?: number; ips?: string[] }[]
+  nics: { name: string; speed_mbps?: number; ips?: string[]; gateway?: string; dns?: string[] }[]
 }
 
 export interface BlockSettings { mode: 'off' | 'watch' | 'block'; threshold: number; window_min: number; ttl_hours: number; whitelist: string[]; share: boolean }

@@ -137,3 +137,43 @@ func TestWinHardwareToleratesAByteOrderMark(t *testing.T) {
 		t.Errorf("%+v %v", h, err)
 	}
 }
+
+func TestWindowsNicCarriesItsGatewayAndNameServers(t *testing.T) {
+	// One name server arrives as a string, several as an array, none as an empty one: all are lists.
+	out := `{"nics":[{"name":"Ethernet","speed":1000000000,"ips":["192.168.10.5","2001:db8::5"],"gateway":"192.168.10.1","dns":["192.168.10.2","1.1.1.1"]},
+	{"name":"Ethernet 2","speed":1000000000,"ips":"10.8.0.12","gateway":"","dns":"10.8.0.1"},{"name":"Tunnel","speed":0,"ips":[],"gateway":"","dns":[]}]}`
+	h, err := ParseWinHardware(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.NICs[0].Gateway != "192.168.10.1" || len(h.NICs[0].DNS) != 2 || h.NICs[0].DNS[1] != "1.1.1.1" || len(h.NICs[0].IPs) != 2 {
+		t.Errorf("%+v", h.NICs[0])
+	}
+	if h.NICs[1].Gateway != "" || len(h.NICs[1].DNS) != 1 || h.NICs[1].DNS[0] != "10.8.0.1" {
+		t.Errorf("%+v", h.NICs[1])
+	}
+	if len(h.NICs[2].DNS) != 0 {
+		t.Errorf("%+v", h.NICs[2])
+	}
+}
+
+func TestLinuxDefaultRouteAndResolver(t *testing.T) {
+	gw, main := ParseDefaultRoutes(`[{"dst":"default","gateway":"10.0.0.1","dev":"eth0","metric":100},{"dst":"default","gateway":"10.1.0.1","dev":"wg0","metric":50},{"dst":"default","dev":"tun0"}]`)
+	if gw["eth0"] != "10.0.0.1" || gw["wg0"] != "10.1.0.1" || main != "wg0" || len(gw) != 2 {
+		t.Errorf("%v %q", gw, main)
+	}
+	if g, m := ParseDefaultRoutes("not json"); len(g) != 0 || m != "" {
+		t.Errorf("%v %q", g, m)
+	}
+	got := ParseResolv("# comment\nnameserver 127.0.0.53\nnameserver 192.168.1.1\nsearch lan\nnameserver ::1\nnameserver 9.9.9.9\n")
+	if len(got) != 2 || got[0] != "192.168.1.1" || got[1] != "9.9.9.9" {
+		t.Errorf("%v", got)
+	}
+}
+
+func TestManyIPv6AddressesDoNotPushOutTheIPv4(t *testing.T) {
+	got := limitIPs([]string{"fd00::1", "fd00::2", "fd00::3", "fd00::4", "fd00::5", "fd00::6", "fd00::7", "fd00::8", "fd00::9", "192.168.1.176"})
+	if len(got) != 3 || got[0] != "192.168.1.176" || got[1] != "fd00::1" {
+		t.Errorf("%v", got)
+	}
+}
