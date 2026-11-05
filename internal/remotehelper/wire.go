@@ -28,6 +28,7 @@ const (
 	msgQuality  = 0x09 // browser -> helper: one byte, 0 auto, 1 high, 2 medium, 3 low
 	msgCombo    = 0x0A // browser -> helper: one byte, a key combination the browser cannot send itself (see comboWin...)
 	msgText     = 0x0B // browser -> helper: UTF-8 text to type on the machine
+	msgNotice   = 0x15 // helper -> browser: UTF-8 note shown over the picture while it waits (empty clears it)
 	msgEnd      = 0x05 // helper -> browser: the person at the machine pressed "Прекратить"
 )
 
@@ -56,6 +57,8 @@ func writeFrame(w io.Writer, width, height int, jpg []byte) error {
 	copy(payload[4:], jpg)
 	return writeMsg(w, msgFrame, payload)
 }
+
+func writeNotice(w io.Writer, text string) error { return writeMsg(w, msgNotice, []byte(text)) }
 
 func writeError(w io.Writer, message string) error {
 	return writeMsg(w, msgError, []byte(message))
