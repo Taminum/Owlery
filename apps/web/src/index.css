@@ -77,3 +77,15 @@ body {
 .ember-menu > *:hover, .ember-menu > *:focus-visible { background: var(--color-surface); }
 .ember-body { touch-action: none; cursor: grab; }
 .ember-body:active { cursor: grabbing; }
+
+/* One look for every data table (the Resources look): a quiet small header, even cell padding, a thin line between rows and a
+   light highlight under the pointer. It is written once, here, for any table that spans its card (w-full); the heatmap and the
+   key-value lists do not, so they keep their own. Padding and weight are unlayered so the old per-cell classes cannot disagree,
+   and the alignment is in the base layer so text-right on a numeric column still wins. */
+@layer base {
+  table.w-full th { text-align: left; }
+}
+table.w-full th { padding: 4px 8px; font-size: 12px; font-weight: 500; color: var(--color-muted); }
+table.w-full td { padding: 6px 8px; }
+table.w-full tbody tr { border-top: 1px solid color-mix(in oklab, var(--color-line) 60%, transparent); transition: background-color 80ms; }
+table.w-full tbody tr:hover { background-color: rgb(255 255 255 / 0.03); }
