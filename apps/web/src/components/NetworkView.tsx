@@ -69,7 +69,7 @@ export function NetworkView({ s }: { s: Server }) {
                   <th className="px-2 py-1.5 font-medium">{t('net.dns')}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-line">
+              <tbody className="[&>tr]:border-t [&>tr]:border-line/60">
                 {nics.map((n) => (
                   <tr key={n.name} className="align-top">
                     <td className="px-2 py-1.5 font-medium">{n.name}</td>
