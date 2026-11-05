@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { t, type MsgKey } from '../i18n'
-import { api } from '../lib/api'
+import { api, ApiError } from '../lib/api'
 import { errorText } from '../lib/errors'
 import { isNewer } from '../lib/semver'
 import { formatDateTime } from '../lib/format'
@@ -279,6 +279,21 @@ journalctl -u remnascope-secagent -n 5 --no-pager`}</Code>
   )
 }
 
+/** What the update button says when the server or the agent refused: in words, with the agent's own reason when it gave one. */
+export function updateErrorText(e: unknown): string {
+  if (e instanceof ApiError) {
+    switch (e.code) {
+      case 'update_failed': return t('agent.err.failed', { why: e.message })
+      case 'agent_offline': return t('agent.err.offline')
+      case 'up_to_date': return t('agent.err.upToDate')
+      case 'update_not_allowed': return t('agent.updateNeedsPermission')
+      case 'no_release_info': return t('agent.err.noRelease')
+      default: return errorText(e)
+    }
+  }
+  return errorText(e)
+}
+
 const PERMS: { key: keyof AgentOpts; label: MsgKey }[] = [
   { key: 'shell', label: 'agent.perm.shell' }, { key: 'web', label: 'agent.perm.web' }, { key: 'desk', label: 'agent.perm.desk' },
   { key: 'scr', label: 'agent.perm.scr' }, { key: 'adm', label: 'agent.perm.adm' }, { key: 'blk', label: 'agent.perm.blk' }, { key: 'probe', label: 'agent.perm.probe' }, { key: 'upd', label: 'agent.perm.upd' },
@@ -294,6 +309,9 @@ export function AgentBlock({ vpsId, canEdit, hostOS }: { vpsId: string; canEdit:
   const [updating, setUpdating] = useState(false)
   const [confirm, setConfirm] = useState(false)
   const [err, setErr] = useState('')
+  // The error of the update button is shown by the button, not up in the corner of the card.
+  const [updErr, setUpdErr] = useState('')
+  const [pushing, setPushing] = useState(false)
   // The newest release, asked of the server (which asks GitHub at most every ten minutes), and an update that is under way.
   const latest = useLoad((s) => api.get<{ version: string }>('/api/v1/agent/latest', s), [], 600_000)
   const [run, setRun] = useState<{ to: string; since: number; failed: boolean } | null>(null)
@@ -311,12 +329,15 @@ export function AgentBlock({ vpsId, canEdit, hostOS }: { vpsId: string; canEdit:
     return () => window.clearInterval(id)
   }, [run, done, reload])
   async function pushUpdate() {
-    setErr('')
+    setUpdErr('')
+    setPushing(true)
     try {
       await api.post(`/api/v1/security/vps/${vpsId}/agent/update`, { version: newest })
       setRun({ to: newest, since: Date.now(), failed: false })
     } catch (e) {
-      setErr(errorText(e))
+      setUpdErr(updateErrorText(e))
+    } finally {
+      setPushing(false)
     }
   }
   const os: OS = /windows/i.test(hostOS ?? '') ? 'windows' : 'linux'
@@ -372,12 +393,14 @@ export function AgentBlock({ vpsId, canEdit, hostOS }: { vpsId: string; canEdit:
       {canEdit && data && (
         <div className="mt-3 flex flex-wrap gap-3">
           {!agent && <PrimaryButton onClick={() => void create()}>{t('sec.agent.create')}</PrimaryButton>}
-          {canPush && !run && <PrimaryButton onClick={() => void pushUpdate()}>{t('agent.updateTo', { v: newest })}</PrimaryButton>}
+          {canPush && !run && <PrimaryButton onClick={() => void pushUpdate()} disabled={pushing}>{pushing ? t('agent.sending') : t('agent.updateTo', { v: newest })}</PrimaryButton>}
           {agent && (canPush && !run ? <GhostButton onClick={() => setUpdating(true)}>{t('agent.update')}</GhostButton> : <PrimaryButton onClick={() => setUpdating(true)}>{t('agent.update')}</PrimaryButton>)}
           {agent && <GhostButton onClick={() => setConfirm(true)}>{t('sec.agent.revoke')}</GhostButton>}
         </div>
       )}
-      {canEdit && canPush && !run && <p className="mt-2 text-xs text-muted">{t('agent.updateHelp')}</p>}
+      {pushing && <p role="status" className="mt-2 text-[13px] text-amber">{t('agent.sendingNote')}</p>}
+      {updErr && <p role="alert" className="mt-2 text-[13px] text-red">{updErr}</p>}
+      {canEdit && canPush && !run && !pushing && !updErr && <p className="mt-2 text-xs text-muted">{t('agent.updateHelp')}</p>}
       {canEdit && hasNew && !canPush && !run && <p className="mt-2 text-xs text-muted">{t('agent.updateNeedsPermission')}</p>}
       {token && <AgentSetupDialog mode="install" token={token} initial={{ shell: true, web: true, desk: true, scr: false, adm: false, blk: false, probe: false, upd: true }} initialOS={os} onClose={() => setToken('')} />}
       {updating && <AgentSetupDialog mode="update" initial={opts} initialOS={os} onClose={() => setUpdating(false)} />}

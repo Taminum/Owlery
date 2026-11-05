@@ -124,7 +124,46 @@ func (f *Fetcher) client() *http.Client {
 	return &copied
 }
 
+// get asks again, a little later, when the answer was a server trouble or the connection broke: the road to GitHub is not
+// always clean, and an update that gives up at the first 504 would need a second press of the button for nothing.
 func (f *Fetcher) get(ctx context.Context, name, version string, limit int64) ([]byte, error) {
+	var last error
+	for try := 0; try < 3; try++ {
+		if try > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, last
+			case <-time.After(time.Duration(try) * time.Second):
+			}
+		}
+		b, err := f.getOnce(ctx, name, version, limit)
+		if err == nil || !retryable(err) {
+			return b, err
+		}
+		last = err
+	}
+	return nil, last
+}
+
+type statusError struct {
+	name string
+	code int
+}
+
+func (e *statusError) Error() string {
+	return fmt.Sprintf("selfupdate: %s answered %d", e.name, e.code)
+}
+
+func retryable(err error) bool {
+	var se *statusError
+	if errors.As(err, &se) {
+		return se.code >= 500 || se.code == http.StatusTooManyRequests
+	}
+	var ue *url.Error
+	return errors.As(err, &ue) // the connection broke or never came
+}
+
+func (f *Fetcher) getOnce(ctx context.Context, name, version string, limit int64) ([]byte, error) {
 	u, err := url.JoinPath(f.base(), version, name)
 	if err != nil {
 		return nil, err
@@ -139,7 +178,7 @@ func (f *Fetcher) get(ctx context.Context, name, version string, limit int64) ([
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("selfupdate: %s answered %d", name, resp.StatusCode)
+		return nil, &statusError{name: name, code: resp.StatusCode}
 	}
 	b, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {

@@ -236,6 +236,23 @@ describe('Security page', () => {
       expect(screen.queryByRole('button', { name: 'Обновить до v0.5.15' })).toBeNull()
     })
 
+    it('says why the update did not happen, next to the button, and leaves the button to press again', async () => {
+      const refuse = (code: string, message: string) => mockApi({ me: owner, handler: (r: Req) => {
+        if (r.path === '/api/v1/security/vps/v1') return { status: 200, body: vps() }
+        if (r.path === '/api/v1/security/vps/v1/agent' && r.method === 'GET') return { status: 200, body: { agent: agentOf(['self_update']) } }
+        if (r.path === '/api/v1/agent/latest') return { status: 200, body: { version: 'v0.5.15' } }
+        if (r.path === '/api/v1/security/vps/v1/agent/update') return { status: 409, body: { code, message, request_id: 'r1' } }
+        if (r.path === '/api/v1/security/vps/v1/fail2ban') return { status: 200, body: { category: 'fail2ban', state: 'agent_required', observed_at: null, received_at: null, clock_skew_ms: 0, data: null, agent: null } }
+      } })
+      refuse('update_failed', 'selfupdate: SHA256SUMS answered 504')
+      renderSec('/security/v1?tab=fail2ban')
+      await userEvent.click(await screen.findByRole('button', { name: 'Обновить до v0.5.15' }))
+      expect(await screen.findByText(/Агент не смог обновиться: selfupdate: SHA256SUMS answered 504/)).toBeInTheDocument()
+      expect(screen.getByText(/остался на прежней версии/)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Обновить до v0.5.15' })).toBeEnabled()
+      expect(screen.queryByText('обновляется')).toBeNull()
+    })
+
     it('says what is missing when the machine did not allow it, and offers the permissions instead', async () => {
       setup(agentOf(['shell']))
       renderSec('/security/v1?tab=fail2ban')
