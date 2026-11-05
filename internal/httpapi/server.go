@@ -27,6 +27,7 @@ import (
 	"github.com/Taminum/Owlery/internal/ingestproto"
 	"github.com/Taminum/Owlery/internal/live"
 	"github.com/Taminum/Owlery/internal/netintel"
+	"github.com/Taminum/Owlery/internal/pulse"
 	"github.com/Taminum/Owlery/internal/remnawave"
 	"github.com/Taminum/Owlery/internal/safehttp"
 	"github.com/Taminum/Owlery/internal/secops"
@@ -69,6 +70,7 @@ type Server struct {
 	Probe       ProbeFactory
 	Sync        *syncer.Syncer
 	Ingest      http.Handler // the agents' WebSocket endpoint; authenticates by agent credential, not by session
+	Pulses      *pulse.Cache // the quick readings of the machines, in memory
 	SecIngest   http.Handler // the security agents' endpoint, with its own credentials
 	SecShell    http.Handler // where an agent connects back for one terminal session
 	RecordsDir  string       // where terminal sessions are written as they happen; empty = not recorded

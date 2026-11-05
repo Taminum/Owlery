@@ -415,6 +415,28 @@ type ProxyOpen struct {
 	Port int    `json:"port"`
 }
 
+// CapSelfUpdate is announced by an agent whose machine allows it to be updated from the server card. The server only
+// names a release version; the agent fetches that release from the project's own GitHub address and installs it only if
+// the list of hashes of the release carries the release signature. Off unless the machine was set up with -allow-update.
+const CapSelfUpdate = "self_update"
+
+// UpdateReq asks the agent to update itself to a release. It is delivered over the live connection or not at all, and the
+// answer comes back on the same connection, matched by ID. It carries nothing but the version: no address, no hash.
+type UpdateReq struct {
+	Type    string `json:"type"` // "update_req"
+	ID      string `json:"id"`
+	Version string `json:"version"` // a release tag such as v0.5.15
+}
+
+// UpdateResult says what became of it: the release was fetched and checked and the update is on its way (OK), or why not.
+// The new version itself shows up in the agent's next hello.
+type UpdateResult struct {
+	Type  string `json:"type"` // "update_result"
+	ID    string `json:"id"`
+	OK    bool   `json:"ok"`
+	Error string `json:"error,omitempty"`
+}
+
 // CapAdmin is announced by an agent whose machine lets Owlery manage it from the server card (processes, services,
 // startup entries, sessions, event log, connections). Windows only, and off unless the machine was set up with
 // -allow-admin: the agent runs as the system account there, so this is as strong as the terminal.
@@ -681,3 +703,19 @@ type BlockAdd struct {
 	IP      string `json:"ip"`
 	Seconds int    `json:"seconds"`
 }
+
+// Pulse is the light, quick reading: only what a person watches move on the server card. The agent sends it every few
+// seconds between the full "host" readings; the server keeps the last one in memory and never stores it, so charts and the
+// database are exactly what they were. A lost one is nothing.
+type Pulse struct {
+	Type     string    `json:"type"` // "pulse"
+	At       time.Time `json:"at"`
+	CPUPct   float64   `json:"cpu"` // -1 until there are two readings to compare
+	MemUsed  int64     `json:"mem_used"`
+	MemTotal int64     `json:"mem_total"`
+	RXBps    int64     `json:"rx"` // bytes a second, over the time since the last pulse
+	TXBps    int64     `json:"tx"`
+}
+
+// MaxPulseBytes bounds one pulse message.
+const MaxPulseBytes = 1 << 10

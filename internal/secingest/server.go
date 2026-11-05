@@ -19,6 +19,7 @@ import (
 	"github.com/coder/websocket"
 
 	"github.com/Taminum/Owlery/internal/auth"
+	"github.com/Taminum/Owlery/internal/pulse"
 	"github.com/Taminum/Owlery/internal/secops"
 	"github.com/Taminum/Owlery/internal/secproto"
 	"github.com/Taminum/Owlery/internal/store"
@@ -36,6 +37,8 @@ type Server struct {
 	Now             func() time.Time
 	// Ops carries commands to agents that hold a connection and is where an agent's answer comes back (nil = no commands).
 	Ops *secops.Hub
+	// Pulses keeps the quick readings in memory (nil = they are dropped).
+	Pulses *pulse.Cache
 }
 
 var dummy = sha256.Sum256([]byte("remnascope-no-such-security-agent"))
@@ -261,6 +264,12 @@ func (s *Server) session(ctx context.Context, c *websocket.Conn, agent store.Sec
 				if err := s.Store.SaveHost(ctx, agent.VPSID, h, time.Now().UTC()); err != nil {
 					s.log().Error("saving host reading", "agent", agent.ID)
 				}
+			}
+		case "pulse":
+			// The quick reading: kept in memory for the server card, never stored, and a bad one is dropped.
+			var p secproto.Pulse
+			if s.Pulses != nil && len(data) <= secproto.MaxPulseBytes && json.Unmarshal(data, &p) == nil {
+				s.Pulses.Set(agent.VPSID, p, time.Now())
 			}
 		case "admin_result":
 			var r secproto.AdminResult

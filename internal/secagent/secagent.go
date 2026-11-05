@@ -68,6 +68,9 @@ type Config struct {
 	// FastInterval is how often the set of banned addresses is compared between full reads, so that a ban is
 	// named within seconds. Zero means 5 seconds; negative turns it off.
 	FastInterval time.Duration
+	// PulseInterval is how often the quick reading of processor, memory and network speed is sent between full readings.
+	// Zero means 5 seconds; negative turns it off.
+	PulseInterval time.Duration
 	// AllowShell lets Owlery open a terminal on this machine with the agent's own rights (Windows, where the agent
 	// runs as the system). ShellSocket is the root helper that opens terminals on Linux; the agent offers a terminal
 	// only when that socket is there, so a machine without the helper cannot be given one.
@@ -378,6 +381,16 @@ func (a *agent) session(ctx context.Context) error {
 		defer ft.Stop()
 		fastC = ft.C
 	}
+	var pulseC <-chan time.Time
+	if !a.cfg.NoHost && a.cfg.PulseInterval >= 0 {
+		d := a.cfg.PulseInterval
+		if d == 0 {
+			d = 5 * time.Second
+		}
+		pt := time.NewTicker(d)
+		defer pt.Stop()
+		pulseC = pt.C
+	}
 	var watch banWatch
 	full := true
 	for {
@@ -403,6 +416,11 @@ func (a *agent) session(ctx context.Context) error {
 			return err
 		case <-t.C:
 			full = true
+		case <-pulseC:
+			// The quick reading: only the processor, memory and network speed, nothing to acknowledge.
+			if err := write(sctx, c, a.host.Pulse(time.Now())); err != nil {
+				return err
+			}
 		case <-fastC:
 			// Only Fail2ban is read and sent, and only when the banned set moved.
 			if watch.changed(sctx, a.cfg.Runner, a.cfg.Fail2banBin) {

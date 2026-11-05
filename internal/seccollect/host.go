@@ -24,6 +24,7 @@ type HostReader struct {
 	havePrev            bool
 	prevProc            map[int]procTicks
 	prevAt              time.Time
+	pulse               pulseState
 	// ContainersFile lists the running containers (id, name, image, tab-separated), written by a small root unit
 	// next to the agent, which has no access to Docker. Empty: container names are not known.
 	ContainersFile string

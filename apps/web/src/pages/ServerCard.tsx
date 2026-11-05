@@ -150,7 +150,7 @@ function Network({ s }: { s: Server }) {
 export default function ServerCard() {
   const { id = '' } = useParams()
   const [params, setParams] = useSearchParams()
-  const q = useLoad((sig) => api.get<Server>(`/api/v1/servers/${id}`, sig), [id], 10_000)
+  const q = useLoad((sig) => api.get<Server>(`/api/v1/servers/${id}`, sig), [id], 5_000)
   const [editing, setEditing] = useState(false)
   const wanted = params.get('view') as Tab | null
   const tab: Tab = wanted && TABS.includes(wanted) ? wanted : 'overview'
