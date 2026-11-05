@@ -23,6 +23,7 @@ type serverOut struct {
 	Critical   int                `json:"alerts_critical"`
 	Alerts     []store.Alert      `json:"alerts,omitempty"` // only on the card: open and the last 30 days
 	ExternalIP string             `json:"external_ip"`      // where its agent connected from; empty until it has, or without an agent
+	Agent      *store.AgentBrief  `json:"agent"`            // its live agent: version, whether it is connected and whether it may be updated from the card
 }
 
 // serverStatus is the one colour of a machine. No agent says nothing about it, so it is "unknown", not "ok".
@@ -66,6 +67,10 @@ func (s *Server) servers(r *http.Request, a auth.Actor, vs []store.VPS, withAler
 	if err != nil {
 		return nil, err
 	}
+	briefs, err := s.Store.AgentBriefs(r.Context(), ids, now.Add(-secproto.StaleAfter))
+	if err != nil {
+		return nil, err
+	}
 	nodes, err := s.Store.ServerNodes(r.Context(), a.Scope(), ids)
 	if err != nil {
 		return nil, err
@@ -73,6 +78,9 @@ func (s *Server) servers(r *http.Request, a auth.Actor, vs []store.VPS, withAler
 	out := make([]serverOut, 0, len(vs))
 	for _, v := range vs {
 		o := serverOut{VPS: v, CanEdit: vpsCanEdit(a, v), Host: byID[v.ID], Nodes: nodes[v.ID], ExternalIP: ips[v.ID]}
+		if b, ok := briefs[v.ID]; ok {
+			o.Agent = &b
+		}
 		if o.Nodes == nil {
 			o.Nodes = []store.ServerNode{}
 		}

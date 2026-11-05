@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"net/netip"
+	"time"
 )
 
 // SetSecAgentRemoteIP remembers the address an agent connected from. Anything that is not an address is not kept.
@@ -39,6 +40,37 @@ func (s *Store) AgentRemoteIPs(ctx context.Context, vpsIDs []string) (map[string
 			return nil, err
 		}
 		out[id] = ip
+	}
+	return out, rows.Err()
+}
+
+// AgentBrief is what the fleet list needs to know about a machine's live agent.
+type AgentBrief struct {
+	Version   string `json:"version"`
+	Online    bool   `json:"online"`
+	CanUpdate bool   `json:"can_update"` // the machine allowed updates from the card
+}
+
+// AgentBriefs gives, for each of the servers that has a live agent, its version, whether it was seen since `seenSince`
+// and whether it allows updates from the card. A server without an agent is missing from the result.
+func (s *Store) AgentBriefs(ctx context.Context, vpsIDs []string, seenSince time.Time) (map[string]AgentBrief, error) {
+	out := map[string]AgentBrief{}
+	if len(vpsIDs) == 0 {
+		return out, nil
+	}
+	rows, err := s.pool.Query(ctx, `SELECT vps_id::text, COALESCE(agent_version, ''), COALESCE(last_seen > $2, false), 'self_update' = ANY(capabilities)
+		FROM security_agents WHERE vps_id = ANY($1::uuid[]) AND status <> 'revoked'`, vpsIDs, seenSince)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var b AgentBrief
+		if err := rows.Scan(&id, &b.Version, &b.Online, &b.CanUpdate); err != nil {
+			return nil, err
+		}
+		out[id] = b
 	}
 	return out, rows.Err()
 }
