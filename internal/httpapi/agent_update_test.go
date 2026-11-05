@@ -38,10 +38,8 @@ func TestUpdatingAnAgentFromTheCard(t *testing.T) {
 	}
 	code := func(b []byte) string {
 		return parse[struct {
-			Error struct {
-				Code string `json:"code"`
-			} `json:"error"`
-		}](t, b).Error.Code
+			Code string `json:"code"`
+		}](t, b).Code
 	}
 
 	// Not connected: nothing to ask.
