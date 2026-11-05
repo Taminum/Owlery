@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
 
+	"github.com/Taminum/Owlery/internal/consoletext"
 	"github.com/Taminum/Owlery/internal/ipblock"
 	"github.com/Taminum/Owlery/internal/secproto"
 )
@@ -93,43 +93,8 @@ func parseEvents(out string) []winEvent {
 	return evs
 }
 
-// toUTF8 makes what wevtutil printed fit for an XML parser. Into a pipe it writes in the console's code page, so a
-// Russian account name arrives as cp866 bytes, which are not UTF-8, and one such name used to sink the whole batch.
-// Text that is not valid UTF-8 is read as cp866 (the Russian console); anything left over becomes "?".
-func toUTF8(s string) string {
-	if utf8.ValidString(s) {
-		return stripXMLControls(s)
-	}
-	var b strings.Builder
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		switch {
-		case c < 0x80:
-			b.WriteByte(c)
-		case c >= 0x80 && c <= 0xAF:
-			b.WriteRune(rune(0x410 + int(c-0x80)))
-		case c >= 0xE0 && c <= 0xEF:
-			b.WriteRune(rune(0x440 + int(c-0xE0)))
-		case c == 0xF0:
-			b.WriteRune('Ё')
-		case c == 0xF1:
-			b.WriteRune('ё')
-		default:
-			b.WriteByte('?')
-		}
-	}
-	return stripXMLControls(b.String())
-}
-
-// stripXMLControls drops the control characters XML does not allow; a log entry may carry any text.
-func stripXMLControls(s string) string {
-	return strings.Map(func(r rune) rune {
-		if r < 0x20 && r != '\t' && r != '\n' && r != '\r' {
-			return -1
-		}
-		return r
-	}, s)
-}
+// toUTF8 makes what wevtutil printed fit for an XML parser (see consoletext).
+func toUTF8(s string) string { return consoletext.ToUTF8(s) }
 
 var recordIDRe = regexp.MustCompile(`<EventRecordID>(\d+)</EventRecordID>`)
 

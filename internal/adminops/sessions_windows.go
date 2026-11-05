@@ -3,7 +3,6 @@
 package adminops
 
 import (
-	"bytes"
 	"context"
 	"encoding/xml"
 	"errors"
@@ -16,6 +15,7 @@ import (
 
 	"golang.org/x/sys/windows"
 
+	"github.com/Taminum/Owlery/internal/consoletext"
 	"github.com/Taminum/Owlery/internal/secproto"
 )
 
@@ -153,7 +153,9 @@ func listEvents(ctx context.Context, q eventQuery) (any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("журнал не прочитан: %w", err)
 	}
-	dec := xml.NewDecoder(bytes.NewReader(append(append([]byte("<Events>"), raw...), []byte("</Events>")...)))
+	// On a Russian machine the text arrives in the console's code page, not UTF-8.
+	clean := consoletext.ToUTF8(string(raw))
+	dec := xml.NewDecoder(strings.NewReader("<Events>" + clean + "</Events>"))
 	var wrap struct {
 		Events []eventXML `xml:"Event"`
 	}
@@ -164,7 +166,7 @@ func listEvents(ctx context.Context, q eventQuery) (any, error) {
 	for _, e := range wrap.Events {
 		msg := strings.TrimSpace(e.Rendering.Message)
 		if len(msg) > 600 {
-			msg = msg[:600] + "…"
+			msg = consoletext.Cut(msg, 600) + "…"
 		}
 		out = append(out, eventInfo{Time: e.System.TimeCreated.At, Log: q.Log, Source: e.System.Provider.Name, ID: e.System.EventID,
 			Level: e.Rendering.Level, Message: msg, Computer: e.System.Computer})
