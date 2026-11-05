@@ -6,6 +6,7 @@ import { PrimaryButton } from './Modal'
 import { ScreenFiles, sendFile } from './ScreenFiles'
 import { FsClient, joinPath } from '../lib/screenfs'
 import { request } from '../lib/api'
+import { errorText } from '../lib/errors'
 
 type State = 'idle' | 'connecting' | 'open' | 'closed'
 type Monitor = { w: number; h: number; primary: boolean }
@@ -46,7 +47,7 @@ const btn = 'h-7 shrink-0 rounded-control border border-line bg-elevated px-2.5 
  * top. The person sees an icon in their tray for as long as this is open and can end it from its menu; opening and
  * closing are in the audit log, the picture is not recorded.
  */
-export function ScreenView({ serverId }: { serverId: string }) {
+export function ScreenView({ serverId, canLaunch = false }: { serverId: string; canLaunch?: boolean }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const box = useRef<HTMLDivElement>(null)
   const view = useRef<HTMLDivElement>(null)
@@ -252,6 +253,19 @@ export function ScreenView({ serverId }: { serverId: string }) {
       .then((r) => setWinSessions(r.data ?? []))
       .catch(() => setWinSessions([]))
   }
+  // Opens PowerShell or cmd on the desktop of the session shown, as the system account. It is asked about first, because the
+  // window appears for whoever is sitting at that session, and the agent writes it to the audit log through the server.
+  async function launch(shell: 'powershell' | 'cmd') {
+    const name = shell === 'cmd' ? 'cmd' : 'PowerShell'
+    if (!window.confirm(t('scr.launch.ask', { name }))) return
+    try {
+      await request('POST', `/api/v1/servers/${serverId}/manage`, { op: 'launch', args: { shell, session: chosenRef.current } })
+      setNotice(t('scr.launch.done', { name }))
+    } catch (e) {
+      setNotice(`${name}: ${errorText(e)}`)
+    }
+    box.current?.focus()
+  }
   const start = () => { setReason(''); setState('connecting'); setMonitors([]); setMonitor(0); setSession((n) => n + 1); loadSessions() }
   const pickSession = (id: number) => {
     chosenRef.current = id
@@ -338,6 +352,7 @@ export function ScreenView({ serverId }: { serverId: string }) {
             <button type="button" className={btn} onClick={() => combo(3)}>Ctrl+Alt+Del</button>
             <button type="button" className={btn} onClick={() => combo(1)}>Win</button>
             <button type="button" className={btn} onClick={() => combo(2)}>Alt+Tab</button>
+            {canLaunch && <><button type="button" className={btn} onClick={() => void launch('powershell')}>PowerShell</button><button type="button" className={btn} onClick={() => void launch('cmd')}>cmd</button></>}
             <button type="button" className={btn} onClick={() => void pasteText()}>{t('scr.paste')}</button>
             <button type="button" className={btn} onClick={() => pickFile.current?.click()}>{t('scr.file')}</button>
             <input ref={pickFile} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void sendOne(f) }} />

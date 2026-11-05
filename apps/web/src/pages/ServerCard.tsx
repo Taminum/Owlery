@@ -178,7 +178,7 @@ export default function ServerCard() {
       {tab === 'alerts' && <AlertRules serverId={s.id} name={s.name} />}
       {tab === 'terminal' && s.can_edit && <TerminalView serverId={s.id} />}
       {tab === 'desktop' && s.can_edit && <DesktopView serverId={s.id} />}
-      {tab === 'screen' && s.can_edit && <ScreenView serverId={s.id} />}
+      {tab === 'screen' && s.can_edit && <ScreenView serverId={s.id} canLaunch={!!s.agent?.can_shell && !!s.agent?.can_admin} />}
       {tab === 'manage' && s.can_edit && <ManageView serverId={s.id} />}
       {tab === 'services' && s.can_edit && <ServicesView serverId={s.id} serverName={s.name} />}
       {tab === 'network' && <NetworkView s={s} />}

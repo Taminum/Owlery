@@ -151,6 +151,13 @@ func pickSession(wanted uint32) (uint32, string) {
 // interactive desktop. It duplicates the agent's own system token, stamps it with the session's id, and creates the
 // process with it — the standard way for a session-0 service to put a process on a user's desktop.
 func startInSession(exe string, sid uint32, args ...string) error {
+	// CREATE_NO_WINDOW so no console flashes up; the helper is a GUI-subsystem binary and has none anyway.
+	return startInSessionWith(exe, sid, 0x08000000, args...)
+}
+
+// startInSessionWith is startInSession with the creation flags chosen by the caller: a console program that is meant to be seen
+// needs CREATE_NEW_CONSOLE (0x10), not CREATE_NO_WINDOW.
+func startInSessionWith(exe string, sid uint32, flags uint32, args ...string) error {
 	var self windows.Token
 	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_DUPLICATE|windows.TOKEN_QUERY|windows.TOKEN_ASSIGN_PRIMARY|windows.TOKEN_ADJUST_DEFAULT|windows.TOKEN_ADJUST_SESSIONID, &self); err != nil {
 		return fmt.Errorf("opening the agent's token: %w", err)
@@ -185,8 +192,7 @@ func startInSession(exe string, sid uint32, args ...string) error {
 	si := &windows.StartupInfo{Desktop: desktop}
 	si.Cb = uint32(unsafe.Sizeof(*si))
 	var pi windows.ProcessInformation
-	// CREATE_NO_WINDOW so no console flashes up; the helper is a GUI-subsystem binary and has none anyway.
-	if err := windows.CreateProcessAsUser(dup, appName, cmdLine, nil, nil, false, 0x08000000, nil, nil, si, &pi); err != nil {
+	if err := windows.CreateProcessAsUser(dup, appName, cmdLine, nil, nil, false, flags, nil, nil, si, &pi); err != nil {
 		return fmt.Errorf("starting the helper in the session: %w", err)
 	}
 	_ = windows.CloseHandle(pi.Thread)
