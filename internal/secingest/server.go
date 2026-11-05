@@ -127,7 +127,7 @@ func (s *Server) Handler() http.Handler {
 		}
 		defer c.CloseNow()
 		c.SetReadLimit(secproto.MaxMessageBytes)
-		s.session(r.Context(), c, agent)
+		s.session(r.Context(), c, agent, s.clientAddr(r))
 	})
 }
 
@@ -167,7 +167,7 @@ func closeWith(c *websocket.Conn, code int, reason string) {
 
 var knownCaps = map[string]bool{"fail2ban_read": true, "socket_read": true, "firewall_read": true, secproto.CapWinsec: true, secproto.CapHardware: true, secproto.CapBlock: true, secproto.CapBlockCfg: true, secproto.CapBlockShare: true, secproto.CapFail2banBan: true, secproto.CapProbe: true, secproto.CapShell: true, secproto.CapDesktop: true, secproto.CapAdmin: true, secproto.CapWeb: true, secproto.CapRemote: true}
 
-func (s *Server) session(ctx context.Context, c *websocket.Conn, agent store.SecAgent) {
+func (s *Server) session(ctx context.Context, c *websocket.Conn, agent store.SecAgent, addr string) {
 	hctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	_, data, err := c.Read(hctx)
 	cancel()
@@ -203,6 +203,7 @@ func (s *Server) session(ctx context.Context, c *websocket.Conn, agent store.Sec
 	if s.Ops != nil {
 		defer s.Ops.Register(agent.ID, func(ctx context.Context, v any) error { return send(ctx, c, v) })()
 	}
+	_ = s.Store.SetSecAgentRemoteIP(ctx, agent.ID, addr) // only for the list of servers: a failure here is not worth dropping the agent
 	s.log().Info("security agent connected", "agent", agent.ID, "vps", agent.VPSID, "ack_seq", ack)
 	// A Windows agent is told how its address blocker is set up. It keeps what it was told, so this only matters the
 	// first time and after a change made while it was away.
@@ -334,4 +335,12 @@ func (s *Server) commandResult(ctx context.Context, agent store.SecAgent, data [
 	if err := s.Store.WriteAudit(ctx, store.AuditEntry{ActorName: "security agent", Action: "security.fail2ban.command_result", ObjectType: "vps", ObjectID: cmd.VPSID, Metadata: meta}); err != nil {
 		s.log().Error("audit write failed", "command", cmd.ID)
 	}
+}
+
+// clientAddr is the address the agent connected from, honouring the trusted proxy in front of the server.
+func (s *Server) clientAddr(r *http.Request) string {
+	if s.ClientIP == nil {
+		return ""
+	}
+	return s.ClientIP(r).String()
 }

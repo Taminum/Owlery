@@ -14,14 +14,15 @@ import (
 // nodes run on it and what is wrong with it.
 type serverOut struct {
 	store.VPS
-	CanEdit  bool               `json:"can_edit"`
-	Status   string             `json:"status"` // ok | warn | bad | unknown
-	Reason   string             `json:"reason"` // why it is not ok: offline | critical | alerts | no_agent
-	Host     *store.HostRow     `json:"host"`
-	Nodes    []store.ServerNode `json:"nodes"`
-	Open     int                `json:"alerts_open"`
-	Critical int                `json:"alerts_critical"`
-	Alerts   []store.Alert      `json:"alerts,omitempty"` // only on the card: open and the last 30 days
+	CanEdit    bool               `json:"can_edit"`
+	Status     string             `json:"status"` // ok | warn | bad | unknown
+	Reason     string             `json:"reason"` // why it is not ok: offline | critical | alerts | no_agent
+	Host       *store.HostRow     `json:"host"`
+	Nodes      []store.ServerNode `json:"nodes"`
+	Open       int                `json:"alerts_open"`
+	Critical   int                `json:"alerts_critical"`
+	Alerts     []store.Alert      `json:"alerts,omitempty"` // only on the card: open and the last 30 days
+	ExternalIP string             `json:"external_ip"`      // where its agent connected from; empty until it has, or without an agent
 }
 
 // serverStatus is the one colour of a machine. No agent says nothing about it, so it is "unknown", not "ok".
@@ -61,13 +62,17 @@ func (s *Server) servers(r *http.Request, a auth.Actor, vs []store.VPS, withAler
 	if err != nil {
 		return nil, err
 	}
+	ips, err := s.Store.AgentRemoteIPs(r.Context(), ids)
+	if err != nil {
+		return nil, err
+	}
 	nodes, err := s.Store.ServerNodes(r.Context(), a.Scope(), ids)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]serverOut, 0, len(vs))
 	for _, v := range vs {
-		o := serverOut{VPS: v, CanEdit: vpsCanEdit(a, v), Host: byID[v.ID], Nodes: nodes[v.ID]}
+		o := serverOut{VPS: v, CanEdit: vpsCanEdit(a, v), Host: byID[v.ID], Nodes: nodes[v.ID], ExternalIP: ips[v.ID]}
 		if o.Nodes == nil {
 			o.Nodes = []store.ServerNode{}
 		}
