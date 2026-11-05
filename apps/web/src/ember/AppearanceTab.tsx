@@ -1,5 +1,6 @@
 import { t, type MsgKey } from '../i18n'
 import { Card } from '../components/ui'
+import { setDensity, useDensity } from '../lib/density'
 import { KAWAII_THEMES, MASCOT_SIZES, setKawaii, useKawaii, type MascotSize } from './settings'
 
 function Toggle({ id, label, hint, checked, disabled, onChange }: { id: string; label: string; hint?: string; checked: boolean; disabled?: boolean; onChange: (v: boolean) => void }) {
@@ -14,8 +15,18 @@ function Toggle({ id, label, hint, checked, disabled, onChange }: { id: string; 
 /** Kawaii Mode: a decorative, optional look and a mascot. Remembered in this browser only. */
 export function AppearanceTab() {
   const s = useKawaii()
+  const density = useDensity()
   return (
     <div className="space-y-4">
+      <Card title={t('density.title')} note={t('density.note')}>
+        <div role="radiogroup" aria-label={t('density.title')} className="flex flex-wrap gap-2">
+          {(['compact', 'roomy'] as const).map((d) => (
+            <button key={d} type="button" role="radio" aria-checked={density === d} onClick={() => setDensity(d)}
+              className={`h-9 rounded-control border px-3 text-[13px] ${density === d ? 'border-cyan bg-elevated text-fg' : 'border-line text-muted hover:text-fg'}`}>{t(`density.${d}` as MsgKey)}</button>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-muted">{t(`density.${density}.hint` as MsgKey)}</p>
+      </Card>
       <Card title={t('kw.title')} note={t('kw.note')}>
         <Toggle id="kw-enabled" label={t('kw.enabled')} hint={t('kw.enabled.hint')} checked={s.enabled} onChange={(v) => setKawaii({ enabled: v })} />
         <div className="mt-2 grid gap-1">

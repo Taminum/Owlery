@@ -78,14 +78,25 @@ body {
 .ember-body { touch-action: none; cursor: grab; }
 .ember-body:active { cursor: grabbing; }
 
-/* One look for every data table (the Resources look): a quiet small header, even cell padding, a thin line between rows and a
-   light highlight under the pointer. It is written once, here, for any table that spans its card (w-full); the heatmap and the
-   key-value lists do not, so they keep their own. Padding and weight are unlayered so the old per-cell classes cannot disagree,
-   and the alignment is in the base layer so text-right on a numeric column still wins. */
+/* One look for every data table, in two densities chosen in Settings -> Appearance (data-density on the document; compact when
+   nothing is set). Compact is the Resources look: a quiet small header, close rows, a thin line between them, a light highlight
+   under the pointer, small buttons and lists inside a row, and a card that holds only a table (.card-bare) lies on the page with
+   no backing. Roomy keeps that card and gives every cell 8px. It is written once here for any table that spans its card (w-full);
+   the heatmap and the key-value lists do not, so they keep their own. Padding and sizes are unlayered so the old per-cell
+   classes cannot disagree; alignment is in the base layer so text-right and align-top on a cell still win. */
 @layer base {
   table.w-full th { text-align: left; }
+  table.w-full td { vertical-align: middle; }
 }
-table.w-full th { padding: 4px 8px; font-size: 12px; font-weight: 500; color: var(--color-muted); }
-table.w-full td { padding: 6px 8px; }
+table.w-full th { font-size: 12px; font-weight: 500; color: var(--color-muted); }
 table.w-full tbody tr { border-top: 1px solid color-mix(in oklab, var(--color-line) 60%, transparent); transition: background-color 80ms; }
 table.w-full tbody tr:hover { background-color: rgb(255 255 255 / 0.03); }
+:root:not([data-density='roomy']) table.w-full th { padding: 4px 8px; }
+:root:not([data-density='roomy']) table.w-full td { padding: 6px 8px; }
+:root:not([data-density='roomy']) table.w-full td button { height: 24px; padding: 0 9px; font-size: 12px; border-radius: 9px; }
+:root:not([data-density='roomy']) table.w-full td select,
+:root:not([data-density='roomy']) table.w-full td input:not([type='checkbox']):not([type='radio']) { height: 26px; font-size: 12px; padding-top: 0; padding-bottom: 0; }
+:root:not([data-density='roomy']) .card-bare { background: transparent; border: 0; padding: 0; border-radius: 0; }
+:root[data-density='roomy'] table.w-full th { padding: 8px; }
+:root[data-density='roomy'] table.w-full td { padding: 8px; }
+:root[data-density='roomy'] table.w-full td button { height: 28px; padding: 0 10px; font-size: 12px; border-radius: 9px; }

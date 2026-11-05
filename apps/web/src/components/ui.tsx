@@ -6,16 +6,19 @@ export function Card({
   note,
   right,
   className = '',
+  bare = false,
   children,
 }: {
   title?: string
   note?: string
   right?: ReactNode
   className?: string
+  /** A card that holds only a title and a table: in the compact look it has no backing and lies on the page. */
+  bare?: boolean
   children: ReactNode
 }) {
   return (
-    <section className={`rounded-card border border-line bg-surface p-4 ${className}`}>
+    <section className={`rounded-card border border-line bg-surface p-4 ${bare ? 'card-bare' : ''} ${className}`}>
       {(title || right) && (
         <header className="mb-3 flex items-start justify-between gap-3">
           <div className="min-w-0">

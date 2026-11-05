@@ -24,7 +24,8 @@ function ask<T>(serverId: string, op: string, args?: object, signal?: AbortSigna
 }
 
 const th = 'px-2 py-1 text-xs font-medium text-muted'
-const td = 'px-2 py-1.5 align-top'
+const td = 'px-2 py-1.5'
+const tdTop = `${td} align-top`
 
 type Getter<T> = (r: T) => string | number
 
@@ -145,7 +146,7 @@ export function ManageView({ serverId }: { serverId: string }) {
   const [section, setSection] = useState<Section>('procs')
   const [help, setHelp] = useState(false)
   return (
-    <Card title={t('mng.title')} right={
+    <Card bare title={t('mng.title')} right={
       <button type="button" onClick={() => setHelp((v) => !v)} aria-expanded={help} aria-label={t('mng.help')} title={t('mng.help')}
         className="grid h-6 w-6 place-items-center rounded-full border border-line text-xs text-muted hover:text-fg">?</button>}>
       {help && <p className="mb-3 text-xs text-muted">{t('mng.note')}</p>}
@@ -358,10 +359,10 @@ function Events({ serverId }: { serverId: string }) {
       <Table id="events" widths={[16, 10, 22, 52]} head={[h(t('mng.time'), 'time'), h(t('mng.level'), 'level'), h(t('mng.source'), 'source'), t('mng.message')]} empty={t('mng.empty')}>
         {rows.map((e, i) => (
           <tr key={i}>
-            <td className={`${td} tnum whitespace-nowrap text-muted`}>{formatDateTime(e.time, 'local')}</td>
-            <td className={td}>{e.level}</td>
-            <td className={td}>{e.source}<span className="block text-xs text-muted">ID {e.id}</span></td>
-            <td data-wrap className={`${td} whitespace-pre-wrap break-words text-xs`}>{e.message}</td>
+            <td className={`${tdTop} tnum whitespace-nowrap text-muted`}>{formatDateTime(e.time, 'local')}</td>
+            <td className={tdTop}>{e.level}</td>
+            <td className={tdTop}>{e.source}<span className="block text-xs text-muted">ID {e.id}</span></td>
+            <td data-wrap className={`${tdTop} whitespace-pre-wrap break-words text-xs`}>{e.message}</td>
           </tr>
         ))}
       </Table>
