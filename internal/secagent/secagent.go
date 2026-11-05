@@ -24,6 +24,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
@@ -34,6 +35,7 @@ import (
 	"github.com/Taminum/Owlery/internal/seccollect"
 	"github.com/Taminum/Owlery/internal/secproto"
 	"github.com/Taminum/Owlery/internal/secshell"
+	"github.com/Taminum/Owlery/internal/selfupdate"
 )
 
 type Config struct {
@@ -68,6 +70,9 @@ type Config struct {
 	// FastInterval is how often the set of banned addresses is compared between full reads, so that a ban is
 	// named within seconds. Zero means 5 seconds; negative turns it off.
 	FastInterval time.Duration
+	// PulseInterval is how often the quick reading of processor, memory and network speed is sent between full readings.
+	// Zero means 5 seconds; negative turns it off.
+	PulseInterval time.Duration
 	// AllowShell lets Owlery open a terminal on this machine with the agent's own rights (Windows, where the agent
 	// runs as the system). ShellSocket is the root helper that opens terminals on Linux; the agent offers a terminal
 	// only when that socket is there, so a machine without the helper cannot be given one.
@@ -88,6 +93,11 @@ type Config struct {
 	// AllowBlock is the machine's explicit permission to shut out addresses that guess passwords with Windows Firewall
 	// rules. Without it the blocker only watches and says what it would have blocked.
 	AllowBlock bool
+	// AllowUpdate is the machine's explicit permission to be updated from the server card. UpdateDir is where the agent keeps a
+	// release it has fetched (its own state directory on Linux, where a root helper installs it). UpdateFetcher is for tests.
+	AllowUpdate   bool
+	UpdateDir     string
+	UpdateFetcher *selfupdate.Fetcher
 	// RemoteSecretFile is the screen-sharing helper's shared secret (Windows). The agent (a system service) launches the
 	// helper — this same binary, run as "screen-helper" — into the signed-in person's own session as the system account,
 	// so it can see and drive that screen including the secure desktop (UAC and the lock screen); the secret, which only
@@ -161,6 +171,7 @@ func Run(ctx context.Context, cfg Config) error {
 		return err
 	}
 	a := &agent{cfg: cfg, url: url, hc: hc, epoch: newEpoch(), probes: make(chan struct{}, maxProbes), admins: make(chan struct{}, 4), socks: seccollect.NewSocketWatch(10 * time.Minute), host: newHostReader(cfg), runCtx: ctx}
+	a.checkUpdateTrial()
 	a.hw = seccollect.NewHardware(seccollect.ExecRunner{Timeout: 90 * time.Second})
 	if runtime.GOOS == "linux" && cfg.ContainersFile != "" {
 		// The unit that lists the containers lists their details beside it; a machine without the unit has no such file.
@@ -209,24 +220,25 @@ func Run(ctx context.Context, cfg Config) error {
 }
 
 type agent struct {
-	cfg     Config
-	url     string
-	hc      *http.Client
-	epoch   string
-	seq     int64
-	helper  f2bhelper.Client
-	done    *executed
-	cmdMu   sync.Mutex // one command at a time, in the order they arrive
-	probes  chan struct{}
-	admins  chan struct{}
-	socks   *seccollect.SocketWatch
-	winsec  *seccollect.Winsec // Windows only: sign-ins from other machines and Defender
-	blocker *ipblock.Engine    // Windows only: shuts out addresses that guess passwords
-	hw      *seccollect.HardwareReader
-	docker  *seccollect.DockerReader // nil off Linux or without a containers list
-	host    *seccollect.HostReader
-	runCtx  context.Context // lives as long as the agent: a terminal outlives a reconnect of the reports
-	shells  *secshell.Runner
+	cfg      Config
+	url      string
+	hc       *http.Client
+	epoch    string
+	seq      int64
+	helper   f2bhelper.Client
+	done     *executed
+	cmdMu    sync.Mutex // one command at a time, in the order they arrive
+	probes   chan struct{}
+	admins   chan struct{}
+	socks    *seccollect.SocketWatch
+	winsec   *seccollect.Winsec // Windows only: sign-ins from other machines and Defender
+	blocker  *ipblock.Engine    // Windows only: shuts out addresses that guess passwords
+	hw       *seccollect.HardwareReader
+	docker   *seccollect.DockerReader // nil off Linux or without a containers list
+	host     *seccollect.HostReader
+	updating atomic.Bool
+	runCtx   context.Context // lives as long as the agent: a terminal outlives a reconnect of the reports
+	shells   *secshell.Runner
 	// dialBack connects back to Owlery for one session (terminal or tunnel).
 	dialBack func(ctx context.Context, path, id string) (*websocket.Conn, error)
 }
@@ -306,6 +318,9 @@ func (a *agent) capabilities(ban bool) []string {
 	if a.cfg.AllowWeb {
 		caps = append(caps, secproto.CapWeb)
 	}
+	if a.updateReady() {
+		caps = append(caps, secproto.CapSelfUpdate)
+	}
 	if a.winsec != nil {
 		caps = append(caps, secproto.CapBlockCfg, secproto.CapBlockShare)
 	}
@@ -357,6 +372,7 @@ func (a *agent) session(ctx context.Context) error {
 	if a.seq < w.AckSeq {
 		a.seq = w.AckSeq
 	}
+	a.onConnected()
 	a.cfg.Log.Info("connected", "ack_seq", w.AckSeq, "server_interval_s", w.IntervalSeconds, "can_ban", ban)
 
 	// From here on one goroutine reads every frame: acknowledgements go to the sender, commands to the
@@ -377,6 +393,16 @@ func (a *agent) session(ctx context.Context) error {
 		ft := time.NewTicker(d)
 		defer ft.Stop()
 		fastC = ft.C
+	}
+	var pulseC <-chan time.Time
+	if !a.cfg.NoHost && a.cfg.PulseInterval >= 0 {
+		d := a.cfg.PulseInterval
+		if d == 0 {
+			d = 5 * time.Second
+		}
+		pt := time.NewTicker(d)
+		defer pt.Stop()
+		pulseC = pt.C
 	}
 	var watch banWatch
 	full := true
@@ -403,6 +429,11 @@ func (a *agent) session(ctx context.Context) error {
 			return err
 		case <-t.C:
 			full = true
+		case <-pulseC:
+			// The quick reading: only the processor, memory and network speed, nothing to acknowledge.
+			if err := write(sctx, c, a.host.Pulse(time.Now())); err != nil {
+				return err
+			}
 		case <-fastC:
 			// Only Fail2ban is read and sent, and only when the banned set moved.
 			if watch.changed(sctx, a.cfg.Runner, a.cfg.Fail2banBin) {
@@ -555,6 +586,17 @@ func (a *agent) reader(ctx context.Context, c *websocket.Conn, ban bool, acks ch
 			go func() {
 				if err := write(ctx, c, a.admin(ctx, req)); err != nil {
 					a.cfg.Log.Warn("could not report a management result", "id", req.ID, "err", err)
+				}
+			}()
+		case "update_req":
+			var req secproto.UpdateReq
+			if json.Unmarshal(b, &req) != nil || req.ID == "" || len(req.ID) > 64 || len(req.Version) > 32 {
+				fail(errors.New("secagent: a bad update request"))
+				return
+			}
+			go func() {
+				if err := write(ctx, c, a.update(ctx, req)); err != nil {
+					a.cfg.Log.Warn("could not report an update result", "id", req.ID, "err", err)
 				}
 			}()
 		case "remote_open":

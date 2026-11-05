@@ -17,12 +17,13 @@ import (
 var ErrOffline = errors.New("secops: the agent is not connected")
 
 type Hub struct {
-	mu     sync.Mutex
-	conns  map[string]*link
-	next   uint64
-	probes map[string]*probeWait
-	admins map[string]*adminWait
-	shells map[string]*shellWait
+	mu      sync.Mutex
+	conns   map[string]*link
+	next    uint64
+	probes  map[string]*probeWait
+	admins  map[string]*adminWait
+	updates map[string]*updateWait
+	shells  map[string]*shellWait
 }
 
 type probeWait struct {
@@ -36,7 +37,7 @@ type link struct {
 }
 
 func New() *Hub {
-	return &Hub{conns: map[string]*link{}, probes: map[string]*probeWait{}, admins: map[string]*adminWait{}}
+	return &Hub{conns: map[string]*link{}, probes: map[string]*probeWait{}, admins: map[string]*adminWait{}, updates: map[string]*updateWait{}}
 }
 
 // Register makes an agent's connection available. The returned function removes it, and only it: a newer
@@ -154,6 +155,52 @@ func (h *Hub) Admin(ctx context.Context, agentID string, req secproto.AdminReq) 
 func (h *Hub) DeliverAdmin(agentID string, r secproto.AdminResult) bool {
 	h.mu.Lock()
 	w := h.admins[r.ID]
+	h.mu.Unlock()
+	if w == nil || w.agent != agentID {
+		return false
+	}
+	select {
+	case w.ch <- r:
+		return true
+	default:
+		return false
+	}
+}
+
+type updateWait struct {
+	agent string
+	ch    chan secproto.UpdateResult
+}
+
+// Update asks an agent to update itself to a release and waits for its answer (or ctx). The ID is set here. The answer says
+// that the release was fetched and checked and is on its way in, or why not; the new version shows in the agent's next hello.
+func (h *Hub) Update(ctx context.Context, agentID string, req secproto.UpdateReq) (secproto.UpdateResult, error) {
+	req.Type, req.ID = "update_req", uuid.NewString()
+	w := &updateWait{agent: agentID, ch: make(chan secproto.UpdateResult, 1)}
+	h.mu.Lock()
+	h.updates[req.ID] = w
+	h.mu.Unlock()
+	defer func() {
+		h.mu.Lock()
+		delete(h.updates, req.ID)
+		h.mu.Unlock()
+	}()
+	if err := h.Send(ctx, agentID, req); err != nil {
+		return secproto.UpdateResult{}, err
+	}
+	select {
+	case r := <-w.ch:
+		return r, nil
+	case <-ctx.Done():
+		return secproto.UpdateResult{}, ErrNoAnswer
+	}
+}
+
+// DeliverUpdate hands an agent's answer to whoever is waiting for it; one nobody asked for, or from a different agent than the
+// one asked, is dropped.
+func (h *Hub) DeliverUpdate(agentID string, r secproto.UpdateResult) bool {
+	h.mu.Lock()
+	w := h.updates[r.ID]
 	h.mu.Unlock()
 	if w == nil || w.agent != agentID {
 		return false

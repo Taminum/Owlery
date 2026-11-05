@@ -10,13 +10,13 @@ import { DangerButton, GhostButton, Modal, PrimaryButton } from './Modal'
 
 // The permissions a machine gives Owlery, by the capability its agent announces. They are switched on the machine
 // itself, by the command this dialog builds: Owlery can never give them to itself.
-export interface AgentOpts { shell: boolean; web: boolean; desk: boolean; scr: boolean; adm: boolean; blk: boolean; probe: boolean }
+export interface AgentOpts { shell: boolean; web: boolean; desk: boolean; scr: boolean; adm: boolean; blk: boolean; probe: boolean; upd: boolean }
 type OS = 'linux' | 'windows'
 
-const CAP: Record<keyof AgentOpts, string> = { shell: 'shell', web: 'web', desk: 'desktop', scr: 'remote', adm: 'admin', blk: 'ip_block', probe: 'probe' }
+const CAP: Record<keyof AgentOpts, string> = { shell: 'shell', web: 'web', desk: 'desktop', scr: 'remote', adm: 'admin', blk: 'ip_block', probe: 'probe', upd: 'self_update' }
 
 export function optsFromCaps(caps: string[]): AgentOpts {
-  return { shell: caps.includes(CAP.shell), web: caps.includes(CAP.web), desk: caps.includes(CAP.desk), scr: caps.includes(CAP.scr), adm: caps.includes(CAP.adm), blk: caps.includes(CAP.blk), probe: caps.includes(CAP.probe) }
+  return { shell: caps.includes(CAP.shell), web: caps.includes(CAP.web), desk: caps.includes(CAP.desk), scr: caps.includes(CAP.scr), adm: caps.includes(CAP.adm), blk: caps.includes(CAP.blk), probe: caps.includes(CAP.probe), upd: caps.includes(CAP.upd) }
 }
 
 const RELEASES = 'https://github.com/Taminum/Owlery/releases/latest/download'
@@ -26,7 +26,7 @@ export function Code({ children }: { children: string }) {
 }
 
 function winFlags(o: AgentOpts): string {
-  return `${o.shell ? ' -allow-shell' : ''}${o.desk ? ' -allow-desktop' : ''}${o.scr ? ' -allow-screen' : ''}${o.adm ? ' -allow-admin' : ''}${o.blk ? ' -allow-block' : ''}${o.web ? ' -allow-web' : ''}${o.probe ? ' -probe' : ''}`
+  return `${o.shell ? ' -allow-shell' : ''}${o.desk ? ' -allow-desktop' : ''}${o.scr ? ' -allow-screen' : ''}${o.adm ? ' -allow-admin' : ''}${o.blk ? ' -allow-block' : ''}${o.web ? ' -allow-web' : ''}${o.upd ? ' -allow-update' : ''}${o.probe ? ' -probe' : ''}`
 }
 
 // The Linux unit gets its flags from a drop-in of its own. Its name sorts last, so it wins over older drop-ins
@@ -36,8 +36,18 @@ function linuxDropIn(host: string, o: AgentOpts): string {
 cat > /etc/systemd/system/remnascope-secagent.service.d/zz-owlery.conf <<'EOF'
 [Service]
 ExecStart=
-ExecStart=/usr/local/bin/remnascope-secagent -server wss://${host} -token-file /etc/remnascope/secagent.token -helper-socket /run/remnascope-sec/f2b.sock -state-dir /var/lib/remnascope-secagent${o.web ? ' -allow-web' : ''}${o.probe ? ' -probe' : ''}
+ExecStart=/usr/local/bin/remnascope-secagent -server wss://${host} -token-file /etc/remnascope/secagent.token -helper-socket /run/remnascope-sec/f2b.sock -state-dir /var/lib/remnascope-secagent${o.web ? ' -allow-web' : ''}${o.upd ? ' -allow-update' : ''}${o.probe ? ' -probe' : ''}
 EOF`
+}
+
+// The root helper that installs an update the agent fetched: a path unit that starts a one-shot service. Without the permission
+// the units are not there (an update block takes them off a machine that had them).
+function linuxUpdateUnits(on: boolean, removeWhenOff: boolean): string {
+  if (on) {
+    return `cp deploy/secagent/remnascope-secagent-update.path deploy/secagent/remnascope-secagent-update.service /etc/systemd/system/
+systemctl daemon-reload && systemctl enable --now remnascope-secagent-update.path`
+  }
+  return removeWhenOff ? 'systemctl disable --now remnascope-secagent-update.path 2>/dev/null || true; rm -f /etc/systemd/system/remnascope-secagent-update.path /etc/systemd/system/remnascope-secagent-update.service' : ''
 }
 
 function linuxShell(host: string, on: boolean): string {
@@ -64,7 +74,7 @@ curl -fLO ${RELEASES}/remnascope-secagent-linux-$A
 curl -fLO ${RELEASES}/remnascope-deploy-files.tar.gz
 tar -xzf remnascope-deploy-files.tar.gz
 install -m 0755 remnascope-secagent-linux-$A /usr/local/bin/remnascope-secagent
-sed 's#wss://SCOPE_HOST#wss://${host}${o.web ? ' -allow-web' : ''}#' deploy/secagent/remnascope-secagent.service > /etc/systemd/system/remnascope-secagent.service
+sed 's#wss://SCOPE_HOST#wss://${host}${o.web ? ' -allow-web' : ''}${o.upd ? ' -allow-update' : ''}#' deploy/secagent/remnascope-secagent.service > /etc/systemd/system/remnascope-secagent.service
 cp deploy/secagent/remnascope-secagent-f2b.service /etc/systemd/system/
 if systemctl cat fail2ban >/dev/null 2>&1; then
 mkdir -p /etc/systemd/system/fail2ban.service.d
@@ -77,6 +87,7 @@ fi
 install -m 0755 deploy/secagent/remnascope-containers-list /usr/local/sbin/
 cp deploy/secagent/remnascope-containers-list.service deploy/secagent/remnascope-containers-list.timer /etc/systemd/system/
 ${o.shell ? linuxShell(host, true) : ''}
+${linuxUpdateUnits(o.upd, false)}
 systemctl daemon-reload
 systemctl enable --now remnascope-containers-list.timer remnascope-secagent-f2b remnascope-secagent
 systemctl restart remnascope-secagent${o.shell ? ' remnascope-shell' : ''}
@@ -141,6 +152,7 @@ export function AgentSetupDialog({ mode, token, initial, initialOS, onClose }: {
         <div className="grid gap-3 sm:grid-cols-2">
           <Check on={o.shell} set={set('shell')} label="sec.onb.shell" hint="sec.onb.shellHint" />
           <Check on={o.web} set={set('web')} label="sec.onb.web" hint="sec.onb.webHint" />
+          <Check on={o.upd} set={set('upd')} label="sec.onb.update" hint="sec.onb.updateHint" />
           {os === 'windows' && <Check on={o.desk} set={set('desk')} label="sec.onb.desk" hint="sec.onb.deskHint" />}
           {os === 'windows' && <Check on={o.scr} set={set('scr')} label="sec.onb.screen" hint="sec.onb.screenHint" />}
           {os === 'windows' && <Check on={o.adm} set={set('adm')} label="sec.onb.admin" hint="sec.onb.adminHint" />}
@@ -162,6 +174,7 @@ install -m 0755 remnascope-secagent-linux-$A /usr/local/bin/remnascope-secagent
 install -m 0755 deploy/secagent/remnascope-containers-list /usr/local/sbin/
 ${linuxDropIn(host, o)}
 ${linuxShell(host, o.shell)}
+${linuxUpdateUnits(o.upd, true)}
 systemctl daemon-reload && systemctl restart remnascope-secagent-f2b remnascope-secagent
 systemctl is-active remnascope-secagent
 OWLERY`}</CopyCode>
@@ -333,7 +346,7 @@ export function AgentBlock({ vpsId, canEdit, hostOS }: { vpsId: string; canEdit:
           {agent && <GhostButton onClick={() => setConfirm(true)}>{t('sec.agent.revoke')}</GhostButton>}
         </div>
       )}
-      {token && <AgentSetupDialog mode="install" token={token} initial={{ shell: true, web: true, desk: true, scr: false, adm: false, blk: false, probe: false }} initialOS={os} onClose={() => setToken('')} />}
+      {token && <AgentSetupDialog mode="install" token={token} initial={{ shell: true, web: true, desk: true, scr: false, adm: false, blk: false, probe: false, upd: true }} initialOS={os} onClose={() => setToken('')} />}
       {updating && <AgentSetupDialog mode="update" initial={opts} initialOS={os} onClose={() => setUpdating(false)} />}
       {confirm && (
         <Modal title={t('sec.agent.revoke')} onClose={() => setConfirm(false)}>

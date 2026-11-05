@@ -33,6 +33,7 @@ import (
 	"github.com/Taminum/Owlery/internal/netintel"
 	"github.com/Taminum/Owlery/internal/notify"
 	"github.com/Taminum/Owlery/internal/probe"
+	"github.com/Taminum/Owlery/internal/pulse"
 	"github.com/Taminum/Owlery/internal/remnawave"
 	"github.com/Taminum/Owlery/internal/safehttp"
 	"github.com/Taminum/Owlery/internal/secchecks"
@@ -172,7 +173,9 @@ func serve(log *slog.Logger) error {
 	srv.SecOps = secHub
 	secChecker.Probes = secHub // a security agent set up as a checker can run the external checks
 	srv.SecChecks = secChecker
-	secIn := &secingest.Server{Store: st, Log: log, Limiter: auth.NewLimiter(1, 10), ClientIP: srv.ClientAddr, Ops: secHub}
+	pulses := pulse.New()
+	srv.Pulses = pulses
+	secIn := &secingest.Server{Store: st, Log: log, Limiter: auth.NewLimiter(1, 10), ClientIP: srv.ClientAddr, Ops: secHub, Pulses: pulses}
 	srv.SecIngest, srv.SecShell = secIn.Handler(), secIn.ShellHandler()
 	srv.Ingest = (&ingest.Server{Store: st, Log: log, Limiter: auth.NewLimiter(1, 10), ClientIP: srv.ClientAddr, Live: srv.Live, Ops: srv.AWGOps}).Handler()
 

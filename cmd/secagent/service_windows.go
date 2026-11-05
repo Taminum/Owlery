@@ -32,13 +32,14 @@ func platformCommand(cmd string, args []string) bool {
 		web := fs.Bool("allow-web", false, "let Owlery open web services bound to 127.0.0.1 on this machine")
 		admin := fs.Bool("allow-admin", false, "let Owlery manage this machine from the server card")
 		screen := fs.Bool("allow-screen", false, "let Owlery show this machine's screen to an administrator")
+		update := fs.Bool("allow-update", false, "let Owlery update this agent from the server card to a release signed with the release key")
 		block := fs.Bool("allow-block", false, "let this machine shut out addresses that guess passwords with Windows Firewall rules")
 		_ = fs.Parse(args)
 		if *server == "" || *tokenFile == "" {
 			fmt.Fprintln(os.Stderr, "secagent install: -server and -token-file are required")
 			os.Exit(2)
 		}
-		if err := install(*server, *tokenFile, *probe, *shell, *desktop, *screen, *web, *admin, *block); err != nil {
+		if err := install(*server, *tokenFile, *probe, *shell, *desktop, *screen, *web, *admin, *block, *update); err != nil {
 			fmt.Fprintln(os.Stderr, "secagent install:", err)
 			os.Exit(1)
 		}
@@ -58,7 +59,7 @@ func platformCommand(cmd string, args []string) bool {
 	return true
 }
 
-func install(server, tokenFile string, probe, shell, desktop, screen, web, admin, block bool) error {
+func install(server, tokenFile string, probe, shell, desktop, screen, web, admin, block, update bool) error {
 	exe, err := os.Executable()
 	if err != nil {
 		return err
@@ -100,6 +101,9 @@ func install(server, tokenFile string, probe, shell, desktop, screen, web, admin
 	}
 	if block {
 		args = append(args, "-allow-block")
+	}
+	if update {
+		args = append(args, "-allow-update")
 	}
 	if screen {
 		args = append(args, "-allow-screen")

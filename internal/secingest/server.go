@@ -19,6 +19,7 @@ import (
 	"github.com/coder/websocket"
 
 	"github.com/Taminum/Owlery/internal/auth"
+	"github.com/Taminum/Owlery/internal/pulse"
 	"github.com/Taminum/Owlery/internal/secops"
 	"github.com/Taminum/Owlery/internal/secproto"
 	"github.com/Taminum/Owlery/internal/store"
@@ -36,6 +37,8 @@ type Server struct {
 	Now             func() time.Time
 	// Ops carries commands to agents that hold a connection and is where an agent's answer comes back (nil = no commands).
 	Ops *secops.Hub
+	// Pulses keeps the quick readings in memory (nil = they are dropped).
+	Pulses *pulse.Cache
 }
 
 var dummy = sha256.Sum256([]byte("remnascope-no-such-security-agent"))
@@ -165,7 +168,7 @@ func closeWith(c *websocket.Conn, code int, reason string) {
 	_ = c.Close(websocket.StatusCode(code), reason)
 }
 
-var knownCaps = map[string]bool{"fail2ban_read": true, "socket_read": true, "firewall_read": true, secproto.CapWinsec: true, secproto.CapHardware: true, secproto.CapBlock: true, secproto.CapBlockCfg: true, secproto.CapBlockShare: true, secproto.CapFail2banBan: true, secproto.CapProbe: true, secproto.CapShell: true, secproto.CapDesktop: true, secproto.CapAdmin: true, secproto.CapWeb: true, secproto.CapRemote: true}
+var knownCaps = map[string]bool{"fail2ban_read": true, "socket_read": true, "firewall_read": true, secproto.CapWinsec: true, secproto.CapHardware: true, secproto.CapBlock: true, secproto.CapBlockCfg: true, secproto.CapBlockShare: true, secproto.CapFail2banBan: true, secproto.CapProbe: true, secproto.CapShell: true, secproto.CapDesktop: true, secproto.CapAdmin: true, secproto.CapWeb: true, secproto.CapRemote: true, secproto.CapSelfUpdate: true}
 
 func (s *Server) session(ctx context.Context, c *websocket.Conn, agent store.SecAgent, addr string) {
 	hctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -262,10 +265,21 @@ func (s *Server) session(ctx context.Context, c *websocket.Conn, agent store.Sec
 					s.log().Error("saving host reading", "agent", agent.ID)
 				}
 			}
+		case "pulse":
+			// The quick reading: kept in memory for the server card, never stored, and a bad one is dropped.
+			var p secproto.Pulse
+			if s.Pulses != nil && len(data) <= secproto.MaxPulseBytes && json.Unmarshal(data, &p) == nil {
+				s.Pulses.Set(agent.VPSID, p, time.Now())
+			}
 		case "admin_result":
 			var r secproto.AdminResult
 			if json.Unmarshal(data, &r) == nil && len(r.ID) <= 64 && s.Ops != nil {
 				s.Ops.DeliverAdmin(agent.ID, r)
+			}
+		case "update_result":
+			var r secproto.UpdateResult
+			if len(data) <= 16<<10 && json.Unmarshal(data, &r) == nil && len(r.ID) <= 64 && s.Ops != nil {
+				s.Ops.DeliverUpdate(agent.ID, r)
 			}
 		case "probe_result":
 			var r secproto.ProbeResult

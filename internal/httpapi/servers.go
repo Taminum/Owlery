@@ -84,6 +84,7 @@ func (s *Server) servers(r *http.Request, a auth.Actor, vs []store.VPS, withAler
 				}
 			}
 		}
+		s.applyPulse(o.Host, v.ID, now)
 		o.Status, o.Reason = serverStatus(o.Host, o.Open, o.Critical)
 		if withAlerts {
 			o.Alerts = alerts[v.ID]

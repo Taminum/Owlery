@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"runtime"
@@ -25,6 +26,7 @@ import (
 	"github.com/Taminum/Owlery/internal/secagent"
 	"github.com/Taminum/Owlery/internal/seccollect"
 	"github.com/Taminum/Owlery/internal/secshell"
+	"github.com/Taminum/Owlery/internal/selfupdate"
 )
 
 var version = "dev"
@@ -32,6 +34,10 @@ var version = "dev"
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "helper" {
 		runHelper(os.Args[2:])
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "apply-update" {
+		runApplyUpdate(os.Args[2:])
 		return
 	}
 	if len(os.Args) > 1 && os.Args[1] == "shell-helper" {
@@ -63,6 +69,8 @@ func main() {
 		allowScr  = flag.Bool("allow-screen", false, "let Owlery show this machine's screen to an administrator, with a notice on it for the person at the machine (Windows; needs owlery-remote installed)")
 		allowAdm  = flag.Bool("allow-admin", false, "let Owlery manage this machine from the server card: processes, services, startup, sessions, event log, connections (Windows; as strong as a terminal)")
 		allowBlk  = flag.Bool("allow-block", false, "let this machine shut out addresses that guess passwords with Windows Firewall rules (Windows; without it the blocker only says what it would block)")
+		allowUpd  = flag.Bool("allow-update", false, "let Owlery update this agent from the server card to a release signed with the release key (Linux also needs the update unit installed)")
+		updateDir = flag.String("update-dir", "", "where a fetched release is kept (default: update inside -state-dir, or the update folder in ProgramData on Windows)")
 		remoteSec = flag.String("remote-secret-file", defaultRemoteSecretFile(), "shared secret of the screen-sharing helper (Windows); screen sharing is offered only when it is there")
 		logFile   = flag.String("log-file", "", "write the log to this file instead of the standard error (a Windows service has no console)")
 	)
@@ -90,7 +98,7 @@ func main() {
 		*noF2B, *noSock, *noFW = true, true, true
 	}
 	cfg := secagent.Config{ServerURL: *server, TokenFile: *tokenFile, CAFile: *caFile, AllowInsecure: *insecure,
-		Interval: *interval, Version: version, Log: log, HelperSocket: *helper, StateDir: *stateDir, NoFail2ban: *noF2B, NoSockets: *noSock, NoFirewall: *noFW, NoHost: *noHost, ContainersFile: *contFile, Probe: *probe, AllowShell: *allowSh, ShellSocket: *shellSock, AllowDesktop: *allowDesk, AllowWeb: *allowWeb, AllowScreen: *allowScr, AllowAdmin: *allowAdm, AllowBlock: *allowBlk, RemoteSecretFile: *remoteSec}
+		Interval: *interval, Version: version, Log: log, HelperSocket: *helper, StateDir: *stateDir, NoFail2ban: *noF2B, NoSockets: *noSock, NoFirewall: *noFW, NoHost: *noHost, ContainersFile: *contFile, Probe: *probe, AllowShell: *allowSh, ShellSocket: *shellSock, AllowDesktop: *allowDesk, AllowWeb: *allowWeb, AllowScreen: *allowScr, AllowAdmin: *allowAdm, AllowBlock: *allowBlk, RemoteSecretFile: *remoteSec, AllowUpdate: *allowUpd, UpdateDir: defaultUpdateDir(*updateDir, *stateDir)}
 	run := func(ctx context.Context) error { return secagent.Run(ctx, cfg) }
 	if handled, err := runAsService(run, log); handled {
 		if err != nil {
@@ -193,6 +201,48 @@ func runShellHelper(args []string) {
 	r := &secshell.Runner{Log: log, Dial: secshell.Dialer{BaseURL: strings.TrimRight(*server, "/"), Token: token, Client: &http.Client{}}.Dial}
 	if err := secshell.ServeHelper(ctx, l, r); err != nil {
 		fmt.Fprintln(os.Stderr, "secagent shell-helper:", err)
+		os.Exit(1)
+	}
+}
+
+// defaultUpdateDir is where a fetched release is kept: the one given, else "update" inside the state directory (Linux), else
+// beside the program's data on Windows. Empty means this agent cannot be updated.
+func defaultUpdateDir(given, stateDir string) string {
+	if given != "" {
+		return given
+	}
+	if runtime.GOOS == "windows" {
+		if pd := os.Getenv("ProgramData"); pd != "" {
+			return filepath.Join(pd, "Owlery", "update")
+		}
+		return ""
+	}
+	if stateDir != "" {
+		return filepath.Join(stateDir, "update")
+	}
+	return ""
+}
+
+// runApplyUpdate is the root helper of a Linux update: a path unit starts it when the agent has fetched a release. It checks the
+// release again against the release key, installs it, restarts the agent and puts the old program back if the new one does not
+// get connected.
+func runApplyUpdate(args []string) {
+	fs := flag.NewFlagSet("apply-update", flag.ExitOnError)
+	dir := fs.String("update-dir", "", "the agent's update directory")
+	install := fs.String("install", "/usr/local/bin/remnascope-secagent", "the installed program")
+	unit := fs.String("unit", "remnascope-secagent.service", "the unit that runs the agent")
+	wait := fs.Duration("wait", 4*time.Minute, "how long the new agent has to get connected")
+	_ = fs.Parse(args)
+	if *dir == "" {
+		fmt.Fprintln(os.Stderr, "secagent apply-update: -update-dir is required")
+		os.Exit(2)
+	}
+	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	a := &selfupdate.Applier{UpdateDir: *dir, Install: *install, Wait: *wait, Poll: 2 * time.Second, GOOS: runtime.GOOS, GOARCH: runtime.GOARCH,
+		Version: selfupdate.ProgramVersion, Log: log,
+		Restart: func() error { return exec.Command("systemctl", "restart", *unit).Run() }}
+	if err := a.Apply(); err != nil {
+		log.Error("update", "err", err)
 		os.Exit(1)
 	}
 }

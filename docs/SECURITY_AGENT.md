@@ -245,3 +245,33 @@ Refused by the agent whatever the page asks: ending the system's own processes (
 disabling the agent's own service, removing anything that is not a Run-key value or a file in a Startup folder, and
 reading event logs other than System, Application and Security. A request goes over the agent's existing connection and
 is answered on it (not a new connection); an answer is capped at 900 KB.
+
+## Updates from the server card (optional)
+
+A machine can allow Owlery to update its agent: install with `-allow-update` (the box "Разрешить обновление с панели" in the
+install dialog). Without it the agent never offers the capability and ignores the request.
+
+- **What the server can ask.** Only "update to release vX.Y.Z". It cannot name an address or a hash.
+- **Where the program comes from.** The project's own GitHub release (`github.com/Taminum/Owlery/releases/download/<tag>`).
+  The release carries `SHA256SUMS` and `SHA256SUMS.sig`, an ed25519 signature made with a key that lives only in the
+  repository's GitHub secrets (`OWL_SIGN_KEY`). The public half is built into the agent (`internal/relsign`). The agent
+  installs nothing whose hash is not in a list that this key signed.
+- **Only forward.** A release that is not later than the running one is refused, and the program must say the same version
+  about itself as its label does, so a signed old release cannot be passed off as a new one. A development build is never
+  replaced.
+- **Linux.** The agent cannot write where its program is. It leaves the checked release in `<state-dir>/update/staged` and
+  creates `update/ready`; the path unit `remnascope-secagent-update.path` starts the root service
+  `remnascope-secagent-update.service`, which runs `secagent apply-update`: it checks the release again (it trusts nothing the
+  agent wrote), keeps the old program as `remnascope-secagent.prev`, installs the new one and restarts the agent. The new
+  agent writes its version into `update/healthy` once it is connected; if that does not happen within four minutes the old
+  program is put back and restarted. Install the two units next to the others (`deploy/secagent`) and run
+  `systemctl enable --now remnascope-secagent-update.path`.
+- **Windows.** The agent is the system account, so it installs the release itself: the running program is renamed to
+  `secagent.exe.old`, the new one takes its place and the service ends with an error, which the service manager answers by
+  starting the new program. A new program that starts three times without getting connected is taken off and the old one
+  put back (this does not cover a program that cannot start at all; that needs the old file restored by hand).
+- **First time.** An agent older than this feature cannot update itself; the first update to a version that has it is done
+  by hand, with the install block that also ticks the box.
+- **Making a release.** The release workflow signs `SHA256SUMS` and refuses to publish without the secret. The key was made
+  with `go run ./cmd/owlsign keygen -out <file>`; keep a copy of the private key in a password manager, because without it
+  every agent would need one more update by hand.
