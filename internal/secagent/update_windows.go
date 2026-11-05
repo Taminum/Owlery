@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"time"
 
 	"github.com/Taminum/Owlery/internal/selfupdate"
@@ -41,6 +42,25 @@ func copyOver(src, dst string) error {
 	return out.Close()
 }
 
+// clearOld makes room for the program that is about to be set aside. The previous update's old program may still be running (the
+// screen helper is started from the same file and outlives a restart of the service), and Windows lets a running program be
+// renamed but not deleted, so when it cannot be removed it is moved out of the way under another name, and what was moved
+// before is swept up when it has stopped.
+func clearOld(old string) error {
+	if m, _ := filepath.Glob(old + ".*"); len(m) > 0 {
+		for _, f := range m {
+			_ = os.Remove(f)
+		}
+	}
+	if _, err := os.Stat(old); err != nil {
+		return nil
+	}
+	if os.Remove(old) == nil {
+		return nil
+	}
+	return os.Rename(old, old+"."+strconv.FormatInt(time.Now().UnixNano(), 36))
+}
+
 func (a *agent) applyStaged(version string) error {
 	staged := filepath.Join(a.cfg.UpdateDir, selfupdate.DirStaged)
 	if _, err := selfupdate.VerifyStaged(staged, "", a.cfg.Version, runtime.GOOS, runtime.GOARCH, nil); err != nil {
@@ -51,7 +71,9 @@ func (a *agent) applyStaged(version string) error {
 		return err
 	}
 	old := exe + ".old"
-	_ = os.Remove(old)
+	if err := clearOld(old); err != nil {
+		return err
+	}
 	if err := os.Rename(exe, old); err != nil {
 		return err
 	}
