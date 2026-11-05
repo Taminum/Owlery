@@ -19,7 +19,7 @@ export interface Server extends VPS {
   hardware?: Hardware | null
   docker?: DockerInfo | null
   external_ip?: string
-  agent?: { version: string; online: boolean; can_update: boolean } | null
+  agent?: { version: string; online: boolean; can_update: boolean; can_shell?: boolean; can_admin?: boolean } | null
 }
 
 export const ROLES: ServerRole[] = ['entry', 'exit', 'panel', 'service', 'workstation', 'home', 'hypervisor', 'router']

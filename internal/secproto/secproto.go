@@ -460,12 +460,15 @@ const (
 	AdminStartupAdd     = "startup_add"
 	AdminSessionLogoff  = "session_logoff"
 	AdminSessionDisconn = "session_disconnect"
+	// AdminLaunch opens a console window (PowerShell or cmd) in a Windows session, as the system account: the person at the
+	// screen sees it and the administrator works in it through the screen view. Args: {"shell":"powershell"|"cmd","session":N}.
+	AdminLaunch = "launch"
 )
 
 // AdminWrites are the operations that change the machine.
 var AdminWrites = map[string]bool{
 	AdminProcKill: true, AdminSvcStart: true, AdminSvcStop: true, AdminSvcRestart: true, AdminSvcStartup: true,
-	AdminStartupRemove: true, AdminStartupAdd: true, AdminSessionLogoff: true, AdminSessionDisconn: true,
+	AdminStartupRemove: true, AdminStartupAdd: true, AdminSessionLogoff: true, AdminSessionDisconn: true, AdminLaunch: true,
 }
 
 // AdminReads are the operations that only look.

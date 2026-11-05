@@ -49,6 +49,8 @@ type AgentBrief struct {
 	Version   string `json:"version"`
 	Online    bool   `json:"online"`
 	CanUpdate bool   `json:"can_update"` // the machine allowed updates from the card
+	CanShell  bool   `json:"can_shell"`  // the machine allowed a terminal
+	CanAdmin  bool   `json:"can_admin"`  // the machine allowed management from the card
 }
 
 // AgentBriefs gives, for each of the servers that has a live agent, its version, whether it was seen since `seenSince`
@@ -58,7 +60,8 @@ func (s *Store) AgentBriefs(ctx context.Context, vpsIDs []string, seenSince time
 	if len(vpsIDs) == 0 {
 		return out, nil
 	}
-	rows, err := s.pool.Query(ctx, `SELECT vps_id::text, COALESCE(agent_version, ''), COALESCE(last_seen > $2, false), 'self_update' = ANY(capabilities)
+	rows, err := s.pool.Query(ctx, `SELECT vps_id::text, COALESCE(agent_version, ''), COALESCE(last_seen > $2, false), 'self_update' = ANY(capabilities),
+		'shell' = ANY(capabilities), 'admin' = ANY(capabilities)
 		FROM security_agents WHERE vps_id = ANY($1::uuid[]) AND status <> 'revoked'`, vpsIDs, seenSince)
 	if err != nil {
 		return nil, err
@@ -67,7 +70,7 @@ func (s *Store) AgentBriefs(ctx context.Context, vpsIDs []string, seenSince time
 	for rows.Next() {
 		var id string
 		var b AgentBrief
-		if err := rows.Scan(&id, &b.Version, &b.Online, &b.CanUpdate); err != nil {
+		if err := rows.Scan(&id, &b.Version, &b.Online, &b.CanUpdate, &b.CanShell, &b.CanAdmin); err != nil {
 			return nil, err
 		}
 		out[id] = b

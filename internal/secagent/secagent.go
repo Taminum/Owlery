@@ -914,6 +914,19 @@ func (a *agent) admin(ctx context.Context, req secproto.AdminReq) secproto.Admin
 		res.Error = "машина занята другими запросами, повторите"
 		return res
 	}
+	if req.Op == secproto.AdminLaunch {
+		// A console is a shell, so it needs what the terminal needs: the machine allowed a shell.
+		if !a.shellReady() {
+			res.Error = "на этой машине терминал не разрешён"
+			return res
+		}
+		if err := launchConsole(req.Args); err != nil {
+			res.Error = err.Error()
+			return res
+		}
+		res.OK = true
+		return res
+	}
 	actx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	data, err := adminops.Do(actx, req.Op, req.Args)
