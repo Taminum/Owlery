@@ -23,7 +23,7 @@ function ask<T>(serverId: string, op: string, args?: object, signal?: AbortSigna
   return request<{ data: T }>('POST', `/api/v1/servers/${serverId}/manage`, { op, args }, signal).then((r) => r.data)
 }
 
-const th = 'px-2 py-1.5 text-left text-xs font-medium text-muted'
+const th = 'px-2 py-1 text-xs font-medium text-muted'
 const td = 'px-2 py-1.5 align-top'
 
 type Getter<T> = (r: T) => string | number
@@ -81,7 +81,7 @@ function useColumns(id: string, def: number[]) {
 
 const MIN_COL = 4
 
-function Table({ id, head, widths, children, empty }: { id: string; head: ReactNode[]; widths: number[]; children: ReactNode[]; empty: string }) {
+function Table({ id, head, widths, right = [], children, empty }: { id: string; head: ReactNode[]; widths: number[]; right?: number[]; children: ReactNode[]; empty: string }) {
   const [w, save] = useColumns(id, widths)
   const ref = useRef<HTMLTableElement>(null)
   if (children.length === 0) return <p className="py-3 text-[13px] text-muted">{empty}</p>
@@ -116,12 +116,12 @@ function Table({ id, head, widths, children, empty }: { id: string; head: ReactN
     if (c && !c.title && c.scrollWidth > c.clientWidth) c.title = c.textContent ?? ''
   }
   return (
-    <div className="max-h-[65vh] overflow-auto rounded-control border border-line">
+    <div className="max-h-[65vh] overflow-auto">
       <table ref={ref} className="w-full table-fixed text-[13px]">
         <colgroup>{w.map((x, i) => <col key={i} style={{ width: `${x}%` }} />)}</colgroup>
         <thead className="sticky top-0 z-10 bg-surface">
           <tr>{head.map((h, i) => (
-            <th key={i} className={`${th} relative overflow-hidden whitespace-nowrap`}>
+            <th key={i} scope="col" className={`${th} ${right.includes(i) ? 'text-right' : 'text-left'} relative overflow-hidden whitespace-nowrap`}>
               {h}
               {i < head.length - 1 && (
                 <span role="separator" aria-orientation="vertical" aria-label={t('mng.resize')} onPointerDown={(e) => drag(i, e)} onDoubleClick={() => reset(i)}
@@ -130,7 +130,7 @@ function Table({ id, head, widths, children, empty }: { id: string; head: ReactN
             </th>
           ))}</tr>
         </thead>
-        <tbody onMouseOver={hint} className="divide-y divide-line [&_td:not([data-wrap])]:overflow-hidden [&_td:not([data-wrap])]:text-ellipsis [&_td:not([data-wrap])]:whitespace-nowrap">{children}</tbody>
+        <tbody onMouseOver={hint} className="[&>tr]:border-t [&>tr]:border-line/60 [&_td:not([data-wrap])]:overflow-hidden [&_td:not([data-wrap])]:text-ellipsis [&_td:not([data-wrap])]:whitespace-nowrap">{children}</tbody>
       </table>
     </div>
   )
@@ -223,14 +223,14 @@ function Procs({ serverId }: { serverId: string }) {
   return (
     <>
       <Bar filter={f} setFilter={setF} reload={l.reload} note={l.note} error={l.error} loadError={l.loadError} loading={l.loading} />
-      <Table id="procs" widths={[26, 8, 22, 8, 10, 16, 10]} head={[h(t('mng.name'), 'name'), h('PID', 'pid'), h(t('mng.user'), 'user'), h(t('mng.cpu'), 'cpu'), h(t('mng.mem'), 'mem'), h(t('mng.started'), 'started'), '']} empty={t('mng.empty')}>
+      <Table id="procs" widths={[26, 8, 22, 8, 10, 16, 10]} right={[1, 3, 4]} head={[h(t('mng.name'), 'name'), h('PID', 'pid'), h(t('mng.user'), 'user'), h(t('mng.cpu'), 'cpu'), h(t('mng.mem'), 'mem'), h(t('mng.started'), 'started'), '']} empty={t('mng.empty')}>
         {rows.map((p) => (
           <tr key={p.pid}>
             <td className={td} title={p.path}>{p.name}</td>
-            <td className={`${td} tnum`}>{p.pid}</td>
+            <td className={`${td} tnum text-right`}>{p.pid}</td>
             <td className={`${td} text-muted`}>{p.user}</td>
-            <td className={`${td} tnum`}>{p.cpu.toFixed(1)}%</td>
-            <td className={`${td} tnum`}>{formatBytes(p.rss)}</td>
+            <td className={`${td} tnum text-right`}>{p.cpu.toFixed(1)}%</td>
+            <td className={`${td} tnum text-right`}>{formatBytes(p.rss)}</td>
             <td className={`${td} tnum text-muted`}>{p.started ? formatDateTime(p.started, 'local') : ''}</td>
             <td data-wrap className={td}><DangerButton onClick={() => void l.act(t('mng.killAsk', { n: p.name, p: String(p.pid) }), 'proc_kill', { pid: p.pid })}>{t('mng.kill')}</DangerButton></td>
           </tr>
@@ -314,10 +314,10 @@ function Sessions({ serverId }: { serverId: string }) {
   return (
     <>
       <Bar reload={l.reload} note={l.note} error={l.error} loadError={l.loadError} loading={l.loading} />
-      <Table id="sessions" widths={[8, 22, 22, 24, 24]} head={[h('ID', 'id'), h(t('mng.user'), 'user'), h(t('mng.state'), 'state'), h(t('mng.client'), 'client'), '']} empty={t('mng.empty')}>
+      <Table id="sessions" widths={[8, 22, 22, 24, 24]} right={[0]} head={[h('ID', 'id'), h(t('mng.user'), 'user'), h(t('mng.state'), 'state'), h(t('mng.client'), 'client'), '']} empty={t('mng.empty')}>
         {sessions.map((s) => (
           <tr key={s.id}>
-            <td className={`${td} tnum`}>{s.id}</td>
+            <td className={`${td} tnum text-right`}>{s.id}</td>
             <td className={td}>{s.user || '—'}</td>
             <td className={td}>{label('sess', s.state)}{s.name ? <span className="block text-xs text-muted">{s.name}</span> : null}</td>
             <td className={`${td} text-muted`}>{s.client}</td>
