@@ -196,6 +196,9 @@ export function ScreenView({ serverId }: { serverId: string }) {
     const host = box.current
     const key = (down: boolean) => (e: KeyboardEvent) => {
       if (e.target instanceof HTMLElement && e.target.closest('textarea, input')) return // typing in the page's own boxes stays in the page
+      // Ctrl+V is left to the browser: it raises a paste event carrying the person's clipboard, which is typed on the
+      // machine below. Forwarding the key would paste the machine's own (empty) clipboard instead.
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyV') return
       e.preventDefault()
       const code = new TextEncoder().encode(e.code)
       if (code.length === 0 || code.length > 40) return
@@ -207,8 +210,17 @@ export function ScreenView({ serverId }: { serverId: string }) {
     }
     const kd = key(true)
     const ku = key(false)
+    const onPaste = (e: ClipboardEvent) => {
+      if (e.target instanceof HTMLElement && e.target.closest('textarea, input')) return
+      e.preventDefault()
+      const text = e.clipboardData?.getData('text') ?? ''
+      // Sent in pieces by characters (not bytes), so that long and Cyrillic text never meets the helper's size limit.
+      const chars = Array.from(text)
+      for (let i = 0; i < chars.length; i += TYPE_CHUNK) send(MSG_TEXT, new TextEncoder().encode(chars.slice(i, i + TYPE_CHUNK).join('')))
+    }
     host?.addEventListener('keydown', kd)
     host?.addEventListener('keyup', ku)
+    host?.addEventListener('paste', onPaste)
     host?.focus()
 
     return () => {
@@ -227,6 +239,7 @@ export function ScreenView({ serverId }: { serverId: string }) {
       cv.removeEventListener('contextmenu', onMenu)
       host?.removeEventListener('keydown', kd)
       host?.removeEventListener('keyup', ku)
+      host?.removeEventListener('paste', onPaste)
       ws.close()
       if (decoder && decoder.state !== 'closed') decoder.close()
     }
