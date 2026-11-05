@@ -65,6 +65,21 @@ describe('Парки', () => {
     expect(screen.queryByText('Вентрейд 1С SQL')).toBeNull()
   })
 
+  it('folds a whole group, in cards too, and still says how many machines need a look', () => {
+    renderGroups()
+    expect(screen.getByRole('radio', { name: 'Карточки' })).toHaveAttribute('aria-checked', 'true')
+    fireEvent.click(screen.getByRole('button', { name: /^ОФИС|Офис/ }))
+    expect(screen.queryByText('УСК')).toBeNull()
+    expect(screen.queryByText('Вентрейд 1С SQL')).toBeNull()
+    expect(screen.getByText('home-pc')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Офис/ })).toHaveTextContent('внимание: 1')
+  })
+
+  it('shows the address on a card', () => {
+    renderGroups()
+    expect(screen.getByText('198.51.100.7')).toBeInTheDocument()
+  })
+
   it('switches between cards and a list, and remembers the choice', () => {
     const { unmount } = renderGroups()
     expect(screen.getByRole('radio', { name: 'Карточки' })).toHaveAttribute('aria-checked', 'true')

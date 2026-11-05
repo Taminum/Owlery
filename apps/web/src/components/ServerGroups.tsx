@@ -127,10 +127,23 @@ export function ServerGroups({ list }: { list: Server[] }) {
           {btn('list', t('srv.view.list'), <List size={14} aria-hidden />)}
         </div>
       </div>
-      {blocks.map((b) => (
+      {blocks.map((b) => {
+        const groupKey = `group:${b.name}`
+        const groupFolded = folded.has(groupKey)
+        const all = b.parks.flatMap((p) => p.servers)
+        const sum = parkSummary(all)
+        return (
         <section key={b.name || '-'} className="space-y-3" aria-label={b.name || t('srv.noGroup')}>
-          {(blocks.length > 1 || b.name) && <h2 className="text-[13px] font-semibold uppercase tracking-wide text-muted">{b.name || t('srv.noGroup')} <span className="font-normal">· {b.count}</span></h2>}
-          {!b.hasParks ? <Machines servers={b.parks[0].servers} view={view} /> : b.parks.map((p) => {
+          {(blocks.length > 1 || b.name) && (
+            <h2 className="text-[13px] font-semibold uppercase tracking-wide text-muted">
+              <button type="button" aria-expanded={!groupFolded} onClick={() => toggle(groupKey)} className="flex items-center gap-1.5 uppercase hover:text-fg">
+                {groupFolded ? <ChevronRight size={14} aria-hidden /> : <ChevronDown size={14} aria-hidden />}
+                {b.name || t('srv.noGroup')} <span className="font-normal">· {b.count}</span>
+                {groupFolded && sum.attention > 0 && <span className={`ml-1 rounded-full border px-2 py-0.5 text-xs font-normal normal-case ${sum.worst === 'bad' ? 'border-red/40 text-red' : 'border-amber/40 text-amber'}`}>{t('srv.attention', { n: sum.attention })}</span>}
+              </button>
+            </h2>
+          )}
+          {groupFolded ? null : !b.hasParks ? <Machines servers={b.parks[0].servers} view={view} /> : b.parks.map((p) => {
             const key = `${b.name}/${p.name}`
             const isFolded = folded.has(key)
             return (
@@ -141,7 +154,8 @@ export function ServerGroups({ list }: { list: Server[] }) {
             )
           })}
         </section>
-      ))}
+        )
+      })}
     </div>
   )
 }
