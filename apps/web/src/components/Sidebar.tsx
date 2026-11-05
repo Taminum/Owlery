@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { BarChart3, Bell, HardDrive, Compass, Wallet, Cpu, Rocket, Gauge, Globe2, Laptop, Shield, ShieldCheck, Telescope, LayoutDashboard, History, Radio, Server, Settings, Users, Waypoints, X, ChevronsLeft, ChevronsRight, type LucideIcon } from 'lucide-react'
+import { BarChart3, Bell, HardDrive, Compass, Wallet, Cpu, Rocket, Gauge, Globe2, Laptop, Shield, ShieldCheck, Telescope, LayoutDashboard, History, Radio, Server, Settings, Users, Waypoints, X, LogOut, UserRound, ChevronsLeft, ChevronsRight, type LucideIcon } from 'lucide-react'
 import { t, type MsgKey } from '../i18n'
 import { api } from '../lib/api'
 import { useLoad } from '../hooks/useLoad'
@@ -55,6 +55,28 @@ function useOpenAlerts(enabled: boolean): number {
 const FOLD_KEY = 'owl.sidebar.collapsed'
 function loadCollapsed(): boolean {
   try { return localStorage.getItem(FOLD_KEY) === '1' } catch { return false }
+}
+
+function AccountRow({ compact }: { compact: boolean }) {
+  const { state, logout } = useAuth()
+  const [open, setOpen] = useState(false)
+  if (state.status !== 'authed') return null
+  const { account, } = state.me
+  return (
+    <div>
+      {open && (
+        <div className="mb-1 space-y-2 rounded-control border border-line bg-surface p-3 text-[13px]">
+          <div><div className="font-medium text-fg">{account.username}</div><div className="text-xs text-muted">{account.is_owner ? t('role.owner') : t('profile.roles').toLowerCase()}</div></div>
+          <button type="button" onClick={() => { setOpen(false); void logout() }} className="flex w-full items-center gap-2 rounded-control border border-line px-3 py-2 hover:border-cyan/60"><LogOut size={15} aria-hidden />{t('auth.logout')}</button>
+        </div>
+      )}
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-label={t('auth.account')} title={compact ? account.username : undefined}
+        className={`flex h-9 w-full items-center gap-3 rounded-control px-3 text-[13px] text-muted hover:bg-surface hover:text-fg ${compact ? 'lg:justify-center lg:px-0' : ''}`}>
+        <UserRound size={18} aria-hidden />
+        <span className={`min-w-0 flex-1 truncate text-left ${compact ? 'lg:hidden' : ''}`}>{account.username}</span>
+      </button>
+    </div>
+  )
 }
 
 function NavItem({ item, onNavigate, compact }: { item: Item; onNavigate: () => void; compact?: boolean }) {
@@ -119,6 +141,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           })}
         </nav>
         <div className={`space-y-0.5 border-t border-line p-3 ${collapsed ? 'lg:px-2' : ''}`}>
+          <AccountRow compact={collapsed} />
           <NavItem item={{ to: '/settings', key: 'nav.settings', icon: Settings }} onNavigate={onClose} compact={collapsed} />
           <button type="button" onClick={() => fold(!collapsed)} aria-pressed={collapsed} title={collapsed ? t('nav.expand') : t('nav.collapse')} aria-label={collapsed ? t('nav.expand') : t('nav.collapse')}
             className={`hidden h-9 w-full items-center gap-3 rounded-control px-3 text-[13px] text-muted hover:bg-surface hover:text-fg lg:flex ${collapsed ? 'lg:justify-center lg:px-0' : ''}`}>

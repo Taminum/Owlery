@@ -338,11 +338,18 @@ export function OverviewTab({ vpsId }: { vpsId: string }) {
       </Card>
       <Card title={t('sec.ov.coverage')}>
         <dl className="space-y-2 text-[13px]">
-          <div><dt className="text-muted">{t('sec.ov.coverage.agent')}</dt><dd>{t(`sec.card.agent.${o.agent}` as MsgKey)}</dd></div>
-          {(['fail2ban', 'sockets', 'firewall'] as const).map((k) => (
+          <div><dt className="text-muted">{t('sec.ov.coverage.agent')}</dt>
+            <dd className="flex flex-wrap items-center gap-2">{t(`sec.card.agent.${o.agent}` as MsgKey)}
+              {o.agent_version && <span className="tnum text-muted">{o.agent_version}</span>}
+              {o.agent === 'online' && <Chip tone={o.can_update ? 'green' : 'amber'}>{t(o.can_update ? 'sec.ov.coverage.updOn' : 'sec.ov.coverage.updOff')}</Chip>}</dd></div>
+          {(o.platform === 'windows' ? (['winsec', 'hardware', 'docker'] as const) : (['fail2ban', 'sockets', 'firewall'] as const))
+            .filter((k) => o.categories[k]).map((k) => (
             <div key={k}>
-              <dt className="text-muted">{k === 'sockets' ? t('sec.ports') : k === 'fail2ban' ? 'Fail2ban' : 'Firewall'}</dt>
+              <dt className="text-muted">{k === 'sockets' ? t('sec.ports') : k === 'fail2ban' ? 'Fail2ban' : k === 'firewall' ? 'Firewall' : t(`sec.ov.coverage.${k}` as MsgKey)}</dt>
               <dd className="flex flex-wrap items-center gap-2"><StateChip state={o.categories[k]?.state ?? 'waiting'} />
+                {k === 'winsec' && o.categories[k].blocked_now !== undefined && (o.categories[k].block_mode === 'off'
+                  ? <span className="text-muted">{t('sec.ov.coverage.blockOff')}</span>
+                  : <span>{t('sec.ov.coverage.blocked', { n: o.categories[k].blocked_now ?? 0 })}</span>)}
                 {o.categories[k]?.observed_at && <span className="tnum text-xs text-muted">{formatDateTime(o.categories[k].observed_at, 'local')}</span>}</dd>
             </div>
           ))}

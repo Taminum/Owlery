@@ -384,4 +384,30 @@ describe('Security overview', () => {
     expect(await screen.findByText('Порт отвечает снаружи, но не отмечен как ожидаемый.')).toBeInTheDocument()
     expect(screen.getByText('Есть сертификат с проблемой или скорым окончанием срока.')).toBeInTheDocument()
   })
+
+  it('shows Windows machines their own rows: RDP protection and hardware, not Fail2ban, ports or firewall', async () => {
+    run(ov({
+      health: 'healthy', agent: 'online', platform: 'windows', agent_version: 'v0.5.15', can_update: true,
+      categories: {
+        winsec: { state: 'ok', observed_at: '2026-10-15T12:00:00Z', blocked_now: 3, block_mode: 'block' },
+        hardware: { state: 'waiting', observed_at: null },
+      },
+    }))
+    renderSec('/security/v1')
+    expect(await screen.findByText('Защита RDP')).toBeInTheDocument()
+    expect(screen.getByText('Железо')).toBeInTheDocument()
+    expect(screen.getByText('заблокировано сейчас: 3')).toBeInTheDocument()
+    expect(screen.getByText('v0.5.15')).toBeInTheDocument()
+    expect(screen.getByText('обновления с панели разрешены')).toBeInTheDocument()
+    expect(screen.queryByText('Fail2ban', { selector: 'dt' })).toBeNull()
+    expect(screen.queryByText('Firewall', { selector: 'dt' })).toBeNull()
+    expect(screen.queryByText('Docker')).toBeNull() // no snapshot, so no row to wait for
+  })
+
+  it('says the machine did not allow updates, and that a watching blocker blocks nothing', async () => {
+    run(ov({ agent: 'online', platform: 'windows', can_update: false, categories: { winsec: { state: 'ok', observed_at: null, blocked_now: 0, block_mode: 'off' }, hardware: { state: 'ok', observed_at: null } } }))
+    renderSec('/security/v1')
+    expect(await screen.findByText('обновления с панели не разрешены')).toBeInTheDocument()
+    expect(screen.getByText('блокировка выключена, только наблюдение')).toBeInTheDocument()
+  })
 })

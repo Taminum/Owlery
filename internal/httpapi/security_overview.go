@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -26,6 +27,9 @@ type ovReason struct {
 type ovCategory struct {
 	State      string     `json:"state"`
 	ObservedAt *time.Time `json:"observed_at"`
+	// Windows address blocker: how many addresses are blocked now and in which mode (only on the winsec category).
+	BlockedNow *int   `json:"blocked_now,omitempty"`
+	BlockMode  string `json:"block_mode,omitempty"`
 }
 
 type ovChecks struct {
@@ -41,13 +45,17 @@ type ovChecks struct {
 // secOverview is a server's one-page picture. "unknown" is a real answer: it means nothing has been read
 // or checked yet, which is not the same as healthy.
 type secOverview struct {
-	Health     string                `json:"health"` // healthy | attention | unknown | disabled
-	Reasons    []ovReason            `json:"reasons"`
-	Agent      string                `json:"agent"` // none | waiting | online | offline
-	Categories map[string]ovCategory `json:"categories"`
-	Checks     ovChecks              `json:"checks"`
-	LastEvent  *store.SecEvent       `json:"last_event"`
-	Events24h  int                   `json:"events_24h"`
+	Health  string     `json:"health"` // healthy | attention | unknown | disabled
+	Reasons []ovReason `json:"reasons"`
+	Agent   string     `json:"agent"` // none | waiting | online | offline
+	// Platform decides which categories make sense for the machine: windows | linux. Unknown (no agent yet) reads as linux.
+	Platform     string                `json:"platform"`
+	AgentVersion string                `json:"agent_version,omitempty"`
+	CanUpdate    bool                  `json:"can_update"` // the machine allowed updates from the card
+	Categories   map[string]ovCategory `json:"categories"`
+	Checks       ovChecks              `json:"checks"`
+	LastEvent    *store.SecEvent       `json:"last_event"`
+	Events24h    int                   `json:"events_24h"`
 }
 
 func (s *Server) secOverview(w http.ResponseWriter, r *http.Request, a auth.Actor, _ store.Session) {
@@ -60,7 +68,19 @@ func (s *Server) secOverview(w http.ResponseWriter, r *http.Request, a auth.Acto
 	o := secOverview{Reasons: []ovReason{}, Agent: "none", Categories: map[string]ovCategory{}}
 	add := func(code, detail string) { o.Reasons = append(o.Reasons, ovReason{code, detail}) }
 
+	o.Platform = "linux"
 	if ag, err := s.Store.SecAgentOf(ctx, v.ID); err == nil {
+		if ag.AgentVersion != nil {
+			o.AgentVersion = *ag.AgentVersion
+		}
+		for _, c := range ag.Capabilities {
+			switch c {
+			case secproto.CapWinsec:
+				o.Platform = "windows"
+			case secproto.CapSelfUpdate:
+				o.CanUpdate = true
+			}
+		}
 		switch {
 		case ag.LastSeen == nil:
 			o.Agent = "waiting"
@@ -81,9 +101,30 @@ func (s *Server) secOverview(w http.ResponseWriter, r *http.Request, a auth.Acto
 			state = "stale"
 		}
 		obs := st.ObservedAt
-		o.Categories[st.Category] = ovCategory{State: state, ObservedAt: &obs}
+		oc := ovCategory{State: state, ObservedAt: &obs}
+		if st.Category == secproto.CatWinsec {
+			o.Platform = "windows"
+			var w secproto.Winsec
+			if json.Unmarshal(st.Data, &w) == nil && w.Block != nil {
+				n := len(w.Block.Active)
+				oc.BlockedNow, oc.BlockMode = &n, w.Block.Mode
+			}
+		}
+		o.Categories[st.Category] = oc
 	}
-	for _, c := range []string{secproto.CatFail2ban, secproto.CatSockets, secproto.CatFirewall} {
+	want := []string{secproto.CatFail2ban, secproto.CatSockets, secproto.CatFirewall}
+	if o.Platform == "windows" {
+		want = []string{secproto.CatWinsec, secproto.CatHardware}
+		// Docker is a row only where it is installed (a snapshot has arrived), so nobody is told to wait for it.
+		if _, ok := o.Categories[secproto.CatDocker]; ok {
+			want = append(want, secproto.CatDocker)
+		}
+		// The Linux categories do not exist here: a Windows agent never sends them.
+		for _, c := range []string{secproto.CatFail2ban, secproto.CatSockets, secproto.CatFirewall} {
+			delete(o.Categories, c)
+		}
+	}
+	for _, c := range want {
 		if _, ok := o.Categories[c]; !ok {
 			state := "agent_required"
 			if o.Agent != "none" {
