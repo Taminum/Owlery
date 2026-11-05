@@ -342,7 +342,10 @@ export interface SecOverview {
   health: 'healthy' | 'attention' | 'unknown' | 'disabled'
   reasons: { code: string; detail?: string }[]
   agent: 'none' | 'waiting' | 'online' | 'offline'
-  categories: Record<string, { state: string; observed_at: string | null }>
+  platform: 'windows' | 'linux'
+  agent_version?: string
+  can_update: boolean
+  categories: Record<string, { state: string; observed_at: string | null; blocked_now?: number; block_mode?: string }>
   checks: {
     ports_total: number; ports_unexpected: number; ports_down: number
     tls_total: number; tls_problems: number; tls_nearest_end: string | null; last_checked_at: string | null

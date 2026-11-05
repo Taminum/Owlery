@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { PAGE_WIDTH } from '../lib/layout'
-import { CalendarClock, LogOut, Menu, RefreshCw, Server, SlidersHorizontal, Spline, UserRound } from 'lucide-react'
-import { useAuth } from '../lib/auth'
+import { CalendarClock, Menu, RefreshCw, Server, SlidersHorizontal, Spline } from 'lucide-react'
 import { t } from '../i18n'
 import { RANGES, REFRESH, TIMEZONES, setPanelScope, type Filters, type Range } from '../lib/filters'
 import type { PanelInfo } from '../lib/types'
@@ -90,34 +89,19 @@ function CustomRange({ filters, update }: Pick<Props, 'filters' | 'update'>) {
   )
 }
 
-function AccountMenu() {
-  const { state, logout } = useAuth()
-  if (state.status !== 'authed') return null
-  const { account } = state.me
-  return (
-    <Popover label={t('auth.account')} value={account.username} icon={<UserRound size={15} className="shrink-0 text-muted" aria-hidden />} align="right">
-      {(close) => (
-        <div className="space-y-3">
-          <div className="text-[13px]"><div className="font-medium text-fg">{account.username}</div><div className="text-xs text-muted">{account.is_owner ? t('role.owner') : t('profile.roles').toLowerCase()}</div></div>
-          <button type="button" onClick={() => { close(); void logout() }} className="flex w-full items-center gap-2 rounded-control border border-line px-3 py-2 text-[13px] hover:border-cyan/60"><LogOut size={15} aria-hidden />{t('auth.logout')}</button>
-        </div>
-      )}
-    </Popover>
-  )
-}
-
 export function TopBar({ filters, panels, update, onRefresh, loading, onMenu, slim }: Props) {
   const smooth = useSmooth()
   const [more, setMore] = useState(false)
   const presets = RANGES.filter((r): r is Exclude<Range, 'custom'> => r !== 'custom')
   if (slim) {
     return (
-      <header className="top-0 z-20 border-b border-line bg-canvas [@media(min-height:700px)]:sticky">
+      // A page with no filters has nothing to put in a bar: on a wide screen there is none, and on a phone there is
+      // only the button that opens the menu (the account is at the foot of the menu).
+      <header className="top-0 z-20 border-b border-line bg-canvas lg:hidden [@media(min-height:700px)]:sticky">
         <div className={`${PAGE_WIDTH} flex items-center gap-2.5 py-2`}>
-          <button type="button" onClick={onMenu} aria-label={t('nav.menu')} className={`${controlCls} grid w-10 place-items-center px-0 lg:hidden`}>
+          <button type="button" onClick={onMenu} aria-label={t('nav.menu')} className={`${controlCls} grid w-10 place-items-center px-0`}>
             <Menu size={18} aria-hidden />
           </button>
-          <div className="ml-auto"><AccountMenu /></div>
         </div>
       </header>
     )
@@ -171,7 +155,6 @@ export function TopBar({ filters, panels, update, onRefresh, loading, onMenu, sl
           <button type="button" onClick={onRefresh} aria-label={t('filter.refreshNow')} title={t('filter.refreshNow')} className={`${controlCls} grid w-10 place-items-center px-0`}>
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} aria-hidden />
           </button>
-          <AccountMenu />
         </div>
         </div>
       </div>
