@@ -138,3 +138,28 @@ func TestAReleaseThatIsNotWhatWasSignedLeavesNothing(t *testing.T) {
 		t.Error("a bad version is refused")
 	}
 }
+
+func TestATroubledServerIsAskedAgainButARefusalIsNot(t *testing.T) {
+	calls := 0
+	troubled := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		if calls < 3 {
+			http.Error(w, "gateway timeout", http.StatusGatewayTimeout)
+			return
+		}
+		_, _ = w.Write([]byte("fine"))
+	}))
+	defer troubled.Close()
+	f := &Fetcher{Base: troubled.URL}
+	got, err := f.get(context.Background(), "SHA256SUMS", "v0.5.15", 1<<20)
+	if err != nil || string(got) != "fine" || calls != 3 {
+		t.Fatalf("%q %v after %d calls", got, err, calls)
+	}
+
+	missing := 0
+	gone := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { missing++; http.NotFound(w, nil) }))
+	defer gone.Close()
+	if _, err := (&Fetcher{Base: gone.URL}).get(context.Background(), "SHA256SUMS", "v0.5.15", 1<<20); err == nil || missing != 1 {
+		t.Fatalf("a 404 is final: %v after %d calls", err, missing)
+	}
+}
