@@ -5,7 +5,7 @@ import { t } from '../i18n'
 import { formatBytes, formatRate } from '../lib/format'
 import { buildBlocks, loadFolded, loadView, parkSummary, saveFolded, saveView, shownAddress, type View } from '../lib/parks'
 import { Card } from './ui'
-import { Meter, tone, uptimeText } from './HostView'
+import { Meter, loadDetail, tone, uptimeText } from './HostView'
 import { RoleChips, StatusChip, StatusDot, placeText, type Server } from './ServerParts'
 
 function Tile({ s }: { s: Server }) {
@@ -21,7 +21,7 @@ function Tile({ s }: { s: Server }) {
           <RoleChips roles={s.roles} />
           {h?.has_data ? (
             <>
-              <Meter label={t('host.cpu')} pct={h.cpu} detail={t('host.loadAvg', { n: h.load1.toFixed(2) })} />
+              <Meter label={t('host.cpu')} pct={h.cpu} detail={loadDetail(h)} />
               <Meter label={t('host.mem')} pct={memPct} detail={`${formatBytes(h.mem_used)} / ${formatBytes(h.mem_total)}`} />
               <Meter label={root ? `${t('host.disk')} ${root.m}` : t('host.disk')} pct={root && root.t > 0 ? (root.u * 100) / root.t : null} detail={root ? `${formatBytes(root.u)} / ${formatBytes(root.t)}` : ''} />
               <p className="text-xs text-muted">↓ {formatRate(h.rx_bps)} · ↑ {formatRate(h.tx_bps)} · {t('host.up')} {uptimeText(h.uptime)}</p>
@@ -45,7 +45,7 @@ function Mini({ label, pct }: { label: string; pct: number | null }) {
   return (
     <div className="hidden min-w-0 md:block">
       <div className="h-1.5 overflow-hidden rounded-full bg-elevated" role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(v)}>
-        <div className={`h-full rounded-full ${BAR[tone(v)]}`} style={{ width: `${v}%` }} />
+        <div className={`h-full rounded-full transition-[width] duration-700 ${BAR[tone(v)]}`} style={{ width: `${v}%` }} />
       </div>
       <span className="tnum text-[11px] text-muted">{label} {pct === null ? '—' : `${Math.round(pct)}%`}</span>
     </div>

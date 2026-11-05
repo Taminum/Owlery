@@ -10,7 +10,7 @@ import { AddServer } from '../components/AddServer'
 import { PrimaryButton } from '../components/Modal'
 
 export default function Servers() {
-  const q = useLoad((sig) => api.get<{ servers: Server[] }>('/api/v1/servers', sig), [], 30_000)
+  const q = useLoad((sig) => api.get<{ servers: Server[] }>('/api/v1/servers', sig), [], 10_000)
   const { state } = useAuth()
   const owner = state.status === 'authed' && state.me.account.is_owner
   const [adding, setAdding] = useState(false)

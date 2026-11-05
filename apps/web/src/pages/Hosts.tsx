@@ -6,7 +6,7 @@ import { useLoad } from '../hooks/useLoad'
 import { Card, Chip } from '../components/ui'
 import { Drawer } from '../components/Drawer'
 import { PageHead, TableSkeleton } from '../components/Analyzer'
-import { HostDetail, Meter, Spark, uptimeText, type Host } from '../components/HostView'
+import { HostDetail, Meter, Spark, loadDetail, uptimeText, type Host } from '../components/HostView'
 
 export default function Hosts() {
   const q = useLoad((s) => api.get<{ hosts: Host[] }>('/api/v1/hosts', s), [], 15_000)
@@ -27,7 +27,7 @@ export default function Hosts() {
               right={<Chip tone={!h.has_data ? 'muted' : h.online ? 'green' : 'amber'}>{!h.has_data ? t('host.noAgent') : h.online ? t('host.online') : t('host.stale')}</Chip>}>
               {!h.has_data ? <p className="text-[13px] text-muted">{t('host.noAgent.hint')}</p> : (
                 <div className="cursor-pointer space-y-3" onClick={() => setOpen(h)}>
-                  <Meter label={t('host.cpu')} pct={h.cpu} detail={t('host.loadAvg', { n: h.load1.toFixed(2) })} />
+                  <Meter label={t('host.cpu')} pct={h.cpu} detail={loadDetail(h)} />
                   <Meter label={t('host.mem')} pct={memPct} detail={`${formatBytes(h.mem_used)} / ${formatBytes(h.mem_total)}`} />
                   <Meter label={root ? `${t('host.disk')} ${root.m}` : t('host.disk')} pct={root && root.t > 0 ? (root.u * 100) / root.t : null} detail={root ? `${formatBytes(root.u)} / ${formatBytes(root.t)}` : ''} />
                   <p className="text-xs text-muted" title={t('host.net.title')}>{t('host.net')}: ↓ {formatRate(h.rx_bps)} · ↑ {formatRate(h.tx_bps)} · {t('host.conns', { n: h.estab })}{h.syn_recv > 0 && <span className={h.syn_recv >= 300 ? 'text-red' : ''}> · {t('host.synShort', { n: h.syn_recv })}</span>}</p>

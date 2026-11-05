@@ -10,7 +10,7 @@ import { Card, Chip } from '../components/ui'
 import { PageHead, TableSkeleton } from '../components/Analyzer'
 import { GhostButton } from '../components/Modal'
 import { HardwareSection } from '../components/HardwareView'
-import { HostDetail, Meter, uptimeText } from '../components/HostView'
+import { HostDetail, Line, Meter, loadDetail, uptimeText, type Point } from '../components/HostView'
 import { AgentBlock } from '../components/AgentSetup'
 import { InventoryDialog, RoleChips, StatusChip, durationText, placeText, type Server } from '../components/ServerParts'
 import { SecurityTabs } from './Security'
@@ -98,16 +98,30 @@ export function About({ s, onEdit }: { s: Server; onEdit: () => void }) {
 
 function Now({ s }: { s: Server }) {
   const h = s.host
+  // The last hour of the processor and memory, inside the card; looked at again every 15 seconds.
+  const hostId = h?.has_data ? h.id : ''
+  const hour = useLoad((sig) => (hostId ? api.get<{ points: Point[] }>(`/api/v1/hosts/${hostId}/series?hours=1`, sig) : Promise.resolve(null)), [hostId], 15_000)
+  const pts = hour.data?.points ?? []
+  const series = (f: (p: Point) => number | null) => pts.map((p) => ({ x: new Date(p.at).getTime(), y: f(p) }))
   if (!h?.has_data) return <Card title={t('srv.now')}><p className="text-[13px] text-muted">{t('srv.noData')}</p></Card>
   const root = h.disks.find((d) => d.m === '/') ?? h.disks[0]
   const memPct = h.mem_total > 0 ? (h.mem_used * 100) / h.mem_total : null
   return (
     <Card title={t('srv.now')} note={`${t('host.up')} ${uptimeText(h.uptime)}`}>
       <div className="space-y-3">
-        <Meter label={t('host.cpu')} pct={h.cpu} detail={t('host.loadAvg', { n: h.load1.toFixed(2) })} />
+        <Meter label={t('host.cpu')} pct={h.cpu} detail={loadDetail(h)} />
         <Meter label={t('host.mem')} pct={memPct} detail={`${formatBytes(h.mem_used)} / ${formatBytes(h.mem_total)}`} />
         <Meter label={root ? `${t('host.disk')} ${root.m}` : t('host.disk')} pct={root && root.t > 0 ? (root.u * 100) / root.t : null} detail={root ? `${formatBytes(root.u)} / ${formatBytes(root.t)}` : ''} />
         <p className="text-xs text-muted">{t('host.net')}: ↓ {formatRate(h.rx_bps)} · ↑ {formatRate(h.tx_bps)} · {t('host.conns', { n: h.estab })}</p>
+        {pts.length > 1 && (
+          <div>
+            <p className="mb-1 text-xs text-muted">{t('srv.lastHour')}</p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Line title={t('host.cpu')} points={series((p) => p.cpu)} max={100} format={(v) => `${Math.round(v)}%`} />
+              <Line title={t('host.mem')} points={series((p) => p.mem_pct)} max={100} format={(v) => `${Math.round(v)}%`} color="var(--color-blue)" />
+            </div>
+          </div>
+        )}
       </div>
     </Card>
   )
@@ -136,7 +150,7 @@ function Network({ s }: { s: Server }) {
 export default function ServerCard() {
   const { id = '' } = useParams()
   const [params, setParams] = useSearchParams()
-  const q = useLoad((sig) => api.get<Server>(`/api/v1/servers/${id}`, sig), [id], 30_000)
+  const q = useLoad((sig) => api.get<Server>(`/api/v1/servers/${id}`, sig), [id], 10_000)
   const [editing, setEditing] = useState(false)
   const wanted = params.get('view') as Tab | null
   const tab: Tab = wanted && TABS.includes(wanted) ? wanted : 'overview'

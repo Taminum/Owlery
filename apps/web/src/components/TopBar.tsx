@@ -15,6 +15,14 @@ interface Props {
   onRefresh: () => void
   loading: boolean
   onMenu: () => void
+  /** Only the menu button and the account: for pages that do not read the filters. */
+  slim?: boolean
+}
+
+// Pages that read none of the filters (panel, nodes, period, refresh) get a bar without them.
+const NO_FILTERS = ['/servers', '/hosts', '/security', '/billing', '/intel', '/start']
+export function pageUsesFilters(pathname: string): boolean {
+  return !NO_FILTERS.some((p) => pathname === p || pathname.startsWith(p + '/'))
 }
 
 const tzLabel = (tz: string) => (tz === 'local' ? t('filter.tzLocal') : tz)
@@ -98,10 +106,22 @@ function AccountMenu() {
   )
 }
 
-export function TopBar({ filters, panels, update, onRefresh, loading, onMenu }: Props) {
+export function TopBar({ filters, panels, update, onRefresh, loading, onMenu, slim }: Props) {
   const smooth = useSmooth()
   const [more, setMore] = useState(false)
   const presets = RANGES.filter((r): r is Exclude<Range, 'custom'> => r !== 'custom')
+  if (slim) {
+    return (
+      <header className="top-0 z-20 border-b border-line bg-canvas [@media(min-height:700px)]:sticky">
+        <div className={`${PAGE_WIDTH} flex items-center gap-2.5 py-2`}>
+          <button type="button" onClick={onMenu} aria-label={t('nav.menu')} className={`${controlCls} grid w-10 place-items-center px-0 lg:hidden`}>
+            <Menu size={18} aria-hidden />
+          </button>
+          <div className="ml-auto"><AccountMenu /></div>
+        </div>
+      </header>
+    )
+  }
   return (
     <header className="top-0 z-20 border-b border-line bg-canvas [@media(min-height:700px)]:sticky">
       <div className={`${PAGE_WIDTH} flex flex-wrap items-center gap-2.5 py-3`}>

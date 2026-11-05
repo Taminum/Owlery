@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { BarChart3, Bell, HardDrive, Compass, Wallet, Cpu, Rocket, Gauge, Globe2, Laptop, Shield, ShieldCheck, Telescope, LayoutDashboard, History, Radio, Server, Settings, Users, Waypoints, X, type LucideIcon } from 'lucide-react'
+import { BarChart3, Bell, HardDrive, Compass, Wallet, Cpu, Rocket, Gauge, Globe2, Laptop, Shield, ShieldCheck, Telescope, LayoutDashboard, History, Radio, Server, Settings, Users, Waypoints, X, ChevronsLeft, ChevronsRight, type LucideIcon } from 'lucide-react'
 import { t, type MsgKey } from '../i18n'
 import { api } from '../lib/api'
 import { useLoad } from '../hooks/useLoad'
@@ -51,27 +52,34 @@ function useOpenAlerts(enabled: boolean): number {
   return data?.open ?? 0
 }
 
-function NavItem({ item, onNavigate }: { item: Item; onNavigate: () => void }) {
+const FOLD_KEY = 'owl.sidebar.collapsed'
+function loadCollapsed(): boolean {
+  try { return localStorage.getItem(FOLD_KEY) === '1' } catch { return false }
+}
+
+function NavItem({ item, onNavigate, compact }: { item: Item; onNavigate: () => void; compact?: boolean }) {
   const { search } = useLocation()
   const alerts = useOpenAlerts(item.to === '/alerts' && !item.disabled)
   const badge = item.to === '/alerts' ? alerts : 0
   const Icon = item.icon
-  const base = 'flex h-9 items-center gap-3 rounded-control px-3 text-[14px]'
+  const base = `relative flex h-9 items-center gap-3 rounded-control px-3 text-[14px] ${compact ? 'lg:justify-center lg:px-0' : ''}`
+  const label = t(item.key)
+  const text = `flex-1 ${compact ? 'lg:hidden' : ''}`
   if (item.disabled) {
     return (
       <span aria-disabled="true" className={`${base} cursor-not-allowed text-muted/60`}>
         <Icon size={18} aria-hidden />
-        <span className="flex-1">{t(item.key)}</span>
-        <span className="text-[11px]">{t('nav.soon')}</span>
+        <span className={text}>{label}</span>
+        <span className={`text-[11px] ${compact ? 'lg:hidden' : ''}`}>{t('nav.soon')}</span>
       </span>
     )
   }
   return (
-    <NavLink to={{ pathname: item.to, search }} end={item.to === '/'} onClick={onNavigate}
+    <NavLink to={{ pathname: item.to, search }} end={item.to === '/'} onClick={onNavigate} title={compact ? label : undefined}
       className={({ isActive }) => `${base} ${isActive ? 'bg-blue/20 font-medium text-fg shadow-[inset_0_0_0_1px_rgba(81,139,250,0.45)]' : 'text-muted hover:bg-surface hover:text-fg'}`}>
       <Icon size={18} aria-hidden />
-      <span className="flex-1">{t(item.key)}</span>
-      {badge > 0 && <span aria-label={t('nav.alertsOpen', { n: badge })} className="grid h-5 min-w-5 place-items-center rounded-full bg-amber px-1.5 text-[11px] font-semibold text-black">{badge}</span>}
+      <span className={text}>{label}</span>
+      {badge > 0 && <span aria-label={t('nav.alertsOpen', { n: badge })} className={`grid h-5 min-w-5 place-items-center rounded-full bg-amber px-1.5 text-[11px] font-semibold text-black ${compact ? 'lg:absolute lg:right-0.5 lg:top-0 lg:h-4 lg:min-w-4 lg:px-1 lg:text-[10px]' : ''}`}>{badge}</span>}
     </NavLink>
   )
 }
@@ -80,12 +88,17 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const { state: auth } = useAuth()
   const owner = auth.status === 'authed' && auth.me.account.is_owner
   const off = useModulesOff()
+  const [collapsed, setCollapsed] = useState(loadCollapsed)
+  function fold(v: boolean) {
+    setCollapsed(v)
+    try { localStorage.setItem(FOLD_KEY, v ? '1' : '0') } catch { /* a convenience only */ }
+  }
   return (
     <>
       {open && <div className="fixed inset-0 z-30 bg-black/60 lg:hidden" onClick={onClose} aria-hidden />}
-      <aside aria-label={t('nav.menu')} className={`fixed inset-y-0 left-0 z-40 flex w-[244px] flex-col border-r border-line bg-sidebar transition-transform lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="flex h-[68px] items-center justify-between px-5">
-          <div>
+      <aside aria-label={t('nav.menu')} className={`fixed inset-y-0 left-0 z-40 flex w-[244px] ${collapsed ? 'lg:w-16' : ''} flex-col border-r border-line bg-sidebar transition-transform lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className={`flex h-[68px] items-center justify-between px-5 ${collapsed ? 'lg:justify-center lg:px-0' : ''}`}>
+          <div className={collapsed ? 'lg:hidden' : ''}>
             <div className="text-xl font-semibold leading-6 tracking-tight text-fg">{t('app.name')}</div>
             <div className="text-xs text-muted">{t('app.tagline')}</div>
           </div>
@@ -93,20 +106,25 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
             <X size={18} aria-hidden />
           </button>
         </div>
-        <nav className="flex-1 overflow-y-auto px-3 py-1">
+        <nav className={`flex-1 overflow-y-auto px-3 py-1 ${collapsed ? 'lg:px-2' : ''}`}>
           {SECTIONS.map((sec) => {
             const items = sec.items.filter((i) => (owner || !i.owner) && !(i.module && off.has(i.module)))
             if (items.length === 0) return null
             return (
               <div key={sec.key} className="pb-2">
-                <div className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted/80">{t(sec.key)}</div>
-                <div className="space-y-0.5">{items.map((i) => <NavItem key={i.to} item={i} onNavigate={onClose} />)}</div>
+                <div className={`px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted/80 ${collapsed ? 'lg:mx-2 lg:mt-1 lg:h-px lg:bg-line lg:p-0 lg:text-[0px]' : ''}`}>{t(sec.key)}</div>
+                <div className="space-y-0.5">{items.map((i) => <NavItem key={i.to} item={i} onNavigate={onClose} compact={collapsed} />)}</div>
               </div>
             )
           })}
         </nav>
-        <div className="border-t border-line p-3">
-          <NavItem item={{ to: '/settings', key: 'nav.settings', icon: Settings }} onNavigate={onClose} />
+        <div className={`space-y-0.5 border-t border-line p-3 ${collapsed ? 'lg:px-2' : ''}`}>
+          <NavItem item={{ to: '/settings', key: 'nav.settings', icon: Settings }} onNavigate={onClose} compact={collapsed} />
+          <button type="button" onClick={() => fold(!collapsed)} aria-pressed={collapsed} title={collapsed ? t('nav.expand') : t('nav.collapse')} aria-label={collapsed ? t('nav.expand') : t('nav.collapse')}
+            className={`hidden h-9 w-full items-center gap-3 rounded-control px-3 text-[13px] text-muted hover:bg-surface hover:text-fg lg:flex ${collapsed ? 'lg:justify-center lg:px-0' : ''}`}>
+            {collapsed ? <ChevronsRight size={18} aria-hidden /> : <ChevronsLeft size={18} aria-hidden />}
+            <span className={collapsed ? 'lg:hidden' : ''}>{t('nav.collapse')}</span>
+          </button>
         </div>
       </aside>
     </>

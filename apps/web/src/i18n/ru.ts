@@ -28,6 +28,8 @@ const base = {
   'nav.panels': 'Панели',
   'nav.alerts': 'Оповещения',
   'nav.settings': 'Настройки',
+  'nav.collapse': 'Свернуть',
+  'nav.expand': 'Развернуть панель',
   'nav.soon': 'скоро',
   'nav.menu': 'Меню',
   'nav.close': 'Закрыть меню',
