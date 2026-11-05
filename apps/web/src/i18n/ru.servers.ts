@@ -11,6 +11,13 @@ export const serversText = {
   'add.next': 'Дальше Owlery сразу создаст агента и покажет команду установки с выбором разрешений (терминал, веб-службы и т.д.).',
   'add.go': 'Создать и показать установку',
   'srv.noGroup': 'Без группы',
+  'srv.noPark': 'Без парка',
+  'srv.machines': 'Машин: {n}',
+  'srv.attention': 'внимание: {n}',
+  'srv.allOk': 'всё в порядке',
+  'srv.view': 'Вид',
+  'srv.view.cards': 'Карточки',
+  'srv.view.list': 'Список',
   'srv.count': 'Машин: {n}',
 
   'srv.status.ok': 'В порядке',

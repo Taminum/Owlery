@@ -18,6 +18,7 @@ export interface Server extends VPS {
   alerts?: ServerAlert[]
   hardware?: Hardware | null
   docker?: DockerInfo | null
+  external_ip?: string
 }
 
 export const ROLES: ServerRole[] = ['entry', 'exit', 'panel', 'service', 'workstation', 'home', 'hypervisor', 'router']
