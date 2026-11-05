@@ -76,14 +76,57 @@ func TestBlocksAtTheLimitAndNotBefore(t *testing.T) {
 	}
 }
 
-func TestFailuresSpreadOverTooLongDoNotAddUp(t *testing.T) {
+func TestFailuresSpreadOverTooLongDoNotAddUpInTenMinutes(t *testing.T) {
 	fw := newFW()
 	e, _ := engine(fw, "", secproto.BlockOn, true)
-	for i := 0; i < 10; i++ { // one every 3 minutes: never five inside ten minutes
+	for i := 0; i < 9; i++ { // one every 3 minutes: never five inside ten minutes, and under ten in a day
 		e.Fail(ctx, "203.0.113.6", t0.Add(time.Duration(i)*3*time.Minute))
 	}
 	if len(fw.rules) != 0 {
-		t.Errorf("slow guessing under the rate is not blocked: %v", fw.rules)
+		t.Errorf("nine slow failures are not blocked: %v", fw.rules)
+	}
+}
+
+func TestASlowGuesserIsBlockedByTheCountOfADay(t *testing.T) {
+	fw := newFW()
+	e, _ := engine(fw, "", secproto.BlockOn, true)
+	for i := 0; i < SlowThreshold-1; i++ { // one every 15 minutes, like 89.34.90.66
+		e.Fail(ctx, "203.0.113.9", t0.Add(time.Duration(i)*15*time.Minute))
+	}
+	if len(fw.rules) != 0 {
+		t.Fatal("nine in a day are under the limit")
+	}
+	e.Fail(ctx, "203.0.113.9", t0.Add(time.Duration(SlowThreshold-1)*15*time.Minute))
+	if !fw.rules[netip.MustParseAddr("203.0.113.9")] {
+		t.Fatal("the tenth failure in a day must block")
+	}
+	if s := e.Snapshot(); len(s.Active) != 1 || s.Active[0].Failed != SlowThreshold {
+		t.Errorf("snapshot: %+v", s)
+	}
+}
+
+func TestFailuresOlderThanADayAreForgotten(t *testing.T) {
+	fw := newFW()
+	e, _ := engine(fw, "", secproto.BlockOn, true)
+	for i := 0; i < SlowThreshold-1; i++ { // one every 3 hours: ten of them take 27 hours
+		e.Fail(ctx, "203.0.113.10", t0.Add(time.Duration(i)*3*time.Hour))
+	}
+	e.Fail(ctx, "203.0.113.10", t0.Add(time.Duration(SlowThreshold-1)*3*time.Hour))
+	if len(fw.rules) != 0 {
+		t.Errorf("the first failures are more than a day old: %v", fw.rules)
+	}
+}
+
+func TestASignInClearsTheCountOfADay(t *testing.T) {
+	fw := newFW()
+	e, _ := engine(fw, "", secproto.BlockOn, true)
+	for i := 0; i < SlowThreshold-1; i++ {
+		e.Fail(ctx, "203.0.113.11", t0.Add(time.Duration(i)*15*time.Minute))
+	}
+	e.OK("203.0.113.11", t0.Add(3*time.Hour))
+	e.Fail(ctx, "203.0.113.11", t0.Add(4*time.Hour))
+	if len(fw.rules) != 0 {
+		t.Errorf("somebody who signed in is left alone: %v", fw.rules)
 	}
 }
 

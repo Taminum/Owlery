@@ -86,6 +86,9 @@ const (
 	wouldFor    = 24 * time.Hour
 	maxTracked  = 5000
 	maxRemember = 2000
+	// SlowThreshold failures from one address within SlowWindow get it blocked even when no ten minutes held enough of them.
+	SlowThreshold = 10
+	SlowWindow    = 24 * time.Hour
 )
 
 type Engine struct {
@@ -97,6 +100,7 @@ type Engine struct {
 	now        func() time.Time
 
 	tries  map[netip.Addr][]time.Time
+	slow   map[netip.Addr][]time.Time
 	active map[netip.Addr]Entry
 	would  map[netip.Addr]Entry
 	safe   map[netip.Addr]time.Time
@@ -109,7 +113,7 @@ type Engine struct {
 // permission to block at all.
 func New(fw Firewall, path string, cfg Config, allowBlock bool) *Engine {
 	e := &Engine{fw: fw, path: path, allowBlock: allowBlock, now: time.Now,
-		tries: map[netip.Addr][]time.Time{}, active: map[netip.Addr]Entry{}, would: map[netip.Addr]Entry{}, safe: map[netip.Addr]time.Time{}}
+		tries: map[netip.Addr][]time.Time{}, slow: map[netip.Addr][]time.Time{}, active: map[netip.Addr]Entry{}, would: map[netip.Addr]Entry{}, safe: map[netip.Addr]time.Time{}}
 	e.cfg = cfg.normalised(allowBlock)
 	e.load()
 	return e
@@ -171,6 +175,7 @@ func (e *Engine) OK(ipStr string, at time.Time) {
 		e.safe[ip] = at.Add(safeFor)
 	}
 	delete(e.tries, ip)
+	delete(e.slow, ip)
 }
 
 // Fail counts one failed sign-in from this address, at the time the machine logged it.
@@ -199,16 +204,36 @@ func (e *Engine) Fail(ctx context.Context, ipStr string, at time.Time) {
 		}
 	}
 	keep = append(keep, at)
-	if len(keep) < e.cfg.Threshold {
-		if len(e.tries) >= maxTracked {
-			if _, known := e.tries[ip]; !known {
-				return // too many addresses at once; better to miss one than to grow without end
-			}
+	// A guesser that waits between tries stays under the short limit for ever, so the same failures are also counted over
+	// a whole day: slow is the failures of the last SlowWindow, at most SlowThreshold of them kept.
+	slow := e.slow[ip]
+	slowCut := at.Add(-SlowWindow)
+	kept := slow[:0]
+	for _, t := range slow {
+		if t.After(slowCut) {
+			kept = append(kept, t)
+		}
+	}
+	kept = append(kept, at)
+	if len(kept) > SlowThreshold {
+		kept = kept[len(kept)-SlowThreshold:]
+	}
+	slowHit := len(kept) >= SlowThreshold
+	if len(keep) < e.cfg.Threshold && !slowHit {
+		_, knownFast := e.tries[ip]
+		_, knownSlow := e.slow[ip]
+		if len(e.tries) >= maxTracked && !knownFast || len(e.slow) >= maxTracked && !knownSlow {
+			return // too many addresses at once; better to miss one than to grow without end
 		}
 		e.tries[ip] = keep
+		e.slow[ip] = kept
 		return
 	}
+	if slowHit && len(keep) < len(kept) {
+		keep = kept // what the entry reports as "failed" is what made the block
+	}
 	delete(e.tries, ip)
+	delete(e.slow, ip)
 	now := e.now()
 	en := Entry{IP: ip, Since: now, Failed: len(keep)}
 	if e.cfg.TTL > 0 {
@@ -298,6 +323,12 @@ func (e *Engine) Tick(ctx context.Context) {
 	for ip, ts := range e.tries {
 		if len(ts) == 0 || !ts[len(ts)-1].After(cut) {
 			delete(e.tries, ip)
+		}
+	}
+	slowCut := now.Add(-SlowWindow)
+	for ip, ts := range e.slow {
+		if len(ts) == 0 || !ts[len(ts)-1].After(slowCut) {
+			delete(e.slow, ip)
 		}
 	}
 	if changed {
