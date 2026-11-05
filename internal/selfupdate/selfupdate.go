@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -80,11 +81,19 @@ func AssetName(goos, goarch string) (string, error) {
 
 // Staged files, in one directory.
 const (
-	FileProgram = "program"
 	FileSums    = "SHA256SUMS"
 	FileSig     = "SHA256SUMS.sig"
 	FileVersion = "version"
 )
+
+// FileProgram is the staged program. Windows will not run a file that has no .exe in its name, and the staged program is run once
+// (with -version) before anything is installed.
+var FileProgram = func() string {
+	if runtime.GOOS == "windows" {
+		return "program.exe"
+	}
+	return "program"
+}()
 
 type Fetcher struct {
 	Client    *http.Client
