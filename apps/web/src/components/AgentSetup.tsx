@@ -288,7 +288,8 @@ export function updateErrorText(e: unknown): string {
       case 'up_to_date': return t('agent.err.upToDate')
       case 'update_not_allowed': return t('agent.updateNeedsPermission')
       case 'no_release_info': return t('agent.err.noRelease')
-      default: return errorText(e)
+      // A reason this page has no words for is shown as it came, so it can be told to whoever looks after the panel.
+      default: return `${errorText(e)} (${e.status} ${e.code}${e.message && e.message !== e.code ? `: ${e.message}` : ''})`
     }
   }
   return errorText(e)

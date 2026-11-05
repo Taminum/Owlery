@@ -128,6 +128,10 @@ func (s *Server) updateAgent(w http.ResponseWriter, r *http.Request, a auth.Acto
 		writeJSON(w, http.StatusAccepted, map[string]any{"status": "pending", "version": version})
 	case err != nil:
 		s.writeErr(w, r, http.StatusConflict, "agent_offline", "the machine's agent is not connected")
+	case !res.OK && res.Error == "busy":
+		// The agent is already fetching a release for an earlier request (a slow road to GitHub can take minutes): that is
+		// the same update on its way, not a failure.
+		writeJSON(w, http.StatusAccepted, map[string]any{"status": "pending", "version": version})
 	case !res.OK:
 		// The agent's own explanation is written for the administrator and is shown as it is.
 		s.writeErr(w, r, http.StatusConflict, "update_failed", res.Error)
