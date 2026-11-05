@@ -7,8 +7,9 @@ import { buildBlocks, loadFolded, loadView, parkSummary, saveFolded, saveView, s
 import { Card } from './ui'
 import { Meter, loadDetail, tone, uptimeText } from './HostView'
 import { RoleChips, StatusChip, StatusDot, placeText, type Server } from './ServerParts'
+import { AgentChips } from './BulkUpdate'
 
-function Tile({ s }: { s: Server }) {
+function Tile({ s, latest }: { s: Server; latest: string }) {
   const h = s.host
   const root = h?.disks.find((d) => d.m === '/') ?? h?.disks[0]
   const memPct = h && h.mem_total > 0 ? (h.mem_used * 100) / h.mem_total : null
@@ -18,7 +19,7 @@ function Tile({ s }: { s: Server }) {
     <Link to={`/servers/${s.id}`} title={s.note || undefined} className="block rounded-card focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan">
       <Card title={s.name} note={sub || undefined} right={<StatusChip s={s} />} className="h-full transition-colors hover:border-cyan/50">
         <div className="space-y-3">
-          <RoleChips roles={s.roles} />
+          <div className="flex flex-wrap items-center gap-2"><RoleChips roles={s.roles} /><AgentChips s={s} latest={latest} /></div>
           {h?.has_data ? (
             <>
               <Meter label={t('host.cpu')} pct={h.cpu} detail={loadDetail(h)} />
@@ -54,7 +55,7 @@ function Mini({ label, pct }: { label: string; pct: number | null }) {
 
 const ROW = 'grid items-center gap-3 border-t border-line/60 px-3 py-2 text-[13px] hover:bg-elevated focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan grid-cols-[10px_minmax(0,1fr)_auto] md:grid-cols-[10px_minmax(0,1.6fr)_minmax(0,0.9fr)_70px_70px_70px_100px]'
 
-function Row({ s }: { s: Server }) {
+function Row({ s, latest }: { s: Server; latest: string }) {
   const h = s.host
   const root = h?.disks.find((d) => d.m === '/') ?? h?.disks[0]
   const memPct = h && h.mem_total > 0 ? (h.mem_used * 100) / h.mem_total : null
@@ -66,6 +67,7 @@ function Row({ s }: { s: Server }) {
       <span className="min-w-0" title={s.note || undefined}>
         <span className="block truncate font-medium">{s.name}</span>
         <span className="block truncate text-xs text-muted">{sub || '—'}</span>
+        <span className="mt-0.5 block"><AgentChips s={s} latest={latest} /></span>
       </span>
       <span className="tnum hidden truncate text-xs text-muted md:block">{shownAddress(s) || '—'}</span>
       <Mini label="ЦП" pct={noData ? null : h!.cpu} />
@@ -76,11 +78,11 @@ function Row({ s }: { s: Server }) {
   )
 }
 
-function Machines({ servers, view }: { servers: Server[]; view: View }) {
+function Machines({ servers, view, latest }: { servers: Server[]; view: View; latest: string }) {
   if (view === 'list') {
-    return <div className="overflow-hidden rounded-card border border-line bg-surface [&>a:first-child]:border-t-0">{servers.map((s) => <Row key={s.id} s={s} />)}</div>
+    return <div className="overflow-hidden rounded-card border border-line bg-surface [&>a:first-child]:border-t-0">{servers.map((s) => <Row key={s.id} s={s} latest={latest} />)}</div>
   }
-  return <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{servers.map((s) => <Tile key={s.id} s={s} />)}</div>
+  return <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{servers.map((s) => <Tile key={s.id} s={s} latest={latest} />)}</div>
 }
 
 function ParkHeader({ name, servers, folded, onToggle }: { name: string; servers: Server[]; folded: boolean; onToggle: () => void }) {
@@ -102,7 +104,7 @@ function ParkHeader({ name, servers, folded, onToggle }: { name: string; servers
 }
 
 /** The fleet as the Servers page shows it: groups, the parks inside them, and the machines as cards or as a list. */
-export function ServerGroups({ list }: { list: Server[] }) {
+export function ServerGroups({ list, latest = '' }: { list: Server[]; latest?: string }) {
   const blocks = buildBlocks(list)
   const biggest = Math.max(0, ...blocks.map((b) => b.count))
   const [chosen, setChosen] = useState<View | null>(loadView())
@@ -143,13 +145,13 @@ export function ServerGroups({ list }: { list: Server[] }) {
               </button>
             </h2>
           )}
-          {groupFolded ? null : !b.hasParks ? <Machines servers={b.parks[0].servers} view={view} /> : b.parks.map((p) => {
+          {groupFolded ? null : !b.hasParks ? <Machines servers={b.parks[0].servers} view={view} latest={latest} /> : b.parks.map((p) => {
             const key = `${b.name}/${p.name}`
             const isFolded = folded.has(key)
             return (
               <div key={key} className="space-y-2">
                 <ParkHeader name={p.name || t('srv.noPark')} servers={p.servers} folded={isFolded} onToggle={() => toggle(key)} />
-                {!isFolded && <Machines servers={p.servers} view={view} />}
+                {!isFolded && <Machines servers={p.servers} view={view} latest={latest} />}
               </div>
             )
           })}
