@@ -1,0 +1,9 @@
+[Unit]
+Description=Owlery: install an agent update (checks the release signature again, restarts the agent, puts the old one back if the new one does not connect)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/remnascope-secagent apply-update -update-dir /var/lib/remnascope-secagent/update -install /usr/local/bin/remnascope-secagent -unit remnascope-secagent.service
+TimeoutStartSec=600
+PrivateTmp=yes
+NoNewPrivileges=yes

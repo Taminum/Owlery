@@ -65,18 +65,21 @@ func DefaultLimits() Limits {
 }
 
 type Server struct {
-	Store       *store.Store
-	Ring        *secrets.Keyring
-	Probe       ProbeFactory
-	Sync        *syncer.Syncer
-	Ingest      http.Handler // the agents' WebSocket endpoint; authenticates by agent credential, not by session
-	Pulses      *pulse.Cache // the quick readings of the machines, in memory
-	SecIngest   http.Handler // the security agents' endpoint, with its own credentials
-	SecShell    http.Handler // where an agent connects back for one terminal session
-	RecordsDir  string       // where terminal sessions are written as they happen; empty = not recorded
-	GuacdAddr   string       // guacd's address for remote desktops (host:4822); empty = desktops off
-	DesktopHost string       // how guacd reaches this API for a desktop tunnel (the API's name on their network)
-	tickets     ticketBox
+	Store  *store.Store
+	Ring   *secrets.Keyring
+	Probe  ProbeFactory
+	Sync   *syncer.Syncer
+	Ingest http.Handler // the agents' WebSocket endpoint; authenticates by agent credential, not by session
+	Pulses *pulse.Cache // the quick readings of the machines, in memory
+	// LatestRelease replaces the look-up of the newest release at GitHub (tests, or a network that cannot reach it).
+	LatestRelease func(context.Context) (string, error)
+	latest        latestCache
+	SecIngest     http.Handler // the security agents' endpoint, with its own credentials
+	SecShell      http.Handler // where an agent connects back for one terminal session
+	RecordsDir    string       // where terminal sessions are written as they happen; empty = not recorded
+	GuacdAddr     string       // guacd's address for remote desktops (host:4822); empty = desktops off
+	DesktopHost   string       // how guacd reaches this API for a desktop tunnel (the API's name on their network)
+	tickets       ticketBox
 	// ServicesDomain is the parent of the web services' subdomains (https://<slug>.<domain>); empty = web services off.
 	ServicesDomain string
 	SecChecks      Nudger      // the external checker, woken by a manual request (nil = none)
@@ -333,6 +336,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/security/vps/{id}/agent", s.session(s.getSecAgent))
 	mux.Handle("POST /api/v1/security/vps/{id}/agent", s.session(s.createSecAgent))
 	mux.Handle("DELETE /api/v1/security/vps/{id}/agent", s.session(s.revokeSecAgent))
+	mux.Handle("POST /api/v1/security/vps/{id}/agent/update", s.session(s.updateAgent))
+	mux.Handle("GET /api/v1/agent/latest", s.session(s.agentLatest))
 	mux.Handle("GET /api/v1/security/vps/{id}/fail2ban", s.session(s.secCategory(secproto.CatFail2ban)))
 	mux.Handle("GET /api/v1/security/vps/{id}/ports", s.session(s.secCategory(secproto.CatSockets)))
 	mux.Handle("GET /api/v1/security/vps/{id}/firewall", s.session(s.secCategory(secproto.CatFirewall)))

@@ -259,7 +259,7 @@ func VerifyStaged(dir, pubKey, current, goos, goarch string, run func(path strin
 	}
 	// A signed list of an older release would pass the checks above with a version file that lies; the program tells the truth.
 	if run == nil {
-		run = programVersion
+		run = ProgramVersion
 	}
 	said, err := run(filepath.Join(dir, FileProgram))
 	if err != nil {
@@ -271,7 +271,8 @@ func VerifyStaged(dir, pubKey, current, goos, goarch string, run func(path strin
 	return version, nil
 }
 
-func programVersion(path string) (string, error) {
+// ProgramVersion runs a program with -version and returns what it prints.
+func ProgramVersion(path string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	var out bytes.Buffer

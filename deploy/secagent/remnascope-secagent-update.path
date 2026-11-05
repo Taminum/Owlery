@@ -1,0 +1,9 @@
+[Unit]
+Description=Owlery: install an agent update the agent has fetched
+
+[Path]
+PathExists=/var/lib/remnascope-secagent/update/ready
+Unit=remnascope-secagent-update.service
+
+[Install]
+WantedBy=multi-user.target
