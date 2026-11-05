@@ -628,6 +628,8 @@ type HWNic struct {
 	Name      string   `json:"name"`
 	SpeedMbps int      `json:"speed_mbps,omitempty"`
 	IPs       []string `json:"ips,omitempty"`
+	Gateway   string   `json:"gateway,omitempty"` // the default gateway that goes out through this interface
+	DNS       []string `json:"dns,omitempty"`     // the name servers this interface uses
 }
 
 type Hardware struct {
