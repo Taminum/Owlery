@@ -151,7 +151,7 @@ export function ManageView({ serverId }: { serverId: string }) {
     <Card bare>
       {help && <p className="mb-3 text-xs text-muted">{t('mng.note')}</p>}
       <div className="mb-3 flex flex-wrap items-end gap-x-5 border-b border-line">
-        <div role="tablist" aria-label={t('mng.title')} className="flex gap-5 overflow-x-auto">
+        <div role="tablist" aria-label={t('mng.title')} className="flex flex-wrap gap-x-5">
           {SECTIONS.map((s) => (
             <button key={s} role="tab" type="button" aria-selected={section === s} onClick={() => setSection(s)}
               className={`-mb-px whitespace-nowrap border-b-2 px-0.5 py-1.5 text-[13px] ${section === s ? 'border-cyan text-fg' : 'border-transparent text-muted hover:text-fg'}`}>{t(`mng.s.${s}` as MsgKey)}</button>
