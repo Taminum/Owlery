@@ -1,9 +1,10 @@
-import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { RefreshCw } from 'lucide-react'
 import { t, type MsgKey } from '../i18n'
 import { request } from '../lib/api'
 import { errorText } from '../lib/errors'
-import { formatBytes, formatDateTime } from '../lib/format'
+import { formatBytes, formatDateTime, formatInt } from '../lib/format'
 import { useLoad } from '../hooks/useLoad'
 import { Card, Chip } from './ui'
 import { DangerButton, GhostButton, PrimaryButton, inputCls } from './Modal'
@@ -145,26 +146,37 @@ function Table({ id, head, widths, right = [], children, empty }: { id: string; 
 export function ManageView({ serverId }: { serverId: string }) {
   const [section, setSection] = useState<Section>('procs')
   const [help, setHelp] = useState(false)
+  const [slot, setSlot] = useState<HTMLElement | null>(null)
   return (
-    <Card bare title={t('mng.title')} right={
-      <button type="button" onClick={() => setHelp((v) => !v)} aria-expanded={help} aria-label={t('mng.help')} title={t('mng.help')}
-        className="grid h-6 w-6 place-items-center rounded-full border border-line text-xs text-muted hover:text-fg">?</button>}>
+    <Card bare>
       {help && <p className="mb-3 text-xs text-muted">{t('mng.note')}</p>}
-      <div role="tablist" aria-label={t('mng.title')} className="mb-3 flex flex-wrap gap-2">
-        {SECTIONS.map((s) => (
-          <button key={s} role="tab" type="button" aria-selected={section === s} onClick={() => setSection(s)}
-            className={`h-8 rounded-control border px-3 text-[13px] ${section === s ? 'border-cyan bg-elevated text-fg' : 'border-line text-muted hover:text-fg'}`}>{t(`mng.s.${s}` as MsgKey)}</button>
-        ))}
+      <div className="mb-3 flex flex-wrap items-end gap-x-5 border-b border-line">
+        <div role="tablist" aria-label={t('mng.title')} className="flex gap-5 overflow-x-auto">
+          {SECTIONS.map((s) => (
+            <button key={s} role="tab" type="button" aria-selected={section === s} onClick={() => setSection(s)}
+              className={`-mb-px whitespace-nowrap border-b-2 px-0.5 py-1.5 text-[13px] ${section === s ? 'border-cyan text-fg' : 'border-transparent text-muted hover:text-fg'}`}>{t(`mng.s.${s}` as MsgKey)}</button>
+          ))}
+        </div>
+        <div className="ml-auto flex items-center gap-2 pb-1">
+          <div ref={setSlot} className="flex items-center gap-2" />
+          <button type="button" onClick={() => setHelp((v) => !v)} aria-expanded={help} aria-label={t('mng.help')} title={t('mng.help')}
+            className="grid h-6 w-6 place-items-center rounded-full border border-line text-xs text-muted hover:text-fg">?</button>
+        </div>
       </div>
-      {section === 'procs' && <Procs serverId={serverId} />}
-      {section === 'services' && <Services serverId={serverId} />}
-      {section === 'startup' && <StartupList serverId={serverId} />}
-      {section === 'sessions' && <Sessions serverId={serverId} />}
-      {section === 'events' && <Events serverId={serverId} />}
-      {section === 'conns' && <Conns serverId={serverId} />}
+      <SlotCtx.Provider value={slot}>
+        {section === 'procs' && <Procs serverId={serverId} />}
+        {section === 'services' && <Services serverId={serverId} />}
+        {section === 'startup' && <StartupList serverId={serverId} />}
+        {section === 'sessions' && <Sessions serverId={serverId} />}
+        {section === 'events' && <Events serverId={serverId} />}
+        {section === 'conns' && <Conns serverId={serverId} />}
+      </SlotCtx.Provider>
     </Card>
   )
 }
+
+/** The place in the tab row where the open section puts its filter and refresh. */
+const SlotCtx = createContext<HTMLElement | null>(null)
 
 /** Loads one list and keeps the bar above it: a filter, a refresh, and the message of the last action. */
 function useList<T>(serverId: string, op: string, args?: object) {
@@ -189,20 +201,33 @@ function useList<T>(serverId: string, op: string, args?: object) {
   return { rows: q.data ?? [], loading: !q.data && !q.error, loadError: q.error, reload: q.reload, note, error, act }
 }
 
-function Bar({ filter, setFilter, reload, extra, note, error, loadError, loading }: {
-  filter?: string; setFilter?: (v: string) => void; reload: () => void; extra?: ReactNode; note: string; error: string; loadError: string; loading: boolean
+function Bar({ filter, setFilter, reload, lead, extra, note, error, loadError, loading }: {
+  filter?: string; setFilter?: (v: string) => void; reload: () => void; lead?: ReactNode; extra?: ReactNode; note: string; error: string; loadError: string; loading: boolean
 }) {
+  const slot = useContext(SlotCtx)
+  const tools = (
+    <>
+      {lead}
+      {setFilter && <input className={`${inputCls} w-44 text-xs`} style={{ height: 26, paddingTop: 0, paddingBottom: 0 }} value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={t('mng.filter')} aria-label={t('mng.filter')} />}
+      <button type="button" onClick={reload} aria-label={t('mng.refresh')} title={t('mng.refresh')}
+        className="grid h-[26px] w-[26px] place-items-center rounded-[9px] border border-line bg-elevated text-muted hover:text-fg"><RefreshCw size={13} aria-hidden /></button>
+    </>
+  )
   return (
-    <div className="mb-2 space-y-2">
-      <div className="flex flex-wrap items-center gap-2">
-        {setFilter && <input className={`${inputCls} max-w-xs`} value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={t('mng.filter')} aria-label={t('mng.filter')} />}
-        <GhostButton onClick={reload}><RefreshCw size={14} aria-hidden /> {t('mng.refresh')}</GhostButton>
-        {extra}
-        {loading && <span className="text-xs text-muted" role="status">{t('mng.loading')}</span>}
+    <>
+      {slot && createPortal(tools, slot)}
+      <div className="mb-2 space-y-2">
+        {!slot && <div className="flex flex-wrap items-center gap-2">{tools}</div>}
+        {(extra || loading) && (
+          <div className="flex flex-wrap items-center gap-2">
+            {extra}
+            {loading && <span className="text-xs text-muted" role="status">{t('mng.loading')}</span>}
+          </div>
+        )}
+        {(error || loadError) && <p role="alert" className="text-[13px] text-red">{error || loadError}</p>}
+        {note && <p role="status" className="text-[13px] text-green">{note}</p>}
       </div>
-      {(error || loadError) && <p role="alert" className="text-[13px] text-red">{error || loadError}</p>}
-      {note && <p role="status" className="text-[13px] text-green">{note}</p>}
-    </div>
+    </>
   )
 }
 
@@ -373,11 +398,17 @@ function Events({ serverId }: { serverId: string }) {
 function Conns({ serverId }: { serverId: string }) {
   const l = useList<Conn>(serverId, 'conns')
   const [f, setF] = useState('')
-  const found = useMemo(() => l.rows.filter((c) => has([c.local, c.remote, c.name, c.pid, c.state], f)), [l.rows, f])
+  const [waits, setWaits] = useState(false)
+  const hidden = useMemo(() => l.rows.filter((c) => c.state === 'TIME_WAIT').length, [l.rows])
+  const found = useMemo(() => l.rows.filter((c) => (waits || c.state !== 'TIME_WAIT') && has([c.local, c.remote, c.name, c.pid, c.state], f)), [l.rows, f, waits])
   const [rows, h] = useSort(found, connCols)
   return (
     <>
-      <Bar filter={f} setFilter={setF} reload={l.reload} note={l.note} error={l.error} loadError={l.loadError} loading={l.loading} />
+      <Bar filter={f} setFilter={setF} reload={l.reload} note={l.note} error={l.error} loadError={l.loadError} loading={l.loading} lead={
+        <label className="mr-3 flex cursor-pointer items-center gap-2 whitespace-nowrap text-xs text-muted">
+          <input type="checkbox" checked={waits} onChange={(e) => setWaits(e.target.checked)} />
+          {t('mng.timeWait')} <span className="opacity-60">{formatInt(hidden)}</span>
+        </label>} />
       <Table id="conns" widths={[8, 22, 22, 14, 20, 14]} head={[h(t('mng.proto'), 'proto'), h(t('mng.local'), 'local'), h(t('mng.remote'), 'remote'), h(t('mng.state'), 'state'), h(t('mng.process'), 'process'), '']} empty={t('mng.empty')}>
         {rows.map((c, i) => (
           <tr key={i}>
