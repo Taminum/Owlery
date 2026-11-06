@@ -133,6 +133,7 @@ export const serversText = {
   'mng.done': 'Готово.',
   'mng.filter': 'Поиск',
   'mng.refresh': 'Обновить',
+  'mng.timeWait': 'Показать TIME_WAIT',
   'mng.loading': 'Спрашиваю машину…',
   'mng.empty': 'Ничего нет.',
   'mng.name': 'Имя',
