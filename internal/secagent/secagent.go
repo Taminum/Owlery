@@ -297,7 +297,7 @@ func (a *agent) capabilities(ban bool) []string {
 	if !a.cfg.NoFirewall {
 		caps = append(caps, "firewall_read")
 	}
-	caps = append(caps, secproto.CapHardware)
+	caps = append(caps, secproto.CapHardware, secproto.CapWol)
 	if a.winsec != nil {
 		caps = append(caps, secproto.CapWinsec)
 	}
@@ -598,6 +598,17 @@ func (a *agent) reader(ctx context.Context, c *websocket.Conn, ban bool, acks ch
 			go func() {
 				if err := write(ctx, c, a.update(ctx, req)); err != nil {
 					a.cfg.Log.Warn("could not report an update result", "id", req.ID, "err", err)
+				}
+			}()
+		case "wol_req":
+			var req secproto.WolReq
+			if json.Unmarshal(b, &req) != nil || req.ID == "" || len(req.ID) > 64 {
+				fail(errors.New("secagent: a bad wake-on-lan request"))
+				return
+			}
+			go func() {
+				if err := write(ctx, c, wolHandle(req)); err != nil {
+					a.cfg.Log.Warn("could not report a wake-on-lan result", "id", req.ID, "err", err)
 				}
 			}()
 		case "remote_open":

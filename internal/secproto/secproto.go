@@ -495,6 +495,42 @@ type AdminResult struct {
 
 const MaxAdminData = 900 << 10
 
+// --- Wake-on-LAN ---------------------------------------------------------------------------------------
+//
+// Switching on a machine that is off takes its network card's address (MAC) and another machine in the same network that
+// broadcasts the "magic packet". An agent therefore does two things when asked, and only then: it names its own network
+// cards ("report", asked only for a machine where somebody turned Wake-on-LAN on in the panel), and it broadcasts a packet
+// for a given address ("send"). A request is delivered over the live connection or not at all.
+
+const CapWol = "wol"
+
+const (
+	WolReport = "report"
+	WolSend   = "send"
+)
+
+type WolReq struct {
+	Type string `json:"type"` // "wol_req"
+	ID   string `json:"id"`
+	Op   string `json:"op"`            // report | send
+	MAC  string `json:"mac,omitempty"` // for send
+}
+
+type WolNIC struct {
+	Name string   `json:"name"`
+	MAC  string   `json:"mac"`
+	IPs  []string `json:"ips,omitempty"`
+}
+
+type WolResult struct {
+	Type  string   `json:"type"` // "wol_result"
+	ID    string   `json:"id"`
+	OK    bool     `json:"ok"`
+	Error string   `json:"error,omitempty"`
+	NICs  []WolNIC `json:"nics,omitempty"` // for report
+	Sent  int      `json:"sent,omitempty"` // for send: how many broadcasts went out
+}
+
 // --- Windows security (the "winsec" category) --------------------------------------------------------
 //
 // What the Windows event log says about sign-ins from other machines, and what Windows Defender says about itself and
