@@ -6,6 +6,7 @@ import { formatBytes, formatRate } from '../lib/format'
 import { buildBlocks, loadFolded, loadView, parkSummary, saveFolded, saveView, shownAddress, type View } from '../lib/parks'
 import { Card } from './ui'
 import { Meter, loadDetail, tone, uptimeText } from './HostView'
+import { WakeButton } from './WakeOnLan'
 import { RoleChips, StatusChip, StatusDot, placeText, type Server } from './ServerParts'
 import { AgentChips } from './BulkUpdate'
 
@@ -73,7 +74,10 @@ function Row({ s, latest }: { s: Server; latest: string }) {
       <Mini label="ЦП" pct={noData ? null : h!.cpu} />
       <Mini label="ОЗУ" pct={noData ? null : memPct} />
       <Mini label={root ? root.m : t('host.disk')} pct={noData || !root || root.t <= 0 ? null : (root.u * 100) / root.t} />
-      <span className="justify-self-end"><StatusChip s={s} /></span>
+      <span className="flex items-center gap-2 justify-self-end">
+        {s.wol && s.agent && !s.agent.online && s.can_edit && <WakeButton serverId={s.id} small />}
+        <StatusChip s={s} />
+      </span>
     </Link>
   )
 }

@@ -19,6 +19,9 @@ export interface Server extends VPS {
   hardware?: Hardware | null
   docker?: DockerInfo | null
   external_ip?: string
+  wol?: boolean
+  maint_until?: string
+  maint_note?: string
   agent?: { version: string; online: boolean; can_update: boolean; can_shell?: boolean; can_admin?: boolean } | null
 }
 

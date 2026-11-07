@@ -81,3 +81,24 @@ func (s *Store) WolNeighbors(ctx context.Context, vpsID string) ([]SecAgent, err
 	}
 	return out, rows.Err()
 }
+
+// WolEnabled says, of the given machines, which have Wake-on-LAN turned on.
+func (s *Store) WolEnabled(ctx context.Context, vpsIDs []string) (map[string]bool, error) {
+	out := map[string]bool{}
+	if len(vpsIDs) == 0 {
+		return out, nil
+	}
+	rows, err := s.pool.Query(ctx, `SELECT vps_id::text FROM wol_targets WHERE vps_id = ANY($1::uuid[])`, vpsIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out[id] = true
+	}
+	return out, rows.Err()
+}

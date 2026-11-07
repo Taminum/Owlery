@@ -21,6 +21,8 @@ import { ManageView } from '../components/ManageView'
 import { ServicesView } from '../components/ServicesView'
 import { RdpProtect } from '../components/RdpProtect'
 import { AlertRules } from '../components/AlertRules'
+import { Maintenance, MaintenanceBanner } from '../components/Maintenance'
+import { WakeOnLan } from '../components/WakeOnLan'
 import { DockerView } from '../components/DockerView'
 import { NetworkView } from '../components/NetworkView'
 
@@ -147,6 +149,8 @@ export default function ServerCard() {
       <Link to="/servers" className="inline-flex items-center gap-2 text-[13px] text-muted hover:text-fg"><ArrowLeft size={15} aria-hidden />{t('srv.back')}</Link>
       <PageHead title={s.name} subtitle={[s.os || s.host?.os, s.provider, placeText(s)].filter(Boolean).join(' · ') || t('srv.subtitle')} right={<div className="flex items-center gap-3"><About s={s} onEdit={() => setEditing(true)} /><StatusChip s={s} /></div>} />
 
+      {s.maint_until && <MaintenanceBanner until={s.maint_until} note={s.maint_note} canEdit={s.can_edit} serverId={s.id} onChange={q.reload} />}
+
       <div role="tablist" aria-label={s.name} className="flex flex-wrap gap-2">
         {TABS.filter((x) => ((x !== 'terminal' && x !== 'desktop' && x !== 'screen' && x !== 'manage' && x !== 'services') || s.can_edit) && (x !== 'protect' || isWindows) && (x !== 'docker' || !!s.docker) && (x !== 'alerts' || s.host?.has_data)).map((x) => (
           <button key={x} role="tab" type="button" aria-selected={tab === x} onClick={() => setTab(x)}
@@ -163,6 +167,7 @@ export default function ServerCard() {
             <Card title={t('srv.openAlerts')}><AlertList items={open} empty={t('srv.noAlerts')} /></Card>
           </div>
           {s.hardware && <HardwareSection hw={s.hardware} host={s.host} />}
+          {s.can_edit && s.agent && <WakeOnLan serverId={s.id} onChange={q.reload} />}
         </div>
       )}
       {tab === 'resources' && (s.host?.has_data ? <HostDetail host={s.host} /> : <p className="text-[13px] text-muted">{t('srv.noData')}</p>)}
@@ -175,7 +180,12 @@ export default function ServerCard() {
       )}
       {tab === 'protect' && isWindows && <RdpProtect serverId={s.id} />}
       {tab === 'docker' && <DockerView info={s.docker} />}
-      {tab === 'alerts' && <AlertRules serverId={s.id} name={s.name} />}
+      {tab === 'alerts' && (
+        <div className="space-y-4">
+          <Maintenance serverId={s.id} canEdit={s.can_edit} until={s.maint_until} note={s.maint_note} onChange={q.reload} />
+          <AlertRules serverId={s.id} name={s.name} />
+        </div>
+      )}
       {tab === 'terminal' && s.can_edit && <TerminalView serverId={s.id} />}
       {tab === 'desktop' && s.can_edit && <DesktopView serverId={s.id} />}
       {tab === 'screen' && s.can_edit && <ScreenView serverId={s.id} canLaunch={!!s.agent?.can_shell && !!s.agent?.can_admin} />}
