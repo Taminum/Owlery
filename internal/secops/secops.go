@@ -24,6 +24,7 @@ type Hub struct {
 	admins  map[string]*adminWait
 	updates map[string]*updateWait
 	shells  map[string]*shellWait
+	wols    map[string]*wolWait
 }
 
 type probeWait struct {
@@ -37,7 +38,7 @@ type link struct {
 }
 
 func New() *Hub {
-	return &Hub{conns: map[string]*link{}, probes: map[string]*probeWait{}, admins: map[string]*adminWait{}, updates: map[string]*updateWait{}}
+	return &Hub{conns: map[string]*link{}, probes: map[string]*probeWait{}, admins: map[string]*adminWait{}, updates: map[string]*updateWait{}, wols: map[string]*wolWait{}}
 }
 
 // Register makes an agent's connection available. The returned function removes it, and only it: a newer
@@ -294,4 +295,50 @@ func (h *Hub) AttachShell(agentID, id string, c *websocket.Conn) bool {
 	}
 	<-w.done
 	return true
+}
+
+type wolWait struct {
+	agent string
+	ch    chan secproto.WolResult
+}
+
+// Wol sends one Wake-on-LAN request to an agent and waits for its answer (or ctx). The ID is set here. Only the agent the
+// request was sent to can answer it.
+func (h *Hub) Wol(ctx context.Context, agentID string, req secproto.WolReq) (secproto.WolResult, error) {
+	req.Type, req.ID = "wol_req", uuid.NewString()
+	w := &wolWait{agent: agentID, ch: make(chan secproto.WolResult, 1)}
+	h.mu.Lock()
+	h.wols[req.ID] = w
+	h.mu.Unlock()
+	defer func() {
+		h.mu.Lock()
+		delete(h.wols, req.ID)
+		h.mu.Unlock()
+	}()
+	if err := h.Send(ctx, agentID, req); err != nil {
+		return secproto.WolResult{}, err
+	}
+	select {
+	case r := <-w.ch:
+		return r, nil
+	case <-ctx.Done():
+		return secproto.WolResult{}, ErrNoAnswer
+	}
+}
+
+// DeliverWol hands an agent's answer to whoever is waiting for it; one nobody asked for, or from a different agent than the one
+// asked, is dropped.
+func (h *Hub) DeliverWol(agentID string, r secproto.WolResult) bool {
+	h.mu.Lock()
+	w := h.wols[r.ID]
+	h.mu.Unlock()
+	if w == nil || w.agent != agentID {
+		return false
+	}
+	select {
+	case w.ch <- r:
+		return true
+	default:
+		return false
+	}
 }
