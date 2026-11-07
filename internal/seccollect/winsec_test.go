@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -205,5 +207,67 @@ func TestWinsecFeedsTheAddressBlocker(t *testing.T) {
 	}
 	if fw.rules[netip.MustParseAddr("198.51.100.8")] {
 		t.Error("an address that signed in must not be blocked")
+	}
+}
+
+// An agent that is stopped for a while (an update, a reboot) must not lose what the log says meanwhile: the place and the
+// counters are kept in a file, and the next start reads on from there.
+func TestWinsecKeepsItsPlaceAcrossARestart(t *testing.T) {
+	state := filepath.Join(t.TempDir(), "winsec.json")
+	s := &winScript{logs: map[string][]string{
+		secLog: {evXML(100, 100, "2026-11-03T10:00:00Z", map[string]string{"LogonType": "2", "IpAddress": "-"})},
+		defLog: {},
+	}, status: "none"}
+	first := NewWinsec(s)
+	first.SetStatePath(state)
+	first.Collect(context.Background())
+	s.logs[secLog] = append(s.logs[secLog], evXML(4625, 101, "2026-11-03T10:01:00Z", map[string]string{"LogonType": "3", "IpAddress": "198.51.100.7"}))
+	if got := first.Collect(context.Background()).Data.(secproto.Winsec); got.RemoteFailed != 1 {
+		t.Fatalf("before the stop: %+v", got)
+	}
+
+	// The agent is down; the log goes on, more than one batch of it.
+	rec := int64(102)
+	for i := 0; i < maxEventsPerRead+30; i++ {
+		s.logs[secLog] = append(s.logs[secLog], evXML(4625, rec, "2026-11-03T10:02:00Z", map[string]string{"LogonType": "3", "IpAddress": "203.0.113.9"}))
+		rec++
+	}
+	s.logs[secLog] = append(s.logs[secLog], evXML(4624, rec, "2026-11-03T10:03:00Z", map[string]string{"LogonType": "10", "IpAddress": "198.51.100.20", "TargetUserName": "Administrator"}))
+
+	second := NewWinsec(s)
+	second.SetStatePath(state)
+	got := second.Collect(context.Background()).Data.(secproto.Winsec)
+	if want := int64(1 + maxEventsPerRead + 30); got.RemoteFailed != want || got.RemoteOK != 1 {
+		t.Fatalf("after the restart: failed %d (want %d), ok %d", got.RemoteFailed, want, got.RemoteOK)
+	}
+	if len(got.Sources) != 2 || got.Sources[0].IP != "203.0.113.9" {
+		t.Errorf("sources: %+v", got.Sources)
+	}
+}
+
+func TestWinsecStartsFromNowWhenItsFileIsDamagedOrTheLogWasCleared(t *testing.T) {
+	dir := t.TempDir()
+	s := &winScript{logs: map[string][]string{
+		secLog: {evXML(5, 5, "2026-11-03T10:00:00Z", map[string]string{"LogonType": "3", "IpAddress": "198.51.100.7"})},
+		defLog: {},
+	}, status: "none"}
+
+	bad := filepath.Join(dir, "bad.json")
+	_ = os.WriteFile(bad, []byte("{not json"), 0o600)
+	w := NewWinsec(s)
+	w.SetStatePath(bad)
+	if got := w.Collect(context.Background()).Data.(secproto.Winsec); got.RemoteFailed != 0 {
+		t.Errorf("a damaged file must mean a fresh start, got %+v", got)
+	}
+
+	// The saved place is far ahead of a log that was cleared and began again at 1.
+	cleared := filepath.Join(dir, "cleared.json")
+	_ = os.WriteFile(cleared, []byte(`{"sec_n":9000,"failed":4}`), 0o600)
+	w = NewWinsec(s)
+	w.SetStatePath(cleared)
+	w.Collect(context.Background())
+	s.logs[secLog] = append(s.logs[secLog], evXML(4625, 6, "2026-11-03T10:05:00Z", map[string]string{"LogonType": "3", "IpAddress": "203.0.113.9"}))
+	if got := w.Collect(context.Background()).Data.(secproto.Winsec); got.RemoteFailed != 5 {
+		t.Errorf("after a cleared log the new events must be counted on top of the kept counters, got %d", got.RemoteFailed)
 	}
 }
