@@ -179,6 +179,7 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 	if runtime.GOOS == "windows" {
 		a.winsec = seccollect.NewWinsec(seccollect.ExecRunner{})
+		a.winsec.SetStatePath(winsecStatePath(cfg))
 		a.blocker = ipblock.New(ipblock.NewFirewall(), blockStatePath(cfg), ipblock.DefaultConfig(), cfg.AllowBlock)
 		a.winsec.SetBlocker(a.blocker)
 	}
@@ -877,6 +878,16 @@ func (a *agent) applyBlockCfg(ctx context.Context, m secproto.BlockCfg) {
 
 // blockStatePath is where the address blocker keeps what it blocked and how it is set up: next to the agent's other
 // files on Windows, in the state directory when one was given.
+func winsecStatePath(cfg Config) string {
+	if cfg.StateDir != "" {
+		return filepath.Join(cfg.StateDir, "winsec.json")
+	}
+	if pd := os.Getenv("ProgramData"); pd != "" {
+		return filepath.Join(pd, "Owlery", "winsec.json")
+	}
+	return ""
+}
+
 func blockStatePath(cfg Config) string {
 	if cfg.StateDir != "" {
 		return filepath.Join(cfg.StateDir, "ipblock.json")

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"net/netip"
+	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -34,14 +36,75 @@ type Winsec struct {
 	defAt                    time.Time
 	defOK                    bool // the Defender log exists on this machine
 	block                    *ipblock.Engine
+
+	statePath string
+	loaded    bool // the saved place was checked against the log once
+	dirty     bool
+}
+
+// winState is what the reader keeps on disk so that a restart (an update, a reboot) does not lose what happened meanwhile:
+// the place in each log and the counters. After a restart it reads on from there, and the numbers carry on as if nothing stopped.
+type winState struct {
+	SecN         int64                `json:"sec_n"`
+	DefN         int64                `json:"def_n"`
+	Failed       int64                `json:"failed"`
+	OK           int64                `json:"ok"`
+	ThreatsTotal int64                `json:"threats_total"`
+	Sources      map[string]int       `json:"sources,omitempty"`
+	RecentOK     []secproto.WinLogon  `json:"recent_ok,omitempty"`
+	Threats      []secproto.WinThreat `json:"threats,omitempty"`
+}
+
+// SetStatePath makes the reader remember its place in the file at path. Call it before the first Collect.
+func (w *Winsec) SetStatePath(path string) {
+	w.statePath = path
+	if path == "" {
+		return
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	var st winState
+	if json.Unmarshal(b, &st) != nil || st.SecN < 0 || st.DefN < 0 {
+		return // a damaged file is as good as none: start from "now" like a new install
+	}
+	w.secN, w.defN, w.failed, w.ok, w.threatsTotal = st.SecN, st.DefN, st.Failed, st.OK, st.ThreatsTotal
+	if st.Sources != nil {
+		w.sources = st.Sources
+	}
+	w.recentOK, w.threats = st.RecentOK, st.Threats
+}
+
+// save writes the state when it changed. It is small and replaced whole, so a crash leaves the old or the new one.
+func (w *Winsec) save() {
+	if w.statePath == "" || !w.dirty {
+		return
+	}
+	b, err := json.Marshal(winState{SecN: w.secN, DefN: w.defN, Failed: w.failed, OK: w.ok, ThreatsTotal: w.threatsTotal,
+		Sources: w.sources, RecentOK: w.recentOK, Threats: w.threats})
+	if err != nil {
+		return
+	}
+	if os.MkdirAll(filepath.Dir(w.statePath), 0o700) != nil {
+		return
+	}
+	tmp := w.statePath + ".tmp"
+	if os.WriteFile(tmp, b, 0o600) != nil {
+		return
+	}
+	if os.Rename(tmp, w.statePath) == nil {
+		w.dirty = false
+	}
 }
 
 const (
-	secLog           = "Security"
-	defLog           = "Microsoft-Windows-Windows Defender/Operational"
-	maxEventsPerRead = 500
-	defenderEvery    = 5 * time.Minute
-	maxSources       = 2000
+	secLog            = "Security"
+	defLog            = "Microsoft-Windows-Windows Defender/Operational"
+	maxEventsPerRead  = 500
+	maxBatchesPerPass = 20 // after a long stop the backlog is read in several batches, but a pass stays short
+	defenderEvery     = 5 * time.Minute
+	maxSources        = 2000
 )
 
 // SetBlocker gives the reader an address blocker to feed with what it sees in the log. Without one it only counts.
@@ -155,35 +218,55 @@ func (w *Winsec) readSecurity(ctx context.Context) (denied bool, failed bool) {
 			return winDenied(res), true
 		}
 		w.secN = n
+		w.loaded = true
+		w.dirty = true
 		return false, false
 	}
-	filter := "*[System[(EventID=4625 or EventID=4624) and EventRecordID>" + strconv.FormatInt(w.secN, 10) + "]]"
-	res, evs := w.query(ctx, secLog, filter, maxEventsPerRead)
-	if res.Err != nil || res.ExitCode != 0 {
-		return winDenied(res), true
-	}
-	for _, e := range evs {
-		if e.Rec > w.secN {
-			w.secN = e.Rec
-		}
-		w.count(ctx, e)
-	}
-	// Text came back but nothing could be read from it: step over it rather than meet the same batch every time.
-	if len(evs) == 0 && strings.TrimSpace(res.Stdout) != "" {
-		if hi := highestRecord(res.Stdout); hi > w.secN {
-			w.secN = hi
+	if !w.loaded {
+		// A place kept from before the restart: the log may have been cleared meanwhile, which numbers it from the start again.
+		w.loaded = true
+		if n, _ := w.newest(ctx, secLog); n > 0 && n < w.secN {
+			w.secN = n
+			w.dirty = true
 		}
 	}
-	// A cleared log starts numbering again; when nothing new came for a while, check that our place still exists.
-	if len(evs) == 0 {
-		if w.idle++; w.idle >= 20 {
-			w.idle = 0
-			if n, _ := w.newest(ctx, secLog); n > 0 && n < w.secN {
-				w.secN = n
+	for batch := 0; batch < maxBatchesPerPass; batch++ {
+		filter := "*[System[(EventID=4625 or EventID=4624) and EventRecordID>" + strconv.FormatInt(w.secN, 10) + "]]"
+		res, evs := w.query(ctx, secLog, filter, maxEventsPerRead)
+		if res.Err != nil || res.ExitCode != 0 {
+			return winDenied(res), true
+		}
+		for _, e := range evs {
+			if e.Rec > w.secN {
+				w.secN = e.Rec
+			}
+			w.count(ctx, e)
+		}
+		if len(evs) > 0 {
+			w.dirty = true
+		}
+		// Text came back but nothing could be read from it: step over it rather than meet the same batch every time.
+		if len(evs) == 0 && strings.TrimSpace(res.Stdout) != "" {
+			if hi := highestRecord(res.Stdout); hi > w.secN {
+				w.secN = hi
+				w.dirty = true
 			}
 		}
-	} else {
-		w.idle = 0
+		// A cleared log starts numbering again; when nothing new came for a while, check that our place still exists.
+		if len(evs) == 0 {
+			if w.idle++; w.idle >= 20 {
+				w.idle = 0
+				if n, _ := w.newest(ctx, secLog); n > 0 && n < w.secN {
+					w.secN = n
+					w.dirty = true
+				}
+			}
+		} else {
+			w.idle = 0
+		}
+		if len(evs) < maxEventsPerRead {
+			break
+		}
 	}
 	return false, false
 }
@@ -197,6 +280,7 @@ func (w *Winsec) count(ctx context.Context, e winEvent) {
 			return
 		}
 		w.failed++
+		w.dirty = true
 		w.sources[ip]++
 		if len(w.sources) > maxSources {
 			w.trimSources()
@@ -217,6 +301,7 @@ func (w *Winsec) count(ctx context.Context, e winEvent) {
 			return
 		}
 		w.ok++
+		w.dirty = true
 		w.recentOK = append([]secproto.WinLogon{{ID: e.Rec, User: user, IP: ip, At: e.At}}, w.recentOK...)
 		if len(w.recentOK) > secproto.MaxWinsecRecent {
 			w.recentOK = w.recentOK[:secproto.MaxWinsecRecent]
@@ -253,6 +338,7 @@ func (w *Winsec) readDefenderLog(ctx context.Context) {
 			return
 		}
 		w.defN = n
+		w.dirty = true
 		return
 	}
 	filter := "*[System[(EventID=1116 or EventID=1117) and EventRecordID>" + strconv.FormatInt(w.defN, 10) + "]]"
@@ -263,11 +349,13 @@ func (w *Winsec) readDefenderLog(ctx context.Context) {
 	for _, e := range evs {
 		if e.Rec > w.defN {
 			w.defN = e.Rec
+			w.dirty = true
 		}
 		if e.ID != 1116 { // 1116 is "found", 1117 is "acted"; one entry per find is enough
 			continue
 		}
 		w.threatsTotal++
+		w.dirty = true
 		w.threats = append([]secproto.WinThreat{{ID: e.Rec, Name: cut(e.Data["Threat Name"], 120), Severity: cut(e.Data["Severity Name"], 32), Path: cut(e.Data["Path"], 200), At: e.At}}, w.threats...)
 		if len(w.threats) > secproto.MaxWinsecRecent {
 			w.threats = w.threats[:secproto.MaxWinsecRecent]
@@ -332,6 +420,7 @@ func (w *Winsec) Collect(ctx context.Context) Snapshot {
 	if len(src) > secproto.MaxWinsecSources {
 		src = src[:secproto.MaxWinsecSources]
 	}
+	w.save()
 	snap.Status = secproto.StatusOK
 	snap.Data = secproto.Winsec{
 		RemoteFailed: w.failed, RemoteOK: w.ok, Sources: src, RecentOK: append([]secproto.WinLogon{}, w.recentOK...),
