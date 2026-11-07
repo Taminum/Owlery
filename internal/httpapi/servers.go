@@ -21,9 +21,12 @@ type serverOut struct {
 	Nodes      []store.ServerNode `json:"nodes"`
 	Open       int                `json:"alerts_open"`
 	Critical   int                `json:"alerts_critical"`
-	Alerts     []store.Alert      `json:"alerts,omitempty"` // only on the card: open and the last 30 days
-	ExternalIP string             `json:"external_ip"`      // where its agent connected from; empty until it has, or without an agent
-	Agent      *store.AgentBrief  `json:"agent"`            // its live agent: version, whether it is connected and whether it may be updated from the card
+	Alerts     []store.Alert      `json:"alerts,omitempty"`      // only on the card: open and the last 30 days
+	ExternalIP string             `json:"external_ip"`           // where its agent connected from; empty until it has, or without an agent
+	Wol        bool               `json:"wol,omitempty"`         // Wake-on-LAN is turned on for it
+	MaintUntil *time.Time         `json:"maint_until,omitempty"` // a maintenance window is open until then
+	MaintNote  string             `json:"maint_note,omitempty"`
+	Agent      *store.AgentBrief  `json:"agent"` // its live agent: version, whether it is connected and whether it may be updated from the card
 }
 
 // serverStatus is the one colour of a machine. No agent says nothing about it, so it is "unknown", not "ok".
@@ -71,6 +74,18 @@ func (s *Server) servers(r *http.Request, a auth.Actor, vs []store.VPS, withAler
 	if err != nil {
 		return nil, err
 	}
+	wols, err := s.Store.WolEnabled(r.Context(), ids)
+	if err != nil {
+		return nil, err
+	}
+	windows, err := s.Store.ActiveMaintenance(r.Context(), now)
+	if err != nil {
+		return nil, err
+	}
+	until := map[string]store.Maintenance{}
+	for _, m := range windows {
+		until[m.VPSID] = m
+	}
 	nodes, err := s.Store.ServerNodes(r.Context(), a.Scope(), ids)
 	if err != nil {
 		return nil, err
@@ -78,6 +93,11 @@ func (s *Server) servers(r *http.Request, a auth.Actor, vs []store.VPS, withAler
 	out := make([]serverOut, 0, len(vs))
 	for _, v := range vs {
 		o := serverOut{VPS: v, CanEdit: vpsCanEdit(a, v), Host: byID[v.ID], Nodes: nodes[v.ID], ExternalIP: ips[v.ID]}
+		o.Wol = wols[v.ID]
+		if m, ok := until[v.ID]; ok {
+			u := m.Until
+			o.MaintUntil, o.MaintNote = &u, m.Note
+		}
 		if b, ok := briefs[v.ID]; ok {
 			o.Agent = &b
 		}

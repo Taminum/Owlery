@@ -72,6 +72,15 @@ func TestWakeOnLanKeepsAnAddressOnlyWhileOnAndWakesThroughANeighbour(t *testing.
 	if st, b := put(w.owner, map[string]any{"enabled": true, "mac": "AA:BB:CC:DD:EE:02"}); st != 200 || !strings.Contains(string(b), `"mac":"aa:bb:cc:dd:ee:02"`) {
 		t.Fatalf("choose the other card: %d %s", st, b)
 	}
+	if _, b := w.owner.get("/api/v1/servers/" + target); !strings.Contains(string(b), `"wol":true`) {
+		t.Errorf("the card must say Wake-on-LAN is on: %s", b)
+	}
+	if st, _ := w.owner.do("PUT", "/api/v1/servers/"+target+"/maintenance", map[string]any{"hours": 1, "note": "update"}); st != 200 {
+		t.Fatal(st)
+	}
+	if _, b := w.owner.get("/api/v1/servers/" + target); !strings.Contains(string(b), `"maint_until"`) || !strings.Contains(string(b), `"maint_note":"update"`) {
+		t.Errorf("the card must show the open window: %s", b)
+	}
 	if st, b := wake(w.owner); st != 409 || errCode(b) != "already_on" {
 		t.Errorf("a machine that is on: %d %s", st, b)
 	}
