@@ -158,6 +158,20 @@ func Evaluate(ctx context.Context, st *store.Store, now time.Time) (opened, clos
 		}
 		conds = kept
 	}
+	// The same for a machine in a maintenance window: everything of that machine is quiet until the window ends.
+	quiet, err := st.QuietSubjects(ctx, now)
+	if err != nil {
+		return 0, 0, err
+	}
+	if len(quiet) > 0 {
+		kept := conds[:0]
+		for _, c := range conds {
+			if !quiet[store.SubjectBase(c.Subject)] {
+				kept = append(kept, c)
+			}
+		}
+		conds = kept
+	}
 	return st.ApplyConditions(ctx, Kinds, conds, now)
 }
 

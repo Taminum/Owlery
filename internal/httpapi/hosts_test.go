@@ -286,3 +286,56 @@ func TestAlertRulesAreSavedPerMachineAndAnAlertCanBePutOff(t *testing.T) {
 		t.Errorf("the snooze must be recorded: %v %v", snoozed, err)
 	}
 }
+
+func TestAMaintenanceWindowSilencesAMachineAndEndsOnItsOwn(t *testing.T) {
+	w := newAgentWorld(t)
+	ctx := context.Background()
+	gb := int64(1 << 30)
+	id := mkVPS(t, w, "home-pc", "203.0.113.61", w.work.ID)
+	other := mkVPS(t, w, "nas", "203.0.113.62", w.work.ID)
+	for _, vid := range []string{id, other} {
+		h := secproto.Host{Type: "host", At: time.Now(), OS: "Windows", CPUs: 4, MemTotal: 16 * gb, MemUsed: 4 * gb, CPUPct: 5, Load1: 0.1, UptimeSec: 3600,
+			Disks: []secproto.HostDisk{{Mount: "C:", FS: "NTFS", Total: 100 * gb, Used: 99 * gb}}}
+		if err := w.h.st.SaveHost(ctx, vid, h, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	open := func(vid string) int {
+		var n int
+		if err := w.h.st.Pool().QueryRow(ctx, `SELECT count(*) FROM alerts WHERE kind='host_disk' AND subject=$1 AND resolved_at IS NULL`, vid+":C:").Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	if _, _, err := alerts.Evaluate(ctx, w.h.st, time.Now().UTC()); err != nil || open(id) != 1 || open(other) != 1 {
+		t.Fatalf("both full disks must alert first: %v %d %d", err, open(id), open(other))
+	}
+	if st, b := w.viewer.do("PUT", "/api/v1/servers/"+id+"/maintenance", map[string]any{"hours": 2}); st != 403 {
+		t.Errorf("a viewer must not open a window: %d %s", st, b)
+	}
+	if st, b := w.owner.do("PUT", "/api/v1/servers/"+id+"/maintenance", map[string]any{"hours": 0}); st != 422 {
+		t.Errorf("hours out of range: %d %s", st, b)
+	}
+	if st, b := w.owner.do("PUT", "/api/v1/servers/"+id+"/maintenance", map[string]any{"hours": 2, "note": "update"}); st != 200 {
+		t.Fatalf("open the window: %d %s", st, b)
+	}
+	if _, _, err := alerts.Evaluate(ctx, w.h.st, time.Now().UTC()); err != nil || open(id) != 0 || open(other) != 1 {
+		t.Errorf("only the machine in the window goes quiet: %v %d %d", err, open(id), open(other))
+	}
+	if _, b := w.owner.get("/api/v1/servers/" + id + "/maintenance"); !strings.Contains(string(b), `"active":true`) {
+		t.Errorf("the window must show as active: %s", b)
+	}
+	// The window is over: the alert opens again by itself.
+	if _, err := w.h.st.Pool().Exec(ctx, `UPDATE maintenance_windows SET until = now() - interval '1 minute'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := alerts.Evaluate(ctx, w.h.st, time.Now().UTC()); err != nil || open(id) != 1 {
+		t.Errorf("after the window the alert returns: %v %d", err, open(id))
+	}
+	if st, b := w.owner.do("PUT", "/api/v1/servers/"+id+"/maintenance", map[string]any{"hours": 1}); st != 200 {
+		t.Fatalf("again: %d %s", st, b)
+	}
+	if st, b := w.owner.do("DELETE", "/api/v1/servers/"+id+"/maintenance", nil); st != 200 || !strings.Contains(string(b), `"active":false`) {
+		t.Errorf("end by hand: %d %s", st, b)
+	}
+}
