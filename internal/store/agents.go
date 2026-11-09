@@ -178,6 +178,7 @@ type Line struct {
 	Event  *xraylog.Event   // nil when the line did not parse (node agents)
 	Device *routerlog.Event // nil when the line did not parse (router agents)
 	FP     []byte           // sha256 of the raw line
+	Skip   bool             // a valid line that is deliberately not stored (an old connection a router lists again); not an error
 }
 
 type GapReport struct {
@@ -280,6 +281,9 @@ func (s *Store) CommitBatch(ctx context.Context, c Commit) (CommitResult, error)
 					t := l.Device.Seen
 					maxTS = &t
 				}
+				continue
+			}
+			if l.Skip {
 				continue
 			}
 			if l.Event == nil {

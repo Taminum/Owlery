@@ -429,9 +429,12 @@ func TestRouterAgentBatch(t *testing.T) {
 		now.Add(-time.Minute).Format(time.RFC3339), now.Format(time.RFC3339))
 	bad := `{"v":1,"id":"c2","t":"x"}`
 	xrayLine := sampleItems(t, 1, 1)[0].Line
-	write(t, c, ingestproto.Batch{Type: "batch", BatchID: "b1", Items: []ingestproto.Item{{Seq: 1, Line: good}, {Seq: 2, Line: bad}, {Seq: 3, Line: xrayLine}}})
+	// a connection a router lists again after days is neither stored nor an error
+	old := fmt.Sprintf(`{"v":1,"id":"c3","t":%q,"u":%q,"src":"192.168.1.176","h":"push.example.com","di":"1.2.3.5","dp":443,"p":"tcp","up":5,"dn":9}`,
+		now.Add(-72*time.Hour).Format(time.RFC3339), now.Format(time.RFC3339))
+	write(t, c, ingestproto.Batch{Type: "batch", BatchID: "b1", Items: []ingestproto.Item{{Seq: 1, Line: good}, {Seq: 2, Line: bad}, {Seq: 3, Line: xrayLine}, {Seq: 4, Line: old}}})
 	ack := read[ingestproto.Ack](t, c)
-	if ack.Accepted != 1 || ack.ParseErrors != 2 || ack.AckSeq != 3 {
+	if ack.Accepted != 1 || ack.ParseErrors != 2 || ack.AckSeq != 4 {
 		t.Fatalf("ack: %+v", ack)
 	}
 	q := store.AnalyticsQuery{PanelIDs: []string{e.panel.ID}, From: now.Add(-time.Hour), To: now.Add(time.Hour)}

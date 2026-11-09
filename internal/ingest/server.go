@@ -253,8 +253,11 @@ func (s *Server) batch(ctx context.Context, c *websocket.Conn, agent store.Agent
 		fp := sha256.Sum256([]byte(it.Line))
 		l := store.Line{Seq: it.Seq, FP: fp[:]}
 		if agent.Kind == "router" {
-			if ev, err := routerlog.Parse(it.Line, time.Now()); err == nil {
+			ev, err := routerlog.Parse(it.Line, time.Now())
+			if err == nil {
 				l.Device = &ev
+			} else if errors.Is(err, routerlog.ErrStale) {
+				l.Skip = true
 			}
 		} else if ev, err := xraylog.ParseLine(it.Line); err == nil {
 			l.Event = &ev

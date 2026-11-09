@@ -1,6 +1,7 @@
 package routerlog
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -48,5 +49,15 @@ func TestParseRejects(t *testing.T) {
 func TestIsRecord(t *testing.T) {
 	if !IsRecord(good) || IsRecord("2026/10/13 accepted") {
 		t.Fatal("IsRecord")
+	}
+}
+
+func TestAnOldConnectionIsStaleNotInvalidAndTheOthersStayInvalid(t *testing.T) {
+	old := strings.Replace(good, "2026-10-13T07:59:00Z", "2026-01-01T07:59:00Z", 1)
+	if _, err := Parse(old, now); !errors.Is(err, ErrStale) || !errors.Is(err, ErrInvalid) {
+		t.Fatalf("an old connection: %v", err)
+	}
+	if _, err := Parse(strings.Replace(good, "192.168.1.176", "8.8.8.8", 1), now); errors.Is(err, ErrStale) || err == nil {
+		t.Fatalf("a public device address must stay an error: %v", err)
 	}
 }
