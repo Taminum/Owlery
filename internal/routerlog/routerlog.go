@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/netip"
 	"strings"
 	"time"
@@ -49,6 +50,10 @@ type Event struct {
 
 var ErrInvalid = errors.New("routerlog: invalid record")
 
+// ErrStale marks a well-formed record whose connection began more than two days ago. A router lists its long-lived
+// connections again on every round, so these are not errors: they are skipped and not counted.
+var ErrStale = fmt.Errorf("%w: older than 48 hours", ErrInvalid)
+
 // IsRecord reports whether a spooled line is a router record rather than an Xray log line.
 func IsRecord(line string) bool { return strings.HasPrefix(line, "{") }
 
@@ -87,8 +92,11 @@ func Parse(line string, now time.Time) (Event, error) {
 	if r.Port < 0 || r.Port > 65535 || r.Up < 0 || r.Down < 0 {
 		return Event{}, ErrInvalid
 	}
-	if r.Start.IsZero() || r.Start.After(now.Add(10*time.Minute)) || r.Start.Before(now.Add(-48*time.Hour)) {
+	if r.Start.IsZero() || r.Start.After(now.Add(10*time.Minute)) {
 		return Event{}, ErrInvalid
+	}
+	if r.Start.Before(now.Add(-48 * time.Hour)) {
+		return Event{}, ErrStale
 	}
 	if r.Seen.IsZero() || r.Seen.Before(r.Start) || r.Seen.After(now.Add(10*time.Minute)) {
 		return Event{}, ErrInvalid
