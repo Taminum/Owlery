@@ -40,9 +40,25 @@ func (s *Server) warmOnce(ctx context.Context) {
 	if len(ids) == 0 {
 		return
 	}
+	// First the windows the pages ask for right now (ready already, unless the service has just started), then the ones
+	// they will move to in a few minutes (see pageEnd), counted before they get there.
+	type window struct {
+		rng string
+		d   time.Duration
+		to  time.Time
+	}
+	now := s.Now().UTC()
+	var windows []window
 	for _, rng := range []string{"24h", "7d"} {
-		d := presets[rng]
-		to := presetEnd(s.Now().UTC(), d)
+		windows = append(windows, window{rng, presets[rng], pageEnd(now, presets[rng])})
+	}
+	for _, rng := range []string{"24h", "7d"} {
+		if next := presetEnd(now, presets[rng]); !next.Equal(pageEnd(now, presets[rng])) {
+			windows = append(windows, window{rng, presets[rng], next})
+		}
+	}
+	for _, w := range windows {
+		rng, d, to := w.rng, w.d, w.to
 		q := store.AnalyticsQuery{PanelIDs: ids, From: to.Add(-d), To: to, Limit: 1}
 		if _, _, _, err := s.Store.Sites(ctx, q); err != nil {
 			s.Log.Warn("analytics warm-up failed", "range", rng, "err", err)
