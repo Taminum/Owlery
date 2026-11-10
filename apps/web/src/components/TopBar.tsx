@@ -122,12 +122,13 @@ export function TopBar({ filters, panels, update, onRefresh, loading, onMenu, sl
         <NodePicker filters={filters} panels={panels} update={update} />
 
         <button type="button" onClick={() => setMore((v) => !v)} aria-expanded={more} aria-label={t('filter.more')} title={t('filter.more')}
-          className={`${controlCls} ml-auto grid w-10 place-items-center px-0 sm:hidden ${more ? 'border-cyan text-fg' : ''}`}>
+          className={`${controlCls} ml-auto grid w-10 place-items-center px-0 sm:order-2 2xl:hidden ${more ? 'border-cyan text-fg' : ''}`}>
           <SlidersHorizontal size={16} aria-hidden />
         </button>
 
         {/* On a phone the period, time zone and refresh controls sit behind the button above, so the page is not
-            pushed down by five rows of filters. From the sm width up they are in the bar as before. */}
+            pushed down by five rows of filters. From the sm width up the period is in the bar, and the rarely touched ones
+            (time zone, auto refresh, smoothing) stay behind the button until the bar is wide enough to hold them in one row. */}
         <div className={`${more ? 'flex' : 'hidden'} w-full flex-wrap items-center gap-2.5 sm:contents`}>
 
         <div role="group" aria-label={t('filter.range')} className="flex h-10 items-center rounded-control border border-line bg-surface p-0.5">
@@ -139,7 +140,7 @@ export function TopBar({ filters, panels, update, onRefresh, loading, onMenu, sl
         </div>
         <CustomRange filters={filters} update={update} />
 
-        <div className="ml-auto flex flex-wrap items-center gap-2.5">
+        <div className={`${more ? 'flex' : 'hidden'} flex-wrap items-center gap-2.5 sm:order-3 sm:w-full sm:justify-end 2xl:ml-auto 2xl:flex 2xl:w-auto`}>
           <label className="sr-only" htmlFor="tz-select">{t('filter.tz')}</label>
           <select id="tz-select" value={filters.tz} onChange={(e) => update({ tz: e.target.value })} className={`${controlCls} min-w-[120px]`}>
             {TIMEZONES.map((z) => <option key={z} value={z}>{tzLabel(z)}</option>)}
