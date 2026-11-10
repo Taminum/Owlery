@@ -33,8 +33,8 @@ func memoized[T any](name string, q AnalyticsQuery, extra any, compute func() (T
 		return zero, err
 	}
 	memo.Lock()
-	if len(memo.m) > 24 {
-		memo.m = map[string]memoEntry{}
+	if len(memo.m) > 48 {
+		dropOldest(memo.m, 24, func(e memoEntry) time.Time { return e.at })
 	}
 	memo.m[key] = memoEntry{v: v, at: time.Now()}
 	memo.Unlock()
@@ -47,4 +47,20 @@ func SetAnalyticsCacheTTL(d time.Duration) time.Duration {
 	old := catCacheTTL
 	catCacheTTL = d
 	return old
+}
+
+// dropOldest removes the entries that were stored longest ago until keep are left. A full cache used to be emptied
+// whole, which threw away the costly week-long answers together with a minute-old one; the short ranges make a new key
+// every minute, so that happened all the time.
+func dropOldest[E any](m map[string]E, keep int, at func(E) time.Time) {
+	for len(m) > keep {
+		var oldest string
+		var when time.Time
+		for k, e := range m {
+			if t := at(e); oldest == "" || t.Before(when) {
+				oldest, when = k, t
+			}
+		}
+		delete(m, oldest)
+	}
 }

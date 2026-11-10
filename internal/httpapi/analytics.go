@@ -51,12 +51,17 @@ type aCoverage struct {
 	NodesWithAgent int `json:"nodes_with_agent"`
 }
 
-// presetEnd is where a preset range ends: now, rounded down (to a minute, to five for a day and more) so that the same
-// view asked again within that time is the same query and its cached answer is used instead of a recount.
+// presetEnd is where a preset range ends: now, rounded down so that the same view asked again within that time is the
+// same query and its cached answer is used instead of a recount. The longer the range, the coarser the step: a minute
+// for the short ones, a quarter of an hour for a day, an hour for a week and more. Counting a week of traffic reads
+// millions of records, and a week that is an hour old tells the same story as one that is five minutes old.
 func presetEnd(now time.Time, d time.Duration) time.Time {
 	step := time.Minute
-	if d >= 24*time.Hour {
-		step = 5 * time.Minute
+	switch {
+	case d >= 7*24*time.Hour:
+		step = time.Hour
+	case d >= 24*time.Hour:
+		step = 15 * time.Minute
 	}
 	return now.Truncate(step)
 }
@@ -73,8 +78,8 @@ func (s *Server) resolveScope(w http.ResponseWriter, r *http.Request, a auth.Act
 			s.writeErr(w, r, http.StatusBadRequest, "invalid_range", "unknown range preset")
 			return sc, false
 		}
-		// The end of a preset range is rounded down (a minute, or five for a day and more) so that the same view asked
-		// again within that time is the same query: its cached answer is used instead of a recount.
+		// The end of a preset range is rounded down (see presetEnd) so that the same view asked again within that time
+		// is the same query: its cached answer is used instead of a recount.
 		sc.to = presetEnd(now, d)
 		sc.from = sc.to.Add(-d)
 	} else {
