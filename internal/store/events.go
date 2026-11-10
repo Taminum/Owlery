@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 // EventsQuery selects connection events. Panel ids must already be authorised by the caller;
@@ -15,6 +16,7 @@ type EventsQuery struct {
 	From, To    time.Time
 	Granularity time.Duration
 	Top         int
+	Exact       bool // count from the events even where half-hour sums exist
 }
 
 type Bucket struct {
@@ -109,130 +111,53 @@ const eventScope = `e.panel_id = ANY($1::uuid[]) AND (cardinality($2::uuid[]) = 
 
 // EventsOverview aggregates the events in the window. Counts are accepted log lines
 // (connection_count); they say nothing about bytes.
+//
+// A window of several hours or more is answered from the half-hour sums (event_rollup) when they reach back far enough:
+// the page then reads a few thousand rows instead of every event of the day seven times over. Such a window starts on a
+// half-hour, so it may hold up to half an hour more than was asked. Short windows, and long ones the sums do not cover
+// yet, are counted from the events as before.
 func (s *Store) EventsOverview(ctx context.Context, q EventsQuery) (EventsOverview, error) {
 	var ov EventsOverview
+	if q.Top <= 0 {
+		q.Top = 5
+	}
+	if q.Granularity < time.Minute {
+		q.Granularity = time.Minute
+	}
+	rolled := false
+	if !q.Exact && q.To.Sub(q.From) >= rollupMinSpan && q.Granularity >= RollupStep {
+		var err error
+		if rolled, err = s.rollupCovers(ctx, q.From, q.To); err != nil {
+			return ov, err
+		}
+	}
+	var err error
+	if rolled {
+		err = s.overviewRolled(ctx, q, &ov)
+	} else {
+		err = s.overviewRaw(ctx, q, &ov)
+	}
+	if err != nil {
+		return ov, err
+	}
 	p, n := uuids(q.PanelIDs), uuids(q.NodeIDs)
-	top := q.Top
-	if top <= 0 {
-		top = 5
-	}
-	gran := q.Granularity
-	if gran < time.Minute {
-		gran = time.Minute
-	}
-	origin := q.From.Truncate(gran)
 
-	// timeline
-	rows, err := s.pool.Query(ctx, `SELECT date_bin(make_interval(secs => $5), e.ts, $6::timestamptz) AS b,
-			count(*) FILTER (WHERE e.protocol='tcp'), count(*) FILTER (WHERE e.protocol='udp')
-		FROM connection_events e WHERE `+eventScope+` GROUP BY b ORDER BY b`, p, n, q.From, q.To, gran.Seconds(), origin)
-	if err != nil {
+	// recent: the last hour first, which is a handful of rows; the whole window only when that hour was quiet
+	from := q.From
+	if hour := q.To.Add(-time.Hour); hour.After(from) {
+		from = hour
+	}
+	if ov.Recent, err = s.recentEvents(ctx, p, n, from, q.To); err != nil {
 		return ov, err
 	}
-	for rows.Next() {
-		var b Bucket
-		if err := rows.Scan(&b.TS, &b.TCP, &b.UDP); err != nil {
-			rows.Close()
+	if len(ov.Recent) < 10 && from.After(q.From) {
+		if ov.Recent, err = s.recentEvents(ctx, p, n, q.From, q.To); err != nil {
 			return ov, err
 		}
-		ov.Buckets = append(ov.Buckets, b)
-		ov.TCP += b.TCP
-		ov.UDP += b.UDP
 	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return ov, err
-	}
-
-	var last *time.Time
-	if err := s.pool.QueryRow(ctx, `SELECT count(DISTINCT e.destination_host), count(DISTINCT e.destination_ip), count(DISTINCT e.node_id), max(e.ts)
-		FROM connection_events e WHERE `+eventScope, p, n, q.From, q.To).Scan(&ov.UniqueHosts, &ov.UniqueIPs, &ov.NodesWithEvents, &last); err != nil {
-		return ov, err
-	}
-	ov.LastEventAt = last
-
-	top3 := func(expr, notNull string) ([]CountRow, error) {
-		rs, err := s.pool.Query(ctx, `SELECT `+expr+`::text AS k, count(*) FROM connection_events e WHERE `+eventScope+` AND `+notNull+`
-			GROUP BY k ORDER BY count(*) DESC, k LIMIT $5`, p, n, q.From, q.To, top)
-		if err != nil {
-			return nil, err
-		}
-		defer rs.Close()
-		var out []CountRow
-		for rs.Next() {
-			var r CountRow
-			if err := rs.Scan(&r.Key, &r.Count); err != nil {
-				return nil, err
-			}
-			r.Label = r.Key
-			out = append(out, r)
-		}
-		return out, rs.Err()
-	}
-	if ov.Hosts, err = top3(`e.destination_host`, `e.destination_host IS NOT NULL`); err != nil {
-		return ov, err
-	}
-	if ov.IPs, err = top3(`host(e.destination_ip)`, `e.destination_ip IS NOT NULL`); err != nil {
-		return ov, err
-	}
-	if ov.Ports, err = top3(`e.destination_port`, `TRUE`); err != nil {
-		return ov, err
-	}
-
-	// users: resolved through the panel's own user table, or kept as an unresolved raw id
-	urs, err := s.pool.Query(ctx, `SELECT e.panel_id, e.user_id, COALESCE(e.xray_email,''), e.internal, COALESCE(u.display_name,''), count(*)
-		FROM connection_events e LEFT JOIN users u ON u.id=e.user_id AND u.panel_id=e.panel_id
-		WHERE `+eventScope+` GROUP BY e.panel_id, e.user_id, e.xray_email, e.internal, u.display_name ORDER BY count(*) DESC LIMIT 12`, p, n, q.From, q.To)
-	if err != nil {
-		return ov, err
-	}
-	for urs.Next() {
-		var r CountRow
-		var pid uuid.UUID
-		var uid *uuid.UUID
-		var email, name string
-		if err := urs.Scan(&pid, &uid, &email, &r.Internal, &name, &r.Count); err != nil {
-			urs.Close()
-			return ov, err
-		}
-		r.PanelID = pid.String()
-		switch {
-		case r.Internal:
-			r.Key, r.Label = r.PanelID+"|system", ""
-		case uid != nil:
-			r.UserID, r.Key, r.Label = uid.String(), uid.String(), name
-		default: // the raw id is only a hint; the caller words it
-			r.Key, r.Label = r.PanelID+"|raw|"+email, email
-		}
-		ov.Users = append(ov.Users, r)
-	}
-	urs.Close()
-	if err := urs.Err(); err != nil {
-		return ov, err
-	}
-
-	// recent
-	rec, err := s.pool.Query(ctx, `SELECT e.ts, e.panel_id, nd.name, COALESCE(u.display_name,''), COALESCE(e.xray_email,''), e.internal, e.protocol,
-			COALESCE(e.destination_host,''), COALESCE(host(e.destination_ip),'')
-		FROM connection_events e JOIN nodes nd ON nd.id=e.node_id AND nd.panel_id=e.panel_id
-		LEFT JOIN users u ON u.id=e.user_id AND u.panel_id=e.panel_id
-		WHERE `+eventScope+` ORDER BY e.ts DESC, e.event_id LIMIT 10`, p, n, q.From, q.To)
-	if err != nil {
-		return ov, err
-	}
-	for rec.Next() {
-		var r RecentEvent
-		var pid uuid.UUID
-		if err := rec.Scan(&r.TS, &pid, &r.NodeName, &r.User, &r.Email, &r.Internal, &r.Protocol, &r.Host, &r.IP); err != nil {
-			rec.Close()
-			return ov, err
-		}
-		r.PanelID = pid.String()
-		ov.Recent = append(ov.Recent, r)
-	}
-	rec.Close()
-	if err := rec.Err(); err != nil {
-		return ov, err
+	if len(ov.Recent) > 0 {
+		t := ov.Recent[0].TS
+		ov.LastEventAt = &t
 	}
 
 	// reported gaps in the window
@@ -254,4 +179,130 @@ func (s *Store) EventsOverview(ctx context.Context, q EventsQuery) (EventsOvervi
 		ov.Gaps = append(ov.Gaps, g)
 	}
 	return ov, gs.Err()
+}
+
+func (s *Store) recentEvents(ctx context.Context, p, n []uuid.UUID, from, to time.Time) ([]RecentEvent, error) {
+	rec, err := s.pool.Query(ctx, `SELECT e.ts, e.panel_id, nd.name, COALESCE(u.display_name,''), COALESCE(e.xray_email,''), e.internal, e.protocol,
+			COALESCE(e.destination_host,''), COALESCE(host(e.destination_ip),'')
+		FROM connection_events e JOIN nodes nd ON nd.id=e.node_id AND nd.panel_id=e.panel_id
+		LEFT JOIN users u ON u.id=e.user_id AND u.panel_id=e.panel_id
+		WHERE `+eventScope+` ORDER BY e.ts DESC, e.event_id LIMIT 10`, p, n, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rec.Close()
+	var out []RecentEvent
+	for rec.Next() {
+		var r RecentEvent
+		var pid uuid.UUID
+		if err := rec.Scan(&r.TS, &pid, &r.NodeName, &r.User, &r.Email, &r.Internal, &r.Protocol, &r.Host, &r.IP); err != nil {
+			return nil, err
+		}
+		r.PanelID = pid.String()
+		out = append(out, r)
+	}
+	return out, rec.Err()
+}
+
+// overviewRaw counts the window from the events themselves.
+func (s *Store) overviewRaw(ctx context.Context, q EventsQuery, ov *EventsOverview) error {
+	p, n := uuids(q.PanelIDs), uuids(q.NodeIDs)
+	origin := q.From.Truncate(q.Granularity)
+
+	rows, err := s.pool.Query(ctx, `SELECT date_bin(make_interval(secs => $5), e.ts, $6::timestamptz) AS b,
+			count(*) FILTER (WHERE e.protocol='tcp'), count(*) FILTER (WHERE e.protocol='udp')
+		FROM connection_events e WHERE `+eventScope+` GROUP BY b ORDER BY b`, p, n, q.From, q.To, q.Granularity.Seconds(), origin)
+	if err != nil {
+		return err
+	}
+	if err := scanBuckets(rows, ov); err != nil {
+		return err
+	}
+
+	if err := s.pool.QueryRow(ctx, `SELECT count(DISTINCT e.destination_host), count(DISTINCT e.destination_ip), count(DISTINCT e.node_id)
+		FROM connection_events e WHERE `+eventScope, p, n, q.From, q.To).Scan(&ov.UniqueHosts, &ov.UniqueIPs, &ov.NodesWithEvents); err != nil {
+		return err
+	}
+
+	top := func(expr, notNull string) ([]CountRow, error) {
+		rs, err := s.pool.Query(ctx, `SELECT `+expr+`::text AS k, count(*) FROM connection_events e WHERE `+eventScope+` AND `+notNull+`
+			GROUP BY k ORDER BY count(*) DESC, k LIMIT $5`, p, n, q.From, q.To, q.Top)
+		if err != nil {
+			return nil, err
+		}
+		return scanCountRows(rs)
+	}
+	if ov.Hosts, err = top(`e.destination_host`, `e.destination_host IS NOT NULL`); err != nil {
+		return err
+	}
+	if ov.IPs, err = top(`host(e.destination_ip)`, `e.destination_ip IS NOT NULL`); err != nil {
+		return err
+	}
+	if ov.Ports, err = top(`e.destination_port`, `TRUE`); err != nil {
+		return err
+	}
+
+	// users: resolved through the panel's own user table, or kept as an unresolved raw id
+	urs, err := s.pool.Query(ctx, `SELECT e.panel_id, e.user_id, COALESCE(e.xray_email,''), e.internal, COALESCE(u.display_name,''), count(*)
+		FROM connection_events e LEFT JOIN users u ON u.id=e.user_id AND u.panel_id=e.panel_id
+		WHERE `+eventScope+` GROUP BY e.panel_id, e.user_id, e.xray_email, e.internal, u.display_name ORDER BY count(*) DESC LIMIT 12`, p, n, q.From, q.To)
+	if err != nil {
+		return err
+	}
+	ov.Users, err = scanUserRows(urs)
+	return err
+}
+
+func scanBuckets(rows pgx.Rows, ov *EventsOverview) error {
+	defer rows.Close()
+	for rows.Next() {
+		var b Bucket
+		if err := rows.Scan(&b.TS, &b.TCP, &b.UDP); err != nil {
+			return err
+		}
+		ov.Buckets = append(ov.Buckets, b)
+		ov.TCP += b.TCP
+		ov.UDP += b.UDP
+	}
+	return rows.Err()
+}
+
+func scanCountRows(rs pgx.Rows) ([]CountRow, error) {
+	defer rs.Close()
+	var out []CountRow
+	for rs.Next() {
+		var r CountRow
+		if err := rs.Scan(&r.Key, &r.Count); err != nil {
+			return nil, err
+		}
+		r.Label = r.Key
+		out = append(out, r)
+	}
+	return out, rs.Err()
+}
+
+// scanUserRows reads (panel, user id or null, logged id, internal, display name, count).
+func scanUserRows(rs pgx.Rows) ([]CountRow, error) {
+	defer rs.Close()
+	var out []CountRow
+	for rs.Next() {
+		var r CountRow
+		var pid uuid.UUID
+		var uid *uuid.UUID
+		var email, name string
+		if err := rs.Scan(&pid, &uid, &email, &r.Internal, &name, &r.Count); err != nil {
+			return nil, err
+		}
+		r.PanelID = pid.String()
+		switch {
+		case r.Internal:
+			r.Key, r.Label = r.PanelID+"|system", ""
+		case uid != nil:
+			r.UserID, r.Key, r.Label = uid.String(), uid.String(), name
+		default: // the raw id is only a hint; the caller words it
+			r.Key, r.Label = r.PanelID+"|raw|"+email, email
+		}
+		out = append(out, r)
+	}
+	return out, rs.Err()
 }
