@@ -96,6 +96,8 @@ table.w-full tbody tr:hover { background-color: rgb(255 255 255 / 0.03); }
 :root:not([data-density='roomy']) table.w-full td button { height: 24px; padding: 0 9px; font-size: 12px; border-radius: 9px; }
 :root:not([data-density='roomy']) table.w-full td select,
 :root:not([data-density='roomy']) table.w-full td input:not([type='checkbox']):not([type='radio']) { height: 26px; font-size: 12px; padding-top: 0; padding-bottom: 0; }
+:root:not([data-density='roomy']) table.w-full.dense th,
+:root:not([data-density='roomy']) table.w-full.dense td { padding-left: 6px; padding-right: 6px; }
 :root:not([data-density='roomy']) .card-bare { background: transparent; border: 0; padding: 0; border-radius: 0; }
 :root[data-density='roomy'] table.w-full th { padding: 8px; }
 :root[data-density='roomy'] table.w-full td { padding: 8px; }
