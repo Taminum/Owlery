@@ -106,12 +106,12 @@ export function RowMenu({ label, actions }: { label: string; actions: RowAction[
   const danger = shown.filter((a) => a.danger)
   const item = (a: RowAction) => (
     <button key={a.label} type="button" role="menuitem" onClick={() => { setOpen(false); a.onClick() }}
-      className={`block w-full rounded-[8px] px-2.5 py-1.5 text-left text-[13px] hover:bg-surface ${a.danger ? 'text-red' : 'text-fg'}`}>{a.label}</button>
+      className={`block !h-auto w-full whitespace-nowrap !rounded-[8px] !px-2.5 !py-1.5 text-left !text-[13px] hover:bg-surface ${a.danger ? 'text-red' : 'text-fg'}`}>{a.label}</button>
   )
   return (
     <div ref={ref} className="relative inline-block text-left">
       <button type="button" aria-haspopup="menu" aria-expanded={open} aria-controls={id} aria-label={`${t('row.actions')}: ${label}`} title={t('row.actions')} onClick={() => setOpen((o) => !o)}
-        className="grid h-6 w-6 place-items-center rounded-[8px] border border-line bg-elevated text-muted hover:border-cyan/60 hover:text-fg">
+        className="grid !h-6 w-6 place-items-center !rounded-[8px] border border-line bg-elevated !p-0 text-muted hover:border-cyan/60 hover:text-fg">
         <MoreHorizontal size={14} aria-hidden />
       </button>
       {open && (

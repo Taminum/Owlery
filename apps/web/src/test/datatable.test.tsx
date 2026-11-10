@@ -67,3 +67,33 @@ describe('shared controls', () => {
     expect(seen).toEqual(['1h'])
   })
 })
+
+describe('tabs of a page and the menu of a row', () => {
+  it('tabs mark the chosen one, show a badge, and report a click', async () => {
+    const { Tabs } = await import('../components/ui')
+    const seen: string[] = []
+    render(<Tabs label="Машина" value="a" onChange={(x) => seen.push(x)} tabs={[{ id: 'a', label: 'Обзор' }, { id: 'b', label: 'История', badge: 2 }]} />)
+    expect(screen.getByRole('tab', { name: 'Обзор' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: /История/ })).toHaveTextContent('2')
+    await userEvent.click(screen.getByRole('tab', { name: /История/ }))
+    expect(seen).toEqual(['b'])
+  })
+
+  it('a row menu lists what is not hidden, the dangerous last, closes after a choice, and is absent when empty', async () => {
+    const { RowMenu } = await import('../components/ui')
+    const done: string[] = []
+    const { rerender } = render(<RowMenu label="nas" actions={[
+      { label: 'Убрать', onClick: () => done.push('rm'), danger: true },
+      { label: 'Изменить', onClick: () => done.push('edit') },
+      { label: 'Скрытое', onClick: () => done.push('no'), hidden: true },
+    ]} />)
+    expect(screen.queryByRole('menu')).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Действия: nas' }))
+    expect(screen.getAllByRole('menuitem').map((x) => x.textContent)).toEqual(['Изменить', 'Убрать'])
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Изменить' }))
+    expect(done).toEqual(['edit'])
+    expect(screen.queryByRole('menu')).toBeNull()
+    rerender(<RowMenu label="nas" actions={[{ label: 'Скрытое', onClick: () => {}, hidden: true }]} />)
+    expect(screen.queryByRole('button', { name: 'Действия: nas' })).toBeNull()
+  })
+})

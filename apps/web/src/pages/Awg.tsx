@@ -7,7 +7,7 @@ import { useApp } from '../lib/context'
 import { formatAxisTime, formatBytes, formatDateTime } from '../lib/format'
 import { useLoad } from '../hooks/useLoad'
 import { useAuth } from '../lib/auth'
-import { Card, Chip } from '../components/ui'
+import { Card, Chip, RowMenu } from '../components/ui'
 import { PageHead } from '../components/Analyzer'
 import { Drawer } from '../components/Drawer'
 import { controlCls } from '../components/Popover'
@@ -167,10 +167,15 @@ export default function Awg() {
                     <td className="tnum px-2 py-2" title={p.total_since ? t('awg.sinceTip', { when: day(p.total_since) }) : undefined}><Pair down={p.total_download} up={p.total_upload} /></td>
                     {canForget && (
                       <td className="whitespace-nowrap px-2 py-2 text-right">
-                        {!p.gone && <button type="button" onClick={() => setRenaming(p)} className="mr-3 text-xs text-muted underline-offset-2 hover:text-cyan hover:underline" aria-label={`${t('awg.rename')}: ${p.label}`}>{t('awg.rename')}</button>}
-                        {!p.gone && in_.mode === 'managed' && <button type="button" onClick={() => setLimiting(p)} className="mr-3 text-xs text-muted underline-offset-2 hover:text-cyan hover:underline" aria-label={`${t('awgl.limits')}: ${p.label}`}>{t('awgl.limits')}</button>}
-                        {!p.gone && in_.mode === 'managed' && <button type="button" onClick={() => setRevoking(p)} className="text-xs text-muted underline-offset-2 hover:text-red hover:underline" aria-label={`${t('awg.revoke')}: ${p.label}`}>{t('awg.revoke')}</button>}
-                        {p.gone && <button type="button" onClick={() => void forget(p)} className="text-xs text-muted underline-offset-2 hover:text-red hover:underline" aria-label={`${t('awg.forget')}: ${p.label}`}>{t('awg.forget')}</button>}
+                        <div className="flex items-center justify-end gap-2">
+                          {!p.gone && in_.mode === 'managed' && <GhostButton size="s" onClick={() => setLimiting(p)} aria-label={`${t('awgl.limits')}: ${p.label}`}>{t('awgl.limits')}</GhostButton>}
+                          {!p.gone && in_.mode !== 'managed' && <GhostButton size="s" onClick={() => setRenaming(p)} aria-label={`${t('awg.rename')}: ${p.label}`}>{t('awg.rename')}</GhostButton>}
+                          <RowMenu label={p.label} actions={[
+                            { label: t('awg.rename'), onClick: () => setRenaming(p), hidden: p.gone || in_.mode !== 'managed' },
+                            { label: t('awg.revoke'), onClick: () => setRevoking(p), danger: true, hidden: p.gone || in_.mode !== 'managed' },
+                            { label: t('awg.forget'), onClick: () => void forget(p), danger: true, hidden: !p.gone },
+                          ]} />
+                        </div>
                       </td>
                     )}
                   </tr>

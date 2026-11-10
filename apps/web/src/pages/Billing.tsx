@@ -5,7 +5,7 @@ import { api } from '../lib/api'
 import { errorText } from '../lib/errors'
 import { useAuth } from '../lib/auth'
 import { useLoad } from '../hooks/useLoad'
-import { Card, Chip } from '../components/ui'
+import { Card, Chip, RowMenu } from '../components/ui'
 import { DangerButton, Field, GhostButton, Modal, PrimaryButton, inputCls } from '../components/Modal'
 import { PageHead, TableSkeleton } from '../components/Analyzer'
 
@@ -19,6 +19,11 @@ function daysUntil(due: string): number {
   const a = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
   const [y, m, d] = due.split('-').map(Number)
   return Math.round((Date.UTC(y, m - 1, d) - a) / 86_400_000)
+}
+
+/** Paid and not due soon: the row needs nothing from the person. Three days is when the reminder starts. */
+function paidAhead(b: { last_paid_on: string | null; next_due: string }): boolean {
+  return !!b.last_paid_on && (new Date(b.next_due + 'T00:00:00').getTime() - Date.now()) / 86_400_000 > 3
 }
 
 function dueChip(due: string) {
@@ -172,10 +177,15 @@ export default function Billing() {
                       <td className="whitespace-nowrap px-2 py-2"><span className="tnum mr-2">{b.next_due.split('-').reverse().join('.')}</span>{dueChip(b.next_due)}</td>
                       <td className="tnum whitespace-nowrap px-2 py-2 text-muted">{b.last_paid_on ? b.last_paid_on.split('-').reverse().join('.') : '—'}</td>
                       <td className="px-2 py-2">
-                        <div className="flex flex-wrap justify-end gap-2">
-                          <PrimaryButton onClick={() => void paid(b)} disabled={paying === b.id} title={t('bill.paid.hint')}>{t('bill.paid')}</PrimaryButton>
-                          <GhostButton onClick={() => setEditing(b)}>{t('bill.edit')}</GhostButton>
-                          <GhostButton onClick={() => setRemoving(b)}>{t('bill.delete')}</GhostButton>
+                        <div className="flex items-center justify-end gap-2">
+                          {paidAhead(b)
+                            ? <Chip tone="green">{t('bill.paidOn', { d: (b.last_paid_on ?? '').split('-').reverse().slice(0, 2).join('.') })}</Chip>
+                            : <GhostButton size="s" onClick={() => void paid(b)} disabled={paying === b.id} title={t('bill.paid.hint')} aria-label={`${t('bill.pay')}: ${b.name}`}>{t('bill.pay')}</GhostButton>}
+                          <RowMenu label={b.name} actions={[
+                            { label: t('bill.payAgain'), onClick: () => void paid(b), hidden: !paidAhead(b) },
+                            { label: t('bill.edit'), onClick: () => setEditing(b) },
+                            { label: t('bill.delete'), onClick: () => setRemoving(b), danger: true },
+                          ]} />
                         </div>
                       </td>
                     </tr>

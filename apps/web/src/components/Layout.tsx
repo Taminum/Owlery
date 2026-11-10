@@ -10,7 +10,7 @@ import type { AppContext } from '../lib/context'
 import Login from '../pages/Login'
 import { PAGE_WIDTH } from '../lib/layout'
 import { Sidebar } from './Sidebar'
-import { TopBar, pageUsesFilters } from './TopBar'
+import { TopBar, filterMode, pageUsesFilters } from './TopBar'
 import { FailureState, OverviewSkeleton } from './States'
 import { Mascot } from '../ember/Mascot'
 import { BusyBar } from './BusyBar'
@@ -51,7 +51,7 @@ function Shell() {
             <span><strong className="font-semibold tracking-wide">{t('demo.banner')}.</strong> {t('demo.bannerText')}</span>
           </div>
         )}
-        {ctx && <TopBar filters={ctx.filters} panels={ctx.panels} update={ctx.update} onRefresh={overview.refresh} loading={overview.loading} onMenu={() => setMenu(true)} slim={!pageUsesFilters(pathname)} />}
+        {ctx && <TopBar filters={ctx.filters} panels={ctx.panels} update={ctx.update} onRefresh={overview.refresh} loading={overview.loading} onMenu={() => setMenu(true)} slim={!pageUsesFilters(pathname)} panelOnly={filterMode(pathname) === 'panel'} />}
         <main id="main" className={`${PAGE_WIDTH} flex-1 py-5`}>
           {ctx ? <Outlet context={ctx} /> : panelsFailure ? <FailureState failure={panelsFailure} onRetry={retry} onReset={retry} /> : <OverviewSkeleton />}
         </main>

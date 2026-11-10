@@ -16,12 +16,21 @@ interface Props {
   onMenu: () => void
   /** Only the menu button and the account: for pages that do not read the filters. */
   slim?: boolean
+  /** The panel choice and nothing else: for pages that depend on the panel but on no period. */
+  panelOnly?: boolean
 }
 
-// Pages that read none of the filters (panel, nodes, period, refresh) get a bar without them.
-const NO_FILTERS = ['/servers', '/hosts', '/security', '/billing', '/intel', '/start']
+// What a page reads decides what its bar holds. Pages that read none of the filters (panel, nodes, period, refresh) get
+// a bar without them; pages whose content depends on the panel but not on a period get the panel alone, so a period
+// that changes nothing is not offered (AmneziaWG has its own, of another kind).
+const NO_FILTERS = ['/servers', '/hosts', '/security', '/billing', '/intel', '/start', '/channels', '/panels', '/settings']
+const PANEL_ONLY = ['/alerts', '/awg']
+const under = (list: string[], pathname: string) => list.some((p) => pathname === p || pathname.startsWith(p + '/'))
+export function filterMode(pathname: string): 'full' | 'panel' | 'none' {
+  return under(NO_FILTERS, pathname) ? 'none' : under(PANEL_ONLY, pathname) ? 'panel' : 'full'
+}
 export function pageUsesFilters(pathname: string): boolean {
-  return !NO_FILTERS.some((p) => pathname === p || pathname.startsWith(p + '/'))
+  return filterMode(pathname) !== 'none'
 }
 
 const tzLabel = (tz: string) => (tz === 'local' ? t('filter.tzLocal') : tz)
@@ -89,7 +98,7 @@ function CustomRange({ filters, update }: Pick<Props, 'filters' | 'update'>) {
   )
 }
 
-export function TopBar({ filters, panels, update, onRefresh, loading, onMenu, slim }: Props) {
+export function TopBar({ filters, panels, update, onRefresh, loading, onMenu, slim, panelOnly }: Props) {
   const smooth = useSmooth()
   const [more, setMore] = useState(false)
   const presets = RANGES.filter((r): r is Exclude<Range, 'custom'> => r !== 'custom')
@@ -119,17 +128,17 @@ export function TopBar({ filters, panels, update, onRefresh, loading, onMenu, sl
           {panels.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
 
-        <NodePicker filters={filters} panels={panels} update={update} />
+        {!panelOnly && <NodePicker filters={filters} panels={panels} update={update} />}
 
-        <button type="button" onClick={() => setMore((v) => !v)} aria-expanded={more} aria-label={t('filter.more')} title={t('filter.more')}
+        {!panelOnly && <button type="button" onClick={() => setMore((v) => !v)} aria-expanded={more} aria-label={t('filter.more')} title={t('filter.more')}
           className={`${controlCls} ml-auto grid w-10 place-items-center px-0 sm:order-2 2xl:hidden ${more ? 'border-cyan text-fg' : ''}`}>
           <SlidersHorizontal size={16} aria-hidden />
-        </button>
+        </button>}
 
         {/* On a phone the period, time zone and refresh controls sit behind the button above, so the page is not
             pushed down by five rows of filters. From the sm width up the period is in the bar, and the rarely touched ones
             (time zone, auto refresh, smoothing) stay behind the button until the bar is wide enough to hold them in one row. */}
-        <div className={`${more ? 'flex' : 'hidden'} w-full flex-wrap items-center gap-2.5 sm:contents`}>
+        {!panelOnly && <div className={`${more ? 'flex' : 'hidden'} w-full flex-wrap items-center gap-2.5 sm:contents`}>
 
         <div role="group" aria-label={t('filter.range')} className="flex h-10 items-center rounded-control border border-line bg-surface p-0.5">
           {presets.map((r) => (
@@ -157,7 +166,7 @@ export function TopBar({ filters, panels, update, onRefresh, loading, onMenu, sl
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} aria-hidden />
           </button>
         </div>
-        </div>
+        </div>}
       </div>
     </header>
   )
