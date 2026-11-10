@@ -113,7 +113,7 @@ describe('DNS Map', () => {
       ], more: false } }
     } })
     renderAt('/intel/dns/m1')
-    await userEvent.click(await screen.findByRole('tab', { name: 'Записи' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Записи' }))
     expect(await screen.findByText('lag.example.com')).toBeInTheDocument()
     expect(screen.getAllByText('подтверждено').length).toBeGreaterThan(0)
     expect(screen.getAllByText('не подтверждено', { selector: 'span' })).toHaveLength(2)
@@ -134,7 +134,7 @@ describe('DNS Map', () => {
       if (r.path === '/api/v1/security/vps-by-address') return { status: 200, body: { items: { '93.184.216.34': { vps_id: 'v1', name: 'Helsinki' } } } }
     } })
     renderAt('/intel/dns/m1')
-    await userEvent.click(await screen.findByRole('tab', { name: 'Записи' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Записи' }))
     const link = await screen.findByRole('link', { name: /Helsinki/ })
     expect(link).toHaveAttribute('href', '/security/v1')
     expect(screen.getAllByRole('link', { name: /Сервер в/ })).toHaveLength(1)
@@ -151,7 +151,7 @@ describe('DNS Map', () => {
       ] } }
     } })
     renderAt('/intel/dns/m1')
-    await userEvent.click(await screen.findByRole('tab', { name: 'История' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'История' }))
     expect(await screen.findByText('почтовые серверы (MX)', { selector: 'span' })).toBeInTheDocument()
     expect(screen.getByText(/20 mx\.other\.org/)).toBeInTheDocument()
     expect(screen.getByText(/часто меняется/)).toBeInTheDocument()
@@ -172,7 +172,7 @@ describe('DNS Map', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Проверить сейчас' }))
     expect(await screen.findByText(/Проверка запрошена/)).toBeInTheDocument()
     expect(api.find('POST', '/api/v1/intel/dns/maps/m1/refresh')).toHaveLength(1)
-    await userEvent.click(screen.getByRole('tab', { name: 'Проверки' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Проверки' }))
     expect(await screen.findByText('ns1.example.net')).toBeInTheDocument()
     expect(screen.getByText('203.0.113.53')).toBeInTheDocument()
     expect(screen.getByText(/адрес не публичный, не опрашивался/)).toBeInTheDocument()

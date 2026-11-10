@@ -1,14 +1,16 @@
-import { pageUsesFilters } from '../components/TopBar'
+import { pageUsesFilters, filterMode } from '../components/TopBar'
 import { loadDetail } from '../components/HostView'
 
 describe('Верхняя полоса и нагрузка', () => {
   it('hides the filters on pages that do not read them', () => {
-    for (const p of ['/servers', '/servers/abc', '/hosts', '/security', '/security/v1', '/billing', '/intel', '/start']) {
+    for (const p of ['/servers', '/servers/abc', '/hosts', '/security', '/security/v1', '/billing', '/intel', '/start', '/channels', '/panels', '/settings']) {
       expect(pageUsesFilters(p), p).toBe(false)
     }
-    for (const p of ['/', '/vpn', '/alerts', '/users', '/panels', '/traffic', '/settings', '/serversx']) {
+    for (const p of ['/', '/vpn', '/alerts', '/users', '/traffic', '/live', '/awg', '/serversx']) {
       expect(pageUsesFilters(p), p).toBe(true)
     }
+    // a page that depends on the panel but on no period is offered the panel alone
+    expect(['/alerts', '/awg', '/', '/sites', '/live'].map(filterMode)).toEqual(['panel', 'panel', 'full', 'full', 'full'])
   })
 
   it('says nothing about load on Windows and names the cores on Linux', () => {

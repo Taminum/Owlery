@@ -7,7 +7,7 @@ import { errorText } from '../lib/errors'
 import { formatDateTime } from '../lib/format'
 import { useLoad } from '../hooks/useLoad'
 import type { DnsChange, DnsCoverage, DnsGraph as GraphData, DnsGraphNode, DnsMap, DnsRecord, DnsRun } from '../lib/types'
-import { Card, Chip } from '../components/ui'
+import { Card, Chip, Segmented } from '../components/ui'
 import { PageHead, TableSkeleton } from '../components/Analyzer'
 import { DnsGraph } from '../components/DnsGraph'
 import { DangerButton, Field, GhostButton, Modal, PrimaryButton, inputCls } from '../components/Modal'
@@ -193,12 +193,7 @@ export function DnsMapDetail() {
         {!m.enabled && ` · ${t('dns.disabled')}`}
       </p>
       <Coverage m={m} />
-      <div role="tablist" aria-label={m.display} className="flex flex-wrap gap-2">
-        {TABS.map((x) => (
-          <button key={x} role="tab" type="button" aria-selected={tab === x} onClick={() => setTab(x)}
-            className={`h-8 rounded-control border px-3 text-[13px] ${tab === x ? 'border-cyan bg-elevated text-fg' : 'border-line text-muted hover:text-fg'}`}>{t(`dns.tab.${x}` as MsgKey)}</button>
-        ))}
-      </div>
+      <Segmented label={m.display} value={tab} onChange={setTab} options={TABS.map((x) => ({ value: x, label: t(`dns.tab.${x}` as MsgKey) }))} />
       {tab === 'map' && <MapTab id={id} rk={rk} finished={!!m.last_run_at} />}
       {tab === 'records' && <RecordsTab id={id} rk={rk} />}
       {tab === 'history' && <HistoryTab id={id} rk={rk} />}

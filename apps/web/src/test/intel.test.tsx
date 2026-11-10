@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from '../lib/auth'
@@ -43,7 +43,7 @@ describe('network intelligence', () => {
     expect(screen.getByText(/rdap: Не ответил вовремя/)).toBeInTheDocument() // a failed source is shown, not hidden
     expect(screen.getByText('Владелец диапазона')).toBeInTheDocument()
     expect(screen.getByText(/а не сайт/)).toBeInTheDocument()
-    expect(screen.getAllByRole('tab').map((x) => x.textContent)).toEqual(['Обзор', 'DNS', 'Поддомены', 'Ping', 'Трассировка', 'Порты', 'TLS', 'HTTP'])
+    expect(within(screen.getAllByRole('group', { name: 'Сетевая разведка' }).at(-1)!).getAllByRole('button').map((x) => x.textContent)).toEqual(['Обзор', 'DNS', 'Поддомены', 'Ping', 'Трассировка', 'Порты', 'TLS', 'HTTP'])
   })
 
   it('runs active checks only when asked, and shows a refusal for a non-public address as a message', async () => {
@@ -55,7 +55,7 @@ describe('network intelligence', () => {
       return undefined
     } })
     renderIntel('/intel?target=8.8.8.8')
-    await userEvent.click(await screen.findByRole('tab', { name: 'Ping' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Ping' }))
     expect(calls.some((c) => c.path === '/api/v1/intel/ping')).toBe(false) // nothing is sent until the button is pressed
     await userEvent.click(screen.getByRole('button', { name: 'Запустить' }))
     await waitFor(() => expect(screen.getAllByText(/Адрес не публичный/).length).toBeGreaterThan(0))
@@ -75,12 +75,12 @@ describe('network intelligence', () => {
       return undefined
     } })
     renderIntel('/intel?target=8.8.8.8')
-    await userEvent.click(await screen.findByRole('tab', { name: 'Трассировка' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Трассировка' }))
     await userEvent.click(screen.getByRole('button', { name: 'Запустить' }))
     expect(await screen.findByText('192.168.1.1')).toBeInTheDocument()
     expect(screen.getByText('нет ответа')).toBeInTheDocument()
     expect(screen.getByText(/Это маршрут от сервера Owlery/)).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('tab', { name: 'TLS' }))
+    await userEvent.click(screen.getByRole('button', { name: 'TLS' }))
     await userEvent.click(screen.getByRole('button', { name: 'Запустить' }))
     expect(await screen.findByText(/Сертификат не прошёл проверку: выдан неизвестным центром/)).toBeInTheDocument()
     expect(screen.getByText(/осталось дней: 79/)).toBeInTheDocument()

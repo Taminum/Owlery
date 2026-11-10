@@ -472,6 +472,7 @@ export const m1 = {
   'al.since': 'С',
   'al.history': 'История',
   'tbl.empty': 'Здесь пока пусто.',
+  'row.actions': 'Действия',
   'an.source': 'Источник',
   'an.count': 'число соединений',
   'table.none': 'За этот период ничего нет.',

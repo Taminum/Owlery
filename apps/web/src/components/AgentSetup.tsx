@@ -6,7 +6,7 @@ import { isNewer } from '../lib/semver'
 import { formatDateTime } from '../lib/format'
 import { useLoad } from '../hooks/useLoad'
 import type { SecAgent } from '../lib/types'
-import { Card, Chip } from './ui'
+import { Card, Chip, Segmented } from './ui'
 import { DangerButton, GhostButton, Modal, PrimaryButton } from './Modal'
 
 // The permissions a machine gives Owlery, by the capability its agent announces. They are switched on the machine
@@ -144,12 +144,7 @@ export function AgentSetupDialog({ mode, token, initial, initialOS, onClose }: {
   return (
     <Modal title={t(mode === 'install' ? 'sec.onb.title' : 'agent.update.title')} onClose={onClose} wide>
       <div className="space-y-3 text-[13px]">
-        <div role="tablist" aria-label={t('sec.onb.os')} className="flex gap-2">
-          {(['linux', 'windows'] as const).map((x) => (
-            <button key={x} role="tab" type="button" aria-selected={os === x} onClick={() => setOS(x)}
-              className={`h-8 rounded-control border px-3 text-[13px] ${os === x ? 'border-cyan bg-elevated text-fg' : 'border-line text-muted hover:text-fg'}`}>{x === 'linux' ? 'Linux' : 'Windows'}</button>
-          ))}
-        </div>
+        <Segmented label={t('sec.onb.os')} value={os} onChange={setOS} options={[{ value: 'linux' as const, label: 'Linux' }, { value: 'windows' as const, label: 'Windows' }]} />
         <div className="grid gap-3 sm:grid-cols-2">
           <Check on={o.shell} set={set('shell')} label="sec.onb.shell" hint="sec.onb.shellHint" />
           <Check on={o.web} set={set('web')} label="sec.onb.web" hint="sec.onb.webHint" />

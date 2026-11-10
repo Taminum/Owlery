@@ -6,7 +6,7 @@ import { api } from '../lib/api'
 import { formatBytes, formatDateTime, formatRate } from '../lib/format'
 import { useLoad } from '../hooks/useLoad'
 import type { ServerAlert } from '../lib/types'
-import { Card } from '../components/ui'
+import { Card, Tabs } from '../components/ui'
 import { PageHead, TableSkeleton } from '../components/Analyzer'
 import { GhostButton } from '../components/Modal'
 import { HardwareSection } from '../components/HardwareView'
@@ -151,14 +151,8 @@ export default function ServerCard() {
 
       {s.maint_until && <MaintenanceBanner until={s.maint_until} note={s.maint_note} canEdit={s.can_edit} serverId={s.id} onChange={q.reload} />}
 
-      <div role="tablist" aria-label={s.name} className="flex flex-wrap gap-2">
-        {TABS.filter((x) => ((x !== 'terminal' && x !== 'desktop' && x !== 'screen' && x !== 'manage' && x !== 'services') || s.can_edit) && (x !== 'protect' || isWindows) && (x !== 'docker' || !!s.docker) && (x !== 'alerts' || s.host?.has_data)).map((x) => (
-          <button key={x} role="tab" type="button" aria-selected={tab === x} onClick={() => setTab(x)}
-            className={`h-8 rounded-control border px-3 text-[13px] ${tab === x ? 'border-cyan bg-elevated text-fg' : 'border-line text-muted hover:text-fg'}`}>
-            {t((x === 'network' && s.nodes.length === 0 ? 'srv.tab.net' : `srv.tab.${x}`) as MsgKey)}{x === 'history' && open.length > 0 && <span className="ml-1.5 text-amber">{open.length}</span>}
-          </button>
-        ))}
-      </div>
+      <Tabs label={s.name} value={tab} onChange={setTab}
+        tabs={TABS.filter((x) => ((x !== 'terminal' && x !== 'desktop' && x !== 'screen' && x !== 'manage' && x !== 'services') || s.can_edit) && (x !== 'protect' || isWindows) && (x !== 'docker' || !!s.docker) && (x !== 'alerts' || s.host?.has_data)).map((x) => ({ id: x, label: t((x === 'network' && s.nodes.length === 0 ? 'srv.tab.net' : `srv.tab.${x}`) as MsgKey), badge: x === 'history' && open.length > 0 ? open.length : undefined }))} />
 
       {tab === 'overview' && (
         <div className="space-y-5">

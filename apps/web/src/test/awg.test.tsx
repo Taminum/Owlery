@@ -101,8 +101,9 @@ describe('AmneziaWG page', () => {
     } })
     renderAwg()
     await screen.findByText('old-phone')
-    expect(screen.getAllByRole('button', { name: /Убрать/ })).toHaveLength(1) // not offered for a device that is still on the server
-    await userEvent.click(screen.getByRole('button', { name: 'Убрать: old-phone' }))
+    expect(screen.getAllByRole('button', { name: /^Действия: / })).toHaveLength(1) // a device that is still on the server has nothing to remove
+    await userEvent.click(screen.getByRole('button', { name: 'Действия: old-phone' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Убрать' }))
     expect(calls.some((c) => c.method === 'DELETE' && c.path === '/api/v1/awg/peers/g1')).toBe(true)
   })
 })
@@ -115,8 +116,15 @@ describe('AmneziaWG device management', () => {
     renderAwg()
     await screen.findByText('amnezia-awg2 · awg0')
     expect(screen.getAllByRole('button', { name: 'Добавить устройство' })).toHaveLength(1) // not for the read-only server
-    expect(screen.getAllByRole('button', { name: /^Отозвать: / }).length).toBe(1) // not for the gone device, not on the read-only server
-    expect(screen.getAllByRole('button', { name: /^Переименовать: / }).length).toBeGreaterThanOrEqual(2)
+    // one visible button a row: limits on the managed server, renaming on the read-only one; the rest is behind "..."
+    expect(screen.getAllByRole('button', { name: /^Лимиты: / })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: /^Переименовать: / }).length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByRole('button', { name: /^Действия: / })).toHaveLength(2) // the managed device and the gone one; nothing on the read-only server
+    await userEvent.click(screen.getByRole('button', { name: 'Действия: RouterOne' }))
+    expect(screen.getAllByRole('menuitem').map((x) => x.textContent)).toEqual(['Переименовать', 'Отозвать'])
+    await userEvent.keyboard('{Escape}')
+    await userEvent.click(screen.getByRole('button', { name: 'Действия: old' }))
+    expect(screen.getAllByRole('menuitem').map((x) => x.textContent)).toEqual(['Убрать']) // a gone device cannot be revoked
   })
 
   it('shows the new device configuration once, with a warning, and sends only a valid name', async () => {
@@ -154,7 +162,8 @@ describe('AmneziaWG device management', () => {
       return undefined
     } })
     renderAwg()
-    await userEvent.click(await screen.findByRole('button', { name: 'Отозвать: RouterOne' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Действия: RouterOne' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Отозвать' }))
     expect(screen.getByText(/перестанет подключаться/)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Отозвать' }))
     expect(await screen.findByText(/занят другим изменением/)).toBeInTheDocument()

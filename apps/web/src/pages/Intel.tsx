@@ -5,7 +5,7 @@ import { t, type MsgKey } from '../i18n'
 import { api } from '../lib/api'
 import { formatInt } from '../lib/format'
 import { useLoad } from '../hooks/useLoad'
-import { Card, Chip } from '../components/ui'
+import { Card, Chip, Segmented } from '../components/ui'
 import { PageHead } from '../components/Analyzer'
 import { GhostButton, PrimaryButton, inputCls } from '../components/Modal'
 
@@ -152,12 +152,7 @@ function Panels({ target, kind }: { target: string; kind: string }) {
   const cur = allowed.includes(tab) ? tab : 'overview'
   return (
     <Card>
-      <div role="tablist" aria-label={t('intel.title')} className="mb-4 flex flex-wrap gap-2">
-        {allowed.map((x) => (
-          <button key={x} role="tab" type="button" aria-selected={cur === x} onClick={() => setTab(x)}
-            className={`h-8 rounded-control border px-3 text-[13px] ${cur === x ? 'border-cyan bg-elevated text-fg' : 'border-line text-muted hover:text-fg'}`}>{t(`intel.tab.${x}` as MsgKey)}</button>
-        ))}
-      </div>
+      <div className="mb-4"><Segmented label={t('intel.title')} value={cur} onChange={setTab} options={allowed.map((x) => ({ value: x, label: t(`intel.tab.${x}` as MsgKey) }))} /></div>
       {cur === 'overview' && <Overview target={target} nonce={nonce} bump={() => setNonce((n) => n + 1)} isCidr={isCidr} isDomain={isDomain} />}
       {cur === 'dns' && <DNSTab target={target} />}
       {cur === 'subdomains' && <SubTab target={target} />}

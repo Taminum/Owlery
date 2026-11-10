@@ -10,7 +10,7 @@ import { useLoad } from '../hooks/useLoad'
 import { errorText } from '../lib/errors'
 import { formatDateTime } from '../lib/format'
 import type { AccountRow, AuditRow, Membership, Role, RulesResponse } from '../lib/types'
-import { Card, Chip } from '../components/ui'
+import { Card, Chip, Tabs } from '../components/ui'
 import AutoClassify from './AutoClassify'
 import { Field, GhostButton, Modal, PrimaryButton, inputCls } from '../components/Modal'
 import { NotifyTab } from '../components/NotifyTab'
@@ -39,14 +39,7 @@ export default function Settings() {
   return (
     <div className="space-y-5">
       <h1 className="text-[22px] font-semibold leading-8">{t('settings.title')}</h1>
-      <div role="tablist" aria-label={t('settings.title')} className="flex flex-wrap gap-1 border-b border-line">
-        {tabs.filter((x) => x.show).map((x) => (
-          <button key={x.id} role="tab" type="button" id={`tab-${x.id}`} aria-selected={tab === x.id} aria-controls={`panel-${x.id}`} onClick={() => setTab(x.id)}
-            className={`-mb-px border-b-2 px-3.5 py-2.5 text-[14px] ${tab === x.id ? 'border-cyan font-medium text-fg' : 'border-transparent text-muted hover:text-fg'}`}>
-            {t(x.label)}
-          </button>
-        ))}
-      </div>
+      <Tabs label={t('settings.title')} value={tab} tabs={tabs.filter((x) => x.show).map((x) => ({ id: x.id, label: t(x.label) }))} onChange={setTab} controls />
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
         {tab === 'profile' && <Profile />}
         {tab === 'accounts' && owner && <Accounts />}
