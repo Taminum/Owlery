@@ -12,6 +12,8 @@ export type Column<T> = {
   /** The first click puts the largest on top: for dates and counts, where the newest or the biggest is what one looks for. */
   descFirst?: boolean
   align?: 'right'
+  /** A note shown when the pointer rests on the header: what the figures in the column are and are not. */
+  hint?: string
   /** Extra classes for the cells of this column (text-muted, whitespace-nowrap and the like). */
   className?: string
 }
@@ -30,7 +32,7 @@ function compare(a: string | number | null | undefined, b: string | number | nul
  * table needs. A header with a sort value sorts on click (again to turn it round), numbers sit on the right in figures
  * of one width, and a long list shows a page at a time with a button for more instead of one endless sheet.
  */
-export function DataTable<T>({ caption, columns, rows, rowKey, initialSort, pageSize = 50, empty }: {
+export function DataTable<T>({ caption, columns, rows, rowKey, initialSort, pageSize = 50, empty, rowClass }: {
   caption: string
   columns: Column<T>[]
   rows: T[]
@@ -38,6 +40,8 @@ export function DataTable<T>({ caption, columns, rows, rowKey, initialSort, page
   initialSort?: SortState
   pageSize?: number
   empty?: ReactNode
+  /** Extra classes of a row, e.g. the highlight of the selected one. */
+  rowClass?: (row: T) => string
 }) {
   const [sort, setSort] = useState<SortState | null>(initialSort ?? null)
   const [shown, setShown] = useState(pageSize)
@@ -75,7 +79,7 @@ export function DataTable<T>({ caption, columns, rows, rowKey, initialSort, page
                 const active = sort?.key === c.key
                 const right = c.align === 'right'
                 return (
-                  <th key={c.key} scope="col" aria-sort={c.sort ? (active ? (sort.desc ? 'descending' : 'ascending') : 'none') : undefined} className={`whitespace-nowrap ${right ? '!text-right' : ''}`}>
+                  <th key={c.key} scope="col" title={c.hint} aria-sort={c.sort ? (active ? (sort.desc ? 'descending' : 'ascending') : 'none') : undefined} className={`whitespace-nowrap ${right ? '!text-right' : ''}`}>
                     {c.sort ? (
                       <button type="button" onClick={() => toggle(c)} className={`inline-flex items-center gap-1 hover:text-fg ${active ? 'text-fg' : ''}`}>
                         {c.title}
@@ -89,7 +93,7 @@ export function DataTable<T>({ caption, columns, rows, rowKey, initialSort, page
           </thead>
           <tbody>
             {page.map((row) => (
-              <tr key={rowKey(row)}>
+              <tr key={rowKey(row)} className={rowClass?.(row)}>
                 {columns.map((c) => <td key={c.key} className={`${c.align === 'right' ? 'tnum text-right' : ''} ${c.className ?? ''}`}>{c.cell(row)}</td>)}
               </tr>
             ))}

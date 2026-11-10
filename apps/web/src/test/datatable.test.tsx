@@ -97,3 +97,15 @@ describe('tabs of a page and the menu of a row', () => {
     expect(screen.queryByRole('button', { name: 'Действия: nas' })).toBeNull()
   })
 })
+
+describe('the table of a column with a hint', () => {
+  it('puts the hint on the header', () => {
+    render(<DataTable caption="Список" rows={[{ id: '1', name: 'a', size: 1 }]} rowKey={(r) => r.id} columns={[{ key: 'n', title: 'Имя', hint: 'Что это за цифры', cell: (r) => r.name }]} />)
+    expect(screen.getByRole('columnheader', { name: 'Имя' })).toHaveAttribute('title', 'Что это за цифры')
+  })
+  it('marks a row the caller asks to mark', () => {
+    render(<DataTable caption="Список" rows={[{ id: '1', name: 'a', size: 1 }, { id: '2', name: 'b', size: 2 }]} rowKey={(r) => r.id} rowClass={(r) => (r.id === '2' ? 'bg-elevated' : '')} columns={[{ key: 'n', title: 'Имя', cell: (r) => r.name }]} />)
+    expect(screen.getByRole('cell', { name: 'b' }).closest('tr')).toHaveClass('bg-elevated')
+    expect(screen.getByRole('cell', { name: 'a' }).closest('tr')).not.toHaveClass('bg-elevated')
+  })
+})

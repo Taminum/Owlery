@@ -1,3 +1,4 @@
+import { DataTable } from '../components/DataTable'
 import { useState } from 'react'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { t } from '../i18n'
@@ -85,40 +86,22 @@ export default function Devices() {
       {data?.meta.state === 'no_data' && <NoDataPanel meta={data.meta} />}
       {data && data.meta.state === 'ok' && (
         <Card title={t('dev.total', { n: formatBytes(data.total_bytes) })}>
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-[13px]">
-              <caption className="sr-only">{t('dev.title')}</caption>
-              <thead><tr className="text-left text-xs text-muted">
-                <th scope="col" className="px-2 py-2 font-medium">{t('dev.device')}</th>
-                <th scope="col" className="px-2 py-2 text-right font-medium">{t('dev.down')}</th>
-                <th scope="col" className="px-2 py-2 text-right font-medium">{t('dev.up')}</th>
-                <th scope="col" className="w-[150px] px-2 py-2 font-medium">{t('an.share')}</th>
-                <th scope="col" className="px-2 py-2 text-right font-medium">{t('an.connections')}</th>
-                <th scope="col" className="px-2 py-2 text-right font-medium">{t('an.users.dests')}</th>
-                <th scope="col" className="px-2 py-2 text-right font-medium">{t('dev.noDomain')}</th>
-                <th scope="col" className="px-2 py-2 font-medium">{t('an.lastSeen')}</th>
-              </tr></thead>
-              <tbody>
-                {data.rows.map((r) => (
-                  <tr key={r.key} className={`border-t border-line/60 ${sel === r.key ? 'bg-elevated' : ''}`}>
-                    <td className="px-2 py-2">
-                      <button type="button" aria-pressed={sel === r.key} onClick={() => setSel(sel === r.key ? null : r.key)} className="text-left font-medium text-fg underline-offset-2 hover:text-cyan hover:underline" title={t('an.users.detail')}>
-                        {r.name || r.ip}
-                      </button>
-                      <div className="tnum text-xs text-muted">{r.name ? `${r.ip} · ` : ''}{r.panel_name}</div>
-                    </td>
-                    <td className="tnum px-2 py-2 text-right text-fg">{formatBytes(r.down_bytes)}</td>
-                    <td className="tnum px-2 py-2 text-right text-muted">{formatBytes(r.up_bytes)}</td>
-                    <td className="px-2 py-2"><ShareBar share={r.share} max={max} /></td>
-                    <td className="tnum px-2 py-2 text-right">{formatInt(r.connections)}</td>
-                    <td className="tnum px-2 py-2 text-right text-muted">{r.destinations}</td>
-                    <td className="tnum px-2 py-2 text-right text-muted">{formatPct(r.no_domain_share)}</td>
-                    <td className="tnum whitespace-nowrap px-2 py-2 text-muted">{formatDateTime(r.last_seen, tz)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable caption={t('dev.title')} rows={data.rows} rowKey={(r) => r.key} rowClass={(r) => (sel === r.key ? 'bg-elevated' : '')} columns={[
+            { key: 'device', title: t('dev.device'), sort: (r) => r.name || r.ip, cell: (r) => (
+              <>
+                <button type="button" aria-pressed={sel === r.key} onClick={() => setSel(sel === r.key ? null : r.key)} className="text-left font-medium text-fg underline-offset-2 hover:text-cyan hover:underline" title={t('an.users.detail')}>
+                  {r.name || r.ip}
+                </button>
+                <div className="tnum text-xs text-muted">{r.name ? `${r.ip} · ` : ''}{r.panel_name}</div>
+              </>) },
+            { key: 'down', title: t('dev.down'), sort: (r) => r.down_bytes, descFirst: true, align: 'right', className: 'text-fg', cell: (r) => formatBytes(r.down_bytes) },
+            { key: 'up', title: t('dev.up'), sort: (r) => r.up_bytes, descFirst: true, align: 'right', className: 'text-muted', cell: (r) => formatBytes(r.up_bytes) },
+            { key: 'share', title: t('an.share'), className: 'w-[150px]', cell: (r) => <ShareBar share={r.share} max={max} /> },
+            { key: 'conn', title: t('an.connections'), sort: (r) => r.connections, descFirst: true, align: 'right', cell: (r) => formatInt(r.connections) },
+            { key: 'dests', title: t('an.users.dests'), sort: (r) => r.destinations, descFirst: true, align: 'right', className: 'text-muted', cell: (r) => r.destinations },
+            { key: 'nodomain', title: t('dev.noDomain'), sort: (r) => r.no_domain_share, descFirst: true, align: 'right', className: 'text-muted', cell: (r) => formatPct(r.no_domain_share) },
+            { key: 'last', title: t('an.lastSeen'), sort: (r) => r.last_seen, descFirst: true, className: 'whitespace-nowrap text-muted', cell: (r) => formatDateTime(r.last_seen, tz) },
+          ]} />
         </Card>
       )}
       {sel && <Drawer title={t('an.users.detail')} onClose={() => setSel(null)}><Detail k={sel} /></Drawer>}

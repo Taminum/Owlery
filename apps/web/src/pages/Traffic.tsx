@@ -1,3 +1,4 @@
+import { DataTable } from '../components/DataTable'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { t } from '../i18n'
 import { C } from '../lib/colors'
@@ -58,54 +59,22 @@ export default function Traffic() {
             </div>
           </Card>
           <Card title={t('tr.nodes')}>
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-[13px]">
-                <caption className="sr-only">{t('tr.nodes')}</caption>
-                <thead><tr className="text-left text-xs text-muted">
-                  <th scope="col" className="px-2 py-2 font-medium">{t('tr.node')}</th>
-                  <th scope="col" className="px-2 py-2 text-right font-medium">{t('tr.bytes')}</th>
-                  <th scope="col" className="w-[150px] px-2 py-2 font-medium">{t('an.share')}</th>
-                  <th scope="col" className="px-2 py-2 text-right font-medium">{t('tr.resets')}</th>
-                  <th scope="col" className="px-2 py-2 font-medium">{t('tr.lastSample')}</th>
-                </tr></thead>
-                <tbody>
-                  {data.nodes.map((n) => (
-                    <tr key={n.node_id} className="border-t border-line/60">
-                      <td className="px-2 py-2 font-medium">{n.name}</td>
-                      <td className="tnum px-2 py-2 text-right">{n.samples === 0 ? '—' : formatBytes(n.bytes)}</td>
-                      <td className="px-2 py-2"><ShareBar share={n.share} max={nodeMax} /></td>
-                      <td className="tnum px-2 py-2 text-right text-muted">{formatInt(n.counter_resets)}</td>
-                      <td className="tnum whitespace-nowrap px-2 py-2 text-muted">{n.last_sample ? formatDateTime(n.last_sample, tz) : t('tr.noSamples')}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTable caption={t('tr.nodes')} rows={data.nodes} rowKey={(n) => n.node_id} columns={[
+              { key: 'node', title: t('tr.node'), sort: (n) => n.name, className: 'font-medium', cell: (n) => n.name },
+              { key: 'bytes', title: t('tr.bytes'), sort: (n) => (n.samples === 0 ? null : n.bytes), descFirst: true, align: 'right', cell: (n) => (n.samples === 0 ? '—' : formatBytes(n.bytes)) },
+              { key: 'share', title: t('an.share'), className: 'w-[150px]', cell: (n) => <ShareBar share={n.share} max={nodeMax} /> },
+              { key: 'resets', title: t('tr.resets'), sort: (n) => n.counter_resets, descFirst: true, align: 'right', className: 'text-muted', cell: (n) => formatInt(n.counter_resets) },
+              { key: 'last', title: t('tr.lastSample'), sort: (n) => n.last_sample, descFirst: true, className: 'whitespace-nowrap text-muted', cell: (n) => (n.last_sample ? formatDateTime(n.last_sample, tz) : t('tr.noSamples')) },
+            ]} />
           </Card>
           <Card title={t('tr.users')} note={t('tr.usersNote')}>
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-[13px]">
-                <caption className="sr-only">{t('tr.users')}</caption>
-                <thead><tr className="text-left text-xs text-muted">
-                  <th scope="col" className="px-2 py-2 font-medium">{t('an.users.user')}</th>
-                  <th scope="col" className="px-2 py-2 font-medium">{t('an.users.panel')}</th>
-                  <th scope="col" className="px-2 py-2 text-right font-medium">{t('tr.bytes')}</th>
-                  <th scope="col" className="w-[150px] px-2 py-2 font-medium">{t('an.share')}</th>
-                  <th scope="col" className="px-2 py-2 font-medium">{t('tr.counter')}</th>
-                </tr></thead>
-                <tbody>
-                  {data.users.map((u) => (
-                    <tr key={`${u.panel_id}:${u.label}`} className="border-t border-line/60">
-                      <td className="px-2 py-2 font-medium">{u.label}{u.note ? <span className="ml-2 text-xs text-muted">{u.note}</span> : null}</td>
-                      <td className="px-2 py-2 text-muted">{u.panel_name}</td>
-                      <td className="tnum px-2 py-2 text-right">{formatBytes(u.bytes)}</td>
-                      <td className="px-2 py-2"><ShareBar share={u.share} max={userMax} /></td>
-                      <td className="px-2 py-2 text-xs text-muted">{t(u.counter === 'lifetime' ? 'tr.counter.lifetime' : 'tr.counter.period')}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTable caption={t('tr.users')} rows={data.users} rowKey={(u) => `${u.panel_id}:${u.label}`} columns={[
+              { key: 'user', title: t('an.users.user'), sort: (u) => u.label, className: 'font-medium', cell: (u) => <>{u.label}{u.note ? <span className="ml-2 text-xs text-muted">{u.note}</span> : null}</> },
+              { key: 'panel', title: t('an.users.panel'), sort: (u) => u.panel_name, className: 'text-muted', cell: (u) => u.panel_name },
+              { key: 'bytes', title: t('tr.bytes'), sort: (u) => u.bytes, descFirst: true, align: 'right', cell: (u) => formatBytes(u.bytes) },
+              { key: 'share', title: t('an.share'), className: 'w-[150px]', cell: (u) => <ShareBar share={u.share} max={userMax} /> },
+              { key: 'counter', title: t('tr.counter'), className: 'text-xs text-muted', cell: (u) => t(u.counter === 'lifetime' ? 'tr.counter.lifetime' : 'tr.counter.period') },
+            ]} />
           </Card>
           <p className="text-xs leading-5 text-muted">{t('tr.note')}</p>
         </>
