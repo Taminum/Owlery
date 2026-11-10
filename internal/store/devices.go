@@ -23,7 +23,13 @@ type DeviceRow struct {
 
 const dScope = `d.panel_id = ANY($1::uuid[]) AND d.started_at >= $2 AND d.started_at < $3`
 
+// DevicesAnalytics is kept like the other heavy analytics answers (see memoized): the page and the digest ask for the
+// same window, and it reads every router record of it.
 func (s *Store) DevicesAnalytics(ctx context.Context, q AnalyticsQuery) ([]DeviceRow, error) {
+	return memoized("devices", q, nil, func() ([]DeviceRow, error) { return s.devicesAnalytics(ctx, q) })
+}
+
+func (s *Store) devicesAnalytics(ctx context.Context, q AnalyticsQuery) ([]DeviceRow, error) {
 	rs, err := s.pool.Query(ctx, `SELECT d.panel_id, d.device_ip, COALESCE((array_agg(d.device_name ORDER BY d.started_at DESC) FILTER (WHERE d.device_name IS NOT NULL))[1], ''),
 			count(*), count(DISTINCT COALESCE(d.destination_host, host(d.destination_ip))),
 			count(*) FILTER (WHERE d.destination_host IS NULL), COALESCE(sum(d.up_bytes),0), COALESCE(sum(d.down_bytes),0),

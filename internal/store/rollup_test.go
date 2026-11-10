@@ -112,3 +112,38 @@ func TestTheOverviewFromHalfHourSumsEqualsTheOneFromEvents(t *testing.T) {
 		t.Fatalf("the long window was not answered from the sums: %d", moved.TCP)
 	}
 }
+
+// The devices of a window are kept like the other heavy answers: asked again, they are not counted again, and a
+// question that differs in anything is a different one.
+func TestDevicesAnalyticsIsKeptForTheSameQuestion(t *testing.T) {
+	e := newAnalyticsEnv(t)
+	router, err := e.s.CreateAgent(ctx, store.Scope{All: true}, e.home.ID, e.homeNodes[0].ID, "OpenWrt", "router", "4", store.HashAgentSecret("rt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	day := time.Date(2026, 10, 9, 0, 0, 0, 0, time.UTC)
+	add := func(key string) {
+		t.Helper()
+		if _, err := e.s.Pool().Exec(ctx, `INSERT INTO device_connections (panel_id, agent_id, conn_key, started_at, updated_at, device_ip, destination_host, destination_port, protocol, up_bytes, down_bytes)
+			VALUES ($1, $2, $3, $4, $4, '192.168.1.10', 'x.example.org', 443, 'tcp', 10, 20)`, e.home.ID, router.ID, key, day.Add(time.Hour)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old := store.SetAnalyticsCacheTTL(time.Hour)
+	t.Cleanup(func() { store.SetAnalyticsCacheTTL(old) })
+	q := store.AnalyticsQuery{PanelIDs: []string{e.home.ID}, From: day, To: day.Add(24 * time.Hour)}
+	add("one")
+	first, err := e.s.DevicesAnalytics(ctx, q)
+	if err != nil || len(first) != 1 || first[0].Connections != 1 {
+		t.Fatalf("first: %+v %v", first, err)
+	}
+	add("two")
+	if again, _ := e.s.DevicesAnalytics(ctx, q); again[0].Connections != 1 {
+		t.Fatalf("the same question was counted again: %+v", again)
+	}
+	other := q
+	other.To = day.Add(25 * time.Hour)
+	if fresh, _ := e.s.DevicesAnalytics(ctx, other); fresh[0].Connections != 2 {
+		t.Fatalf("another window got the kept answer: %+v", fresh)
+	}
+}

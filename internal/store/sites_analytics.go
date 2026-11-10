@@ -525,6 +525,10 @@ type CountryRow struct {
 // Countries groups connections by the country of the destination address. Only lines that carry
 // an IP can be placed: domain-only lines (most clients' node logs) are counted apart, not guessed.
 func (s *Store) Countries(ctx context.Context, q AnalyticsQuery) ([]CountryRow, error) {
+	return memoized("countries", q, nil, func() ([]CountryRow, error) { return s.countries(ctx, q) })
+}
+
+func (s *Store) countries(ctx context.Context, q AnalyticsQuery) ([]CountryRow, error) {
 	rs, err := s.pool.Query(ctx, `WITH `+eventsCTE+`
 SELECT COALESCE(ev.country, ''), COALESCE(sum(ev.w), 0)::bigint, count(DISTINCT ev.ukey), count(DISTINCT ev.site) FILTER (WHERE ev.site IS NOT NULL),
        COALESCE(sum(ev.bytes), 0), count(*) FILTER (WHERE ev.rtr)
