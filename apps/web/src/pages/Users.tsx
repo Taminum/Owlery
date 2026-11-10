@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { t } from '../i18n'
+import { t, type MsgKey } from '../i18n'
 import { useApp } from '../lib/context'
 import { formatDateTime, formatInt, formatPct } from '../lib/format'
 import { useAnalytics } from '../hooks/useAnalytics'
@@ -58,6 +58,11 @@ function Detail({ k }: { k: string }) {
 
 interface Sub { panel_id: string; panel_name: string; username: string; status: string; expire_at: string | null; traffic_limit_bytes: number | null; traffic_used_bytes: number | null }
 
+function statusLabel(status: string): string {
+  const key = `sub.st.${status}` as MsgKey
+  return t(key) || status || '—'
+}
+
 function Subscriptions({ tz }: { tz: string }) {
   const { data } = useLoad((s) => api.get<{ users: Sub[] }>('/api/v1/subscriptions', s), [], 120_000)
   const [now] = useState(() => Date.now())
@@ -83,7 +88,7 @@ function Subscriptions({ tz }: { tz: string }) {
                 <tr key={`${u.panel_id}:${u.username}:${i}`} className="border-t border-line/60">
                   <td className="px-2 py-2 font-medium text-fg">{u.username}</td>
                   <td className="px-2 py-2 text-muted">{u.panel_name}</td>
-                  <td className="px-2 py-2"><Chip tone={u.status === 'ACTIVE' ? 'green' : 'muted'}>{u.status || '—'}</Chip></td>
+                  <td className="px-2 py-2"><Chip tone={u.status === 'ACTIVE' ? 'green' : 'muted'}>{statusLabel(u.status)}</Chip></td>
                   <td className="whitespace-nowrap px-2 py-2">
                     {u.expire_at ? (
                       <>

@@ -3,7 +3,7 @@ import { t } from '../i18n'
 import { C } from '../lib/colors'
 import { useLook } from '../lib/chartLook'
 import { useApp } from '../lib/context'
-import { formatAxisTime, formatBytes, formatDateTime, formatInt } from '../lib/format'
+import { formatAxisTime, formatBytes, formatDateTime, formatInt, sourceLabel } from '../lib/format'
 import { useAnalytics } from '../hooks/useAnalytics'
 import type { TrafficResponse } from '../lib/types'
 import { Card, Chip } from '../components/ui'
@@ -37,7 +37,7 @@ export default function Traffic() {
         <>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] text-muted">
             <span className="tnum">{formatDateTime(data.meta.from, tz)} → {formatDateTime(data.meta.to, tz)}</span>
-            <Chip tone="muted">{data.meta.source}</Chip>
+            <span title={sourceLabel(data.meta.source).title}><Chip tone="muted">{sourceLabel(data.meta.source).text}</Chip></span>
             {data.last_sample && <span className="tnum">{t('tr.lastSample')}: {formatDateTime(data.last_sample, tz)}</span>}
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
