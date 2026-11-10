@@ -65,7 +65,7 @@ function CustomRange({ filters, update }: Pick<Props, 'filters' | 'update'>) {
   const [to, setTo] = useState(toLocalInput(filters.to))
   const valid = from && to && new Date(from) < new Date(to)
   return (
-    <Popover label={t('filter.custom')} value={filters.range === 'custom' ? t('range.custom') : t('filter.custom')} icon={<CalendarClock size={15} className="shrink-0 text-muted" aria-hidden />} align="right">
+    <Popover label={t('filter.custom')} value={filters.range === 'custom' ? t('range.custom') : t('filter.custom')} icon={<CalendarClock size={15} className="shrink-0 text-muted" aria-hidden />} align="right" compact active={filters.range === 'custom'}>
       {(close) => (
         <form
           className="space-y-3"
@@ -114,7 +114,7 @@ export function TopBar({ filters, panels, update, onRefresh, loading, onMenu, sl
         </button>
 
         <label className="sr-only" htmlFor="panel-select">{t('filter.panel')}</label>
-        <select id="panel-select" value={filters.panels.length === 1 ? filters.panels[0] : ''} onChange={(e) => update((f) => setPanelScope(f, e.target.value ? [e.target.value] : [], panels))} className={`${controlCls} min-w-0 flex-1 sm:min-w-[150px] sm:flex-none`}>
+        <select id="panel-select" value={filters.panels.length === 1 ? filters.panels[0] : ''} onChange={(e) => update((f) => setPanelScope(f, e.target.value ? [e.target.value] : [], panels))} className={`${controlCls} min-w-0 flex-1 basis-[90px] lg:min-w-[150px] lg:flex-none lg:basis-auto`}>
           <option value="">{t('filter.panelAll')}</option>
           {panels.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
