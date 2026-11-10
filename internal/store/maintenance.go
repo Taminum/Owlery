@@ -59,8 +59,8 @@ func (s *Store) ActiveMaintenance(ctx context.Context, now time.Time) ([]Mainten
 	return out, rows.Err()
 }
 
-// QuietSubjects lists what the open windows silence: the machine itself, its security agent and its checked certificates and
-// ports. An alert's subject is one of these, or one of them followed by ":" and a detail (a disk, a container).
+// QuietSubjects lists what the open windows silence: the machine itself, its security agent, its checked certificates and
+// ports, and the agents of the Remnawave nodes the machine is confirmed to host (the log, router and AmneziaWG agents). An alert's subject is one of these, or one of them followed by ":" and a detail (a disk, a container).
 func (s *Store) QuietSubjects(ctx context.Context, now time.Time) (map[string]bool, error) {
 	if _, err := s.pool.Exec(ctx, `DELETE FROM maintenance_windows WHERE until <= $1`, now); err != nil {
 		return nil, err
@@ -69,7 +69,9 @@ func (s *Store) QuietSubjects(ctx context.Context, now time.Time) (map[string]bo
 		SELECT vps_id::text FROM maintenance_windows
 		UNION SELECT a.id::text FROM security_agents a JOIN maintenance_windows m ON m.vps_id = a.vps_id
 		UNION SELECT e.id::text FROM security_tls_endpoints e JOIN maintenance_windows m ON m.vps_id = e.vps_id
-		UNION SELECT e.id::text FROM security_port_endpoints e JOIN maintenance_windows m ON m.vps_id = e.vps_id`)
+		UNION SELECT e.id::text FROM security_port_endpoints e JOIN maintenance_windows m ON m.vps_id = e.vps_id
+		UNION SELECT a.id::text FROM agents a JOIN security_vps_links l ON l.node_id = a.node_id AND l.panel_id = a.panel_id
+		                                   JOIN maintenance_windows m ON m.vps_id = l.vps_id WHERE a.status <> 'revoked'`)
 	if err != nil {
 		return nil, err
 	}
