@@ -1,3 +1,4 @@
+import { DataTable } from '../components/DataTable'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { t } from '../i18n'
 import { api } from '../lib/api'
@@ -57,29 +58,13 @@ function AgentView({ a, tz }: { a: LiveAgent; tz: string }) {
       </Card>
       <Card title={t('live.devices')} note={t('live.devicesNote')}>
         {a.devices.length === 0 ? <p className="py-4 text-center text-[13px] text-muted">{a.live ? t('live.noDevices') : t('live.noDevicesStale')}</p> : (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-[13px]">
-              <caption className="sr-only">{t('live.devices')}</caption>
-              <thead><tr className="text-left text-xs text-muted">
-                <th scope="col" className="px-2 py-2 font-medium">{t('dev.device')}</th>
-                <th scope="col" className="px-2 py-2 text-right font-medium">↓ {t('live.down')}</th>
-                <th scope="col" className="px-2 py-2 text-right font-medium">↑ {t('live.up')}</th>
-                <th scope="col" className="w-[160px] px-2 py-2 font-medium" title={t('live.shareHint')}>{t('live.load')}</th>
-                <th scope="col" className="px-2 py-2 text-right font-medium">{t('an.connections')}</th>
-              </tr></thead>
-              <tbody>
-                {a.devices.map((d, i) => (
-                  <tr key={d.ip} className="border-t border-line/60">
-                    <td className="px-2 py-2"><span className="font-medium">{d.name || d.ip}</span>{d.name && <div className="tnum text-xs text-muted">{d.ip}</div>}</td>
-                    <td className="tnum px-2 py-2 text-right">{formatRate(d.down_bps)}</td>
-                    <td className="tnum px-2 py-2 text-right text-muted">{formatRate(d.up_bps)}</td>
-                    <td className="px-2 py-2"><ShareBar share={shares[i]} max={maxShare} /></td>
-                    <td className="tnum px-2 py-2 text-right text-muted">{formatInt(d.connections)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable caption={t('live.devices')} rows={a.devices.map((d, i) => ({ d, share: shares[i] }))} rowKey={(x) => x.d.ip} initialSort={{ key: 'down', desc: true }} columns={[
+            { key: 'device', title: t('dev.device'), sort: (x) => x.d.name || x.d.ip, cell: (x) => <><span className="font-medium">{x.d.name || x.d.ip}</span>{x.d.name && <div className="tnum text-xs text-muted">{x.d.ip}</div>}</> },
+            { key: 'down', title: `↓ ${t('live.down')}`, sort: (x) => x.d.down_bps, descFirst: true, align: 'right', cell: (x) => formatRate(x.d.down_bps) },
+            { key: 'up', title: `↑ ${t('live.up')}`, sort: (x) => x.d.up_bps, descFirst: true, align: 'right', className: 'text-muted', cell: (x) => formatRate(x.d.up_bps) },
+            { key: 'load', title: t('live.load'), hint: t('live.shareHint'), className: 'w-[160px]', cell: (x) => <ShareBar share={x.share} max={maxShare} /> },
+            { key: 'conn', title: t('an.connections'), sort: (x) => x.d.connections, descFirst: true, align: 'right', className: 'text-muted', cell: (x) => formatInt(x.d.connections) },
+          ]} />
         )}
       </Card>
     </div>

@@ -1,3 +1,4 @@
+import { DataTable } from '../components/DataTable'
 import { t } from '../i18n'
 import { useApp } from '../lib/context'
 import { formatDateTime, formatInt, formatPct } from '../lib/format'
@@ -36,45 +37,21 @@ export default function Nodes() {
       {data?.meta.state === 'no_data' && data.rows.length === 0 && <NoDataPanel meta={data.meta} />}
       {data && data.rows.length > 0 && (
         <Card title={t('an.total', { n: formatInt(data.total_connections) })}>
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-[13px]">
-              <caption className="sr-only">{t('an.nodes.title')}</caption>
-              <thead><tr className="text-left text-xs text-muted">
-                <th scope="col" className="px-2 py-2 font-medium">{t('an.nodes.node')}</th>
-                <th scope="col" className="px-2 py-2 font-medium">{t('an.users.panel')}</th>
-                <th scope="col" className="px-2 py-2 font-medium">{t('an.nodes.agent')}</th>
-                <th scope="col" className="px-2 py-2 font-medium" title={t('pulse.hint')}>{t('pulse.speed')}</th>
-                <th scope="col" className="px-2 py-2 font-medium">{t('an.nodes.lastEvent')}</th>
-                <th scope="col" className="px-2 py-2 text-right font-medium">{t('an.connections')}</th>
-                <th scope="col" className="w-[150px] px-2 py-2 font-medium">{t('an.share')}</th>
-                <th scope="col" className="px-2 py-2 text-right font-medium">{t('an.users')}</th>
-                <th scope="col" className="px-2 py-2 text-right font-medium">{t('an.users.dests')}</th>
-                <th scope="col" className="px-2 py-2 text-right font-medium">{t('an.users.udp')}</th>
-              </tr></thead>
-              <tbody>
-                {data.rows.map((r) => {
-                  const [label, tone] = AGENT[r.agent] ?? AGENT.none
-                  return (
-                    <tr key={`${r.panel_id}:${r.node_id}`} className="border-t border-line/60">
-                      <td className="px-2 py-2 font-medium text-fg">{r.name}</td>
-                      <td className="px-2 py-2 text-muted">{r.panel_name}</td>
-                      <td className="px-2 py-2"><Chip tone={tone}>{t(label)}</Chip></td>
-                      <td className="tnum whitespace-nowrap px-2 py-2 text-muted">{(() => {
-                        const v = speed.get(`${r.panel_id}:${r.name}`)
-                        return v ? `↓ ${formatRate(v.down_bps)} · ↑ ${formatRate(v.up_bps)}` : t('pulse.none')
-                      })()}</td>
-                      <td className="tnum whitespace-nowrap px-2 py-2 text-muted">{r.last_event_at ? formatDateTime(r.last_event_at, tz) : '—'}</td>
-                      <td className="tnum px-2 py-2 text-right text-fg">{formatInt(r.connections)}</td>
-                      <td className="px-2 py-2"><ShareBar share={r.share} max={max} /></td>
-                      <td className="tnum px-2 py-2 text-right text-muted">{r.users}</td>
-                      <td className="tnum px-2 py-2 text-right text-muted">{r.destinations}</td>
-                      <td className="tnum px-2 py-2 text-right text-muted">{formatPct(r.udp_share)}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+          <DataTable caption={t('an.nodes.title')} rows={data.rows} rowKey={(r) => `${r.panel_id}:${r.node_id}`} columns={[
+            { key: 'node', title: t('an.nodes.node'), sort: (r) => r.name, className: 'font-medium text-fg', cell: (r) => r.name },
+            { key: 'panel', title: t('an.users.panel'), sort: (r) => r.panel_name, className: 'text-muted', cell: (r) => r.panel_name },
+            { key: 'agent', title: t('an.nodes.agent'), sort: (r) => t((AGENT[r.agent] ?? AGENT.none)[0]), cell: (r) => { const [label, tone] = AGENT[r.agent] ?? AGENT.none; return <Chip tone={tone}>{t(label)}</Chip> } },
+            { key: 'speed', title: t('pulse.speed'), hint: t('pulse.hint'), className: 'tnum whitespace-nowrap text-muted', cell: (r) => {
+              const v = speed.get(`${r.panel_id}:${r.name}`)
+              return v ? `↓ ${formatRate(v.down_bps)} · ↑ ${formatRate(v.up_bps)}` : t('pulse.none')
+            } },
+            { key: 'event', title: t('an.nodes.lastEvent'), sort: (r) => r.last_event_at, descFirst: true, className: 'whitespace-nowrap text-muted', cell: (r) => (r.last_event_at ? formatDateTime(r.last_event_at, tz) : '—') },
+            { key: 'conn', title: t('an.connections'), sort: (r) => r.connections, descFirst: true, align: 'right', className: 'text-fg', cell: (r) => formatInt(r.connections) },
+            { key: 'share', title: t('an.share'), className: 'w-[150px]', cell: (r) => <ShareBar share={r.share} max={max} /> },
+            { key: 'users', title: t('an.users'), sort: (r) => r.users, descFirst: true, align: 'right', className: 'text-muted', cell: (r) => r.users },
+            { key: 'dests', title: t('an.users.dests'), sort: (r) => r.destinations, descFirst: true, align: 'right', className: 'text-muted', cell: (r) => r.destinations },
+            { key: 'udp', title: t('an.users.udp'), sort: (r) => r.udp_share, descFirst: true, align: 'right', className: 'text-muted', cell: (r) => formatPct(r.udp_share) },
+          ]} />
         </Card>
       )}
     </div>
