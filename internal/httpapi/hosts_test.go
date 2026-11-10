@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -337,5 +338,51 @@ func TestAMaintenanceWindowSilencesAMachineAndEndsOnItsOwn(t *testing.T) {
 	}
 	if st, b := w.owner.do("DELETE", "/api/v1/servers/"+id+"/maintenance", nil); st != 200 || !strings.Contains(string(b), `"active":false`) {
 		t.Errorf("end by hand: %d %s", st, b)
+	}
+}
+
+// A machine that is confirmed to host a node: while its window is open, its node's agents are quiet too (they would go
+// silent whenever the machine restarts), and the agent of a node on another machine is not.
+func TestAMaintenanceWindowAlsoQuietsTheAgentsOfItsNodes(t *testing.T) {
+	w := newAgentWorld(t)
+	ctx := context.Background()
+	nodes, err := w.h.st.ListNodes(ctx, store.Scope{All: true}, w.home.ID, false)
+	if err != nil || len(nodes) < 2 {
+		t.Fatalf("nodes: %v %d", err, len(nodes))
+	}
+	mine, theirs := "", ""
+	for i, n := range nodes[:2] {
+		ag, err := w.h.st.CreateAgent(ctx, store.Scope{All: true}, w.home.ID, n.ID, "log", "node", "", store.HashAgentSecret(fmt.Sprint("s", i)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.h.st.Pool().Exec(ctx, `UPDATE agents SET status='active', last_seen = now() - interval '2 hours' WHERE id=$1`, ag.ID); err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			mine = ag.ID
+		} else {
+			theirs = ag.ID
+		}
+	}
+	id := mkVPS(t, w, "hel", "203.0.113.71", "")
+	if st, b := w.owner.do("POST", "/api/v1/security/vps/"+id+"/links", map[string]any{"panel_id": w.home.ID, "node_id": nodes[0].ID}); st != 201 {
+		t.Fatalf("link the machine to its node: %d %s", st, b)
+	}
+	open := func(agent string) int {
+		var n int
+		if err := w.h.st.Pool().QueryRow(ctx, `SELECT count(*) FROM alerts WHERE kind='agent_silent' AND subject=$1 AND resolved_at IS NULL`, agent).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	if _, _, err := alerts.Evaluate(ctx, w.h.st, time.Now().UTC()); err != nil || open(mine) != 1 || open(theirs) != 1 {
+		t.Fatalf("both silent agents alert first: %v %d %d", err, open(mine), open(theirs))
+	}
+	if st, b := w.owner.do("PUT", "/api/v1/servers/"+id+"/maintenance", map[string]any{"hours": 2}); st != 200 {
+		t.Fatalf("open the window: %d %s", st, b)
+	}
+	if _, _, err := alerts.Evaluate(ctx, w.h.st, time.Now().UTC()); err != nil || open(mine) != 0 || open(theirs) != 1 {
+		t.Errorf("only the agent of the machine's own node goes quiet: %v %d %d", err, open(mine), open(theirs))
 	}
 }
