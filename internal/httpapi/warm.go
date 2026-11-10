@@ -52,15 +52,29 @@ func (s *Server) warmOnce(ctx context.Context) {
 			s.Log.Warn("analytics warm-up failed", "range", rng, "err", err)
 			return
 		}
-		// The other analytics pages open on the same ranges; each call fills the cache their first request would otherwise wait for.
-		dq := q
+		// The other analytics pages open on the same ranges; each call fills the cache their first request would otherwise
+		// wait for. A cached answer is found by the whole question, so each one is asked exactly as its page asks it:
+		// the pages set no limit, and a question with one is a different question that warms nothing.
+		page := store.AnalyticsQuery{PanelIDs: ids, From: q.From, To: q.To}
+		dq := page
 		dq.GroupBy = "site"
 		_, _, _, e1 := s.Store.Destinations(ctx, dq)
-		_, _, e2 := s.Store.UsersAnalytics(ctx, q)
-		_, e3 := s.Store.Subjects(ctx, q)
-		if e1 != nil || e2 != nil || e3 != nil {
-			s.Log.Warn("analytics warm-up failed", "range", rng, "err", errors.Join(e1, e2, e3))
+		_, _, e2 := s.Store.UsersAnalytics(ctx, page)
+		_, e3 := s.Store.Subjects(ctx, page)
+		_, e4 := s.Store.Countries(ctx, page)
+		if err := errors.Join(e1, e2, e3, e4); err != nil {
+			s.Log.Warn("analytics warm-up failed", "range", rng, "err", err)
 			return
+		}
+		if rng == "24h" { // "What changed" opens on a day: the sites nobody had visited before, and the devices at home
+			nq := page
+			nq.NewOnly, nq.Limit = true, 10
+			_, _, _, e5 := s.Store.Sites(ctx, nq)
+			_, e6 := s.Store.DevicesAnalytics(ctx, page)
+			if err := errors.Join(e5, e6); err != nil {
+				s.Log.Warn("analytics warm-up failed", "range", rng, "err", err)
+				return
+			}
 		}
 	}
 }
