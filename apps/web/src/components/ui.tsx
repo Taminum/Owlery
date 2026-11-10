@@ -47,3 +47,17 @@ export function Chip({ icon: Icon, tone = 'muted', children }: { icon?: LucideIc
 export function Skeleton({ className = '' }: { className?: string }) {
   return <div className={`skeleton ${className}`} aria-hidden />
 }
+
+/** One look for every "pick one of a few" control: periods, list or cards, open or all. */
+export function Segmented<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: { value: T; label: ReactNode }[]; onChange: (v: T) => void }) {
+  return (
+    <div role="group" aria-label={label} className="inline-flex gap-0.5 rounded-control border border-line bg-surface p-[3px]">
+      {options.map((o) => (
+        <button key={o.value} type="button" aria-pressed={o.value === value} onClick={() => onChange(o.value)}
+          className={`h-[26px] rounded-[7px] px-2.5 text-[13px] ${o.value === value ? 'bg-elevated text-fg ring-1 ring-inset ring-cyan' : 'text-muted hover:text-fg'}`}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
+}

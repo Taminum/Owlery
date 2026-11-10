@@ -8,8 +8,11 @@ import { formatDateTime } from '../lib/format'
 import { useLoad } from '../hooks/useLoad'
 import { useAuth } from '../lib/auth'
 import { errorText } from '../lib/errors'
-import { GhostButton } from '../components/Modal'
+import { GhostButton, inputCls } from '../components/Modal'
+import { DataTable, type Column } from '../components/DataTable'
 import type { AlertsResponse } from '../lib/types'
+
+type AlertRow = AlertsResponse['alerts'][number]
 import { Card, Chip } from '../components/ui'
 import { PageHead, TableSkeleton } from '../components/Analyzer'
 
@@ -65,6 +68,15 @@ export default function Alerts() {
   const open = data?.alerts.filter((a) => !a.resolved_at) ?? []
   const closed = data?.alerts.filter((a) => a.resolved_at) ?? []
   const hidden = filtered && everything.data ? Math.max(0, everything.data.open - open.length) : 0
+  const [find, setFind] = useState('')
+  const needle = find.trim().toLowerCase()
+  const found = needle ? closed.filter((a) => `${a.label} ${a.detail} ${a.panel_name}`.toLowerCase().includes(needle)) : closed
+  const columns: Column<AlertRow>[] = [
+    { key: 'what', title: t('al.what'), sort: (a) => a.label, cell: (a) => <><span className="font-medium">{a.label}</span> <Chip tone="muted">{a.panel_name}</Chip></> },
+    { key: 'detail', title: t('al.detail'), className: 'text-muted', cell: (a) => a.detail },
+    { key: 'opened', title: t('al.opened'), sort: (a) => a.opened_at, descFirst: true, className: 'tnum whitespace-nowrap text-muted', cell: (a) => formatDateTime(a.opened_at, tz) },
+    { key: 'closed', title: t('al.closed'), sort: (a) => a.resolved_at, descFirst: true, className: 'tnum whitespace-nowrap text-muted', cell: (a) => (a.resolved_at ? formatDateTime(a.resolved_at, tz) : '') },
+  ]
 
   return (
     <div className="space-y-4">
@@ -108,27 +120,10 @@ export default function Alerts() {
           )}
           <Card title={t('al.history')} note={t('al.historyNote')}>
             {closed.length === 0 ? <p className="py-4 text-center text-[13px] text-muted">{t('al.noHistory')}</p> : (
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-[13px]">
-                  <caption className="sr-only">{t('al.history')}</caption>
-                  <thead><tr className="text-left text-xs text-muted">
-                    <th scope="col" className="px-2 py-2 font-medium">{t('al.what')}</th>
-                    <th scope="col" className="px-2 py-2 font-medium">{t('al.detail')}</th>
-                    <th scope="col" className="px-2 py-2 font-medium">{t('al.opened')}</th>
-                    <th scope="col" className="px-2 py-2 font-medium">{t('al.closed')}</th>
-                  </tr></thead>
-                  <tbody>
-                    {closed.map((a) => (
-                      <tr key={a.id} className="border-t border-line/60">
-                        <td className="px-2 py-2"><span className="font-medium">{a.label}</span> <Chip tone="muted">{a.panel_name}</Chip></td>
-                        <td className="px-2 py-2 text-muted">{a.detail}</td>
-                        <td className="tnum whitespace-nowrap px-2 py-2 text-muted">{formatDateTime(a.opened_at, tz)}</td>
-                        <td className="tnum whitespace-nowrap px-2 py-2 text-muted">{a.resolved_at ? formatDateTime(a.resolved_at, tz) : ''}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <>
+                <input type="search" className={`${inputCls} mb-3 !h-8 max-w-xs !text-[13px]`} aria-label={t('al.find')} placeholder={t('al.find')} value={find} onChange={(e) => setFind(e.target.value)} />
+                <DataTable caption={t('al.history')} columns={columns} rows={found} rowKey={(a) => a.id} empty={<p className="py-4 text-center text-[13px] text-muted">{t('al.nothing')}</p>} />
+              </>
             )}
           </Card>
         </>
