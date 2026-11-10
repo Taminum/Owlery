@@ -102,7 +102,8 @@ describe('sites: new only, hand-made categories, activity', () => {
       },
     })
     renderAt('/sites')
-    await userEvent.click(await screen.findByRole('button', { name: 'Категория: mystery.example' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Действия: mystery.example' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Категория' }))
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByRole('button', { name: 'Сохранить правило' })).toBeDisabled()
     await userEvent.type(within(dialog).getByLabelText('Категория'), 'Музыка')
@@ -118,7 +119,7 @@ describe('sites: new only, hand-made categories, activity', () => {
     mockApi({ me: op, handler: (r) => { if (r.path === '/api/v1/analytics/sites') return { status: 200, body: sitesBody() }; if (r.path === '/api/v1/analytics/subjects') return { status: 200, body: { subjects: [] } }; return undefined } })
     renderAt('/sites')
     await screen.findByRole('button', { name: 'mystery.example' })
-    expect(screen.queryByRole('button', { name: /Категория: mystery.example/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Действия: mystery.example/ })).not.toBeInTheDocument()
   })
 
   it('draws the weekday-by-hour grid with the time zone offset in the request', async () => {

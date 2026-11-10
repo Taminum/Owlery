@@ -62,7 +62,9 @@ function Node({ r, max, tz, depth, subject, ctx }: { r: DestRow; max: number; tz
               </button>
             ) : <span className="w-6 shrink-0" />}
             <K size={14} className="shrink-0 text-muted" aria-label={t(`an.kind.${r.kind}` as 'an.kind.domain')} />
-            <span className="truncate font-medium text-fg" title={r.key}>{r.key}</span>
+            <span className="min-w-0 truncate font-medium text-fg" title={r.key}>{r.key}</span>
+          </div>
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 pl-[54px]">
             {(r.kind === 'domain' || r.kind === 'ip' || r.kind === 'site') && <Link to={`/intel?target=${encodeURIComponent(r.key)}`} className="shrink-0 text-xs text-muted underline-offset-2 hover:text-cyan hover:underline" aria-label={`${t('intel.investigate')}: ${r.key}`}>{t('intel.investigate')}</Link>}
             {r.service && r.kind !== 'service' && r.kind !== 'category' && <Chip tone="cyan">{r.service}{r.confidence && r.confidence !== 'high' ? ` · ${confidenceLabel(r.confidence)}` : ''}</Chip>}
             {r.owner && <span className="truncate text-xs text-muted" title={`AS${r.asn} · ${t('an.ownerHint')}`}>{r.owner}</span>}

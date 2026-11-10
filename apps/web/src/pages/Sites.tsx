@@ -1,4 +1,5 @@
-import { Link } from 'react-router-dom'
+import { DataTable } from '../components/DataTable'
+import { useNavigate } from 'react-router-dom'
 import { useEffect, useMemo, useState } from 'react'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { t } from '../i18n'
@@ -9,7 +10,7 @@ import { formatAxisTime, formatBytes, formatDateTime, formatInt, tzOffsetMinutes
 import { useAnalytics } from '../hooks/useAnalytics'
 import { hasAwg } from '../components/SourceMarks'
 import type { ActivityResponse, RulesResponse, SiteDetailResponse, SitesResponse } from '../lib/types'
-import { Card, Chip } from '../components/ui'
+import { Card, Chip, RowMenu } from '../components/ui'
 import { CoverageLine, NoDataPanel, PageHead, ShareBar, TableSkeleton } from '../components/Analyzer'
 import { controlCls } from '../components/Popover'
 import { Drawer } from '../components/Drawer'
@@ -174,6 +175,7 @@ function RuleDialog({ site, onClose, onDone }: { site: string; onClose: () => vo
 }
 
 export default function Sites() {
+  const nav = useNavigate()
   const { filters } = useApp()
   const { state: auth } = useAuth()
   const isOwner = auth.status === 'authed' && auth.me.account.is_owner
@@ -240,35 +242,16 @@ export default function Sites() {
       {view === 'countries' && <CountriesCard subject={subject} limit={40} />}
       {data && data.meta.state === 'ok' && view === 'categories' && (
         <Card title={t('sites.tab.categories')} note={t('sites.catNote')}>
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-[13px]">
-              <caption className="sr-only">{t('sites.tab.categories')}</caption>
-              <thead><tr className="text-left text-xs text-muted">
-                <th scope="col" className="px-2 py-2 font-medium">{t('sites.category')}</th>
-                <th scope="col" className="px-2 py-2 text-right font-medium">{t('sites.sites')}</th>
-                <th scope="col" className="px-2 py-2 text-right font-medium">{t('sites.visits')}</th>
-                <th scope="col" className="px-2 py-2 text-right font-medium">{t('an.connections')}</th>
-                <th scope="col" className="w-[150px] px-2 py-2 font-medium">{t('an.share')}</th>
-                <th scope="col" className="px-2 py-2 text-right font-medium">{t('an.users')}</th>
-                <th scope="col" className="px-2 py-2 text-right font-medium">{t('an.bytes')}</th>
-              </tr></thead>
-              <tbody>
-                {data.categories.map((c) => (
-                  <tr key={c.category} className="border-t border-line/60">
-                    <td className="px-2 py-2">
-                      <button type="button" onClick={() => { setCategory(c.category); setView('sites'); setOffset(0) }} className={`font-medium underline-offset-2 hover:text-cyan hover:underline ${c.classified ? 'text-fg' : 'text-muted'}`}>{c.category}</button>
-                    </td>
-                    <td className="tnum px-2 py-2 text-right">{formatInt(c.sites)}</td>
-                    <td className="tnum px-2 py-2 text-right">{formatInt(c.visits)}</td>
-                    <td className="tnum px-2 py-2 text-right text-muted">{formatInt(c.connections)}</td>
-                    <td className="px-2 py-2"><ShareBar share={c.share} max={catMax} /></td>
-                    <td className="tnum px-2 py-2 text-right text-muted">{c.users}</td>
-                    <td className="tnum px-2 py-2 text-right text-muted">{bytesText(c.bytes)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable caption={t('sites.tab.categories')} rows={data.categories} rowKey={(c) => c.category} columns={[
+            { key: 'cat', title: t('sites.category'), sort: (c) => c.category, cell: (c) => (
+              <button type="button" onClick={() => { setCategory(c.category); setView('sites'); setOffset(0) }} className={`font-medium underline-offset-2 hover:text-cyan hover:underline ${c.classified ? 'text-fg' : 'text-muted'}`}>{c.category}</button>) },
+            { key: 'sites', title: t('sites.sites'), sort: (c) => c.sites, descFirst: true, align: 'right', cell: (c) => formatInt(c.sites) },
+            { key: 'visits', title: t('sites.visits'), sort: (c) => c.visits, descFirst: true, align: 'right', cell: (c) => formatInt(c.visits) },
+            { key: 'conn', title: t('an.connections'), sort: (c) => c.connections, descFirst: true, align: 'right', className: 'text-muted', cell: (c) => formatInt(c.connections) },
+            { key: 'share', title: t('an.share'), className: 'w-[150px]', cell: (c) => <ShareBar share={c.share} max={catMax} /> },
+            { key: 'users', title: t('an.users'), sort: (c) => c.users, descFirst: true, align: 'right', className: 'text-muted', cell: (c) => c.users },
+            { key: 'bytes', title: t('an.bytes'), sort: (c) => c.bytes, descFirst: true, align: 'right', className: 'text-muted', cell: (c) => bytesText(c.bytes) },
+          ]} />
         </Card>
       )}
       {data && data.meta.state === 'ok' && view === 'sites' && (
@@ -312,8 +295,10 @@ export default function Sites() {
                       <td className="tnum whitespace-nowrap px-2 py-2 text-muted">{formatDateTime(r.last_seen, tz)}</td>
                       {isOwner && (
                         <td className="whitespace-nowrap px-2 py-2 text-right">
-                          <Link to={`/intel?target=${encodeURIComponent(r.site)}`} className="mr-3 text-xs text-muted underline-offset-2 hover:text-cyan hover:underline" aria-label={`${t('intel.investigate')}: ${r.site}`}>{t('intel.investigate')}</Link>
-                          <button type="button" onClick={() => setRuleFor(r.site)} className="whitespace-nowrap text-xs text-muted underline-offset-2 hover:text-cyan hover:underline" aria-label={`${t('sites.setCategory')}: ${r.site}`}>{r.classified ? t('sites.change') : t('sites.setCategory')}</button>
+                          <RowMenu label={r.site || t('sites.noName')} actions={[
+                            { label: t('intel.investigate'), onClick: () => nav(`/intel?target=${encodeURIComponent(r.site)}`) },
+                            { label: r.classified ? t('sites.change') : t('sites.setCategory'), onClick: () => setRuleFor(r.site) },
+                          ]} />
                         </td>
                       )}
                     </tr>
