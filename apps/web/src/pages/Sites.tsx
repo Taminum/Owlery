@@ -296,7 +296,7 @@ export default function Sites() {
                   {data.rows.map((r) => (
                     <tr key={r.site} className={`border-t border-line/60 ${sel === r.site ? 'bg-elevated' : ''}`}>
                       <td className="max-w-[260px] px-2 py-2">
-                        <button type="button" aria-pressed={sel === r.site} onClick={() => setSel(sel === r.site ? null : r.site)} className="max-w-full truncate text-left font-medium text-fg underline-offset-2 hover:text-cyan hover:underline" title={r.site}>{r.site}</button>
+                        <button type="button" aria-pressed={sel === r.site} onClick={() => setSel(sel === r.site ? null : r.site)} className="max-w-full truncate text-left font-medium text-fg underline-offset-2 hover:text-cyan hover:underline" title={r.site}>{r.site || t('sites.noName')}</button>
                         {r.service && <div className="text-xs text-cyan">{r.service}</div>}
                       </td>
                       <td className={`px-2 py-2 text-xs ${r.classified ? 'text-fg' : 'text-muted'}`}>{r.category}</td>

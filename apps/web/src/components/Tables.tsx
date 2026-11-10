@@ -33,6 +33,7 @@ export function TopTable({ title, note, firstCol, rows, showConfidence = false, 
             </tr>
           </thead>
           <tbody>
+            {rows.length === 0 && <tr><td colSpan={showConfidence ? 5 : 4} className="py-4 text-center text-muted">{t('table.none')}</td></tr>}
             {rows.map((r, i) => (
               <tr key={r.key} className="border-t border-line/60">
                 <td className="tnum px-2 py-2 text-muted">{r.other ? '' : i + 1}</td>

@@ -1,6 +1,6 @@
 import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ReferenceArea, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { C, SERIES } from '../lib/colors'
-import { formatAxisTime, formatBytes, formatDateTime, formatInt, formatPct } from '../lib/format'
+import { formatAxisTime, formatBytes, formatDateTime, formatInt, formatPct, sourceLabel } from '../lib/format'
 import { t } from '../i18n'
 import { useLook } from '../lib/chartLook'
 import type { Overview, Row } from '../lib/types'
@@ -68,7 +68,7 @@ export function TimelineCard({ ov, tz }: { ov: Overview; tz: string }) {
   return (
     <Card
       title={t('chart.timeline')}
-      note={`connection_count · ${ov.connections.source}`}
+      note={`${t('an.count')} · ${sourceLabel(ov.connections.source).text}`}
       right={<Legend items={[{ color: C.blue, label: t('chart.tcp') }, { color: C.green, label: t('chart.udp') }]} />}
       className="h-full"
     >
@@ -103,7 +103,7 @@ export function TrafficCard({ ov, tz }: { ov: Overview; tz: string }) {
   return (
     <Card
       title={t('chart.traffic')}
-      note={`${t('chart.trafficNote')} · ${ov.traffic.source} · покрытие ${formatPct(ov.traffic.coverage_pct)}`}
+      note={`${t('chart.trafficNote')} · ${sourceLabel(ov.traffic.source).text} · покрытие ${formatPct(ov.traffic.coverage_pct)}`}
       right={<Legend items={[{ color: C.cyan, label: `↓ ${t('kpi.down')}` }, { color: C.amber, label: `↑ ${t('kpi.up')}` }]} />}
       className="h-full"
     >
@@ -135,7 +135,7 @@ export function TrafficTotalCard({ ov, tz }: { ov: Overview; tz: string }) {
   return (
     <Card
       title={t('chart.traffic')}
-      note={`${t('chart.trafficTotalNote')} · ${ov.traffic.source}${ov.traffic.counter_resets ? ` · ${t('tr.resets')}: ${ov.traffic.counter_resets}` : ''}`}
+      note={`${t('chart.trafficTotalNote')} · ${sourceLabel(ov.traffic.source).text}${ov.traffic.counter_resets ? ` · ${t('tr.resets')}: ${ov.traffic.counter_resets}` : ''}`}
       className="h-full"
     >
       <div className="h-[200px]" role="img" aria-label={t('chart.traffic')}>

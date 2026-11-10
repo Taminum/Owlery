@@ -5,7 +5,7 @@ import { Inbox, Server } from 'lucide-react'
 import { t, type MsgKey } from '../i18n'
 import { C } from '../lib/colors'
 import { useLook } from '../lib/chartLook'
-import { formatAxisTime, formatDateTime, formatInt, formatPct } from '../lib/format'
+import { formatAxisTime, formatDateTime, formatInt, formatPct, sourceLabel } from '../lib/format'
 import type { AMeta } from '../lib/types'
 import { Chip, Skeleton } from './ui'
 
@@ -52,7 +52,7 @@ export function CoverageLine({ meta, tz }: { meta: AMeta; tz: string }) {
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] text-muted">
       <span className="tnum">{formatDateTime(meta.from, tz)} → {formatDateTime(meta.to, tz)}</span>
       <Chip tone={partial ? 'amber' : 'muted'}>{t('an.nodes.coverage', { a: meta.coverage.nodes_with_agent, n: meta.coverage.nodes_total })}</Chip>
-      <span>connection_count · {meta.source}</span>
+      <span title={`connection_count · ${sourceLabel(meta.source).title}`}>{t('an.source')}: {sourceLabel(meta.source).text}</span>
     </div>
   )
 }

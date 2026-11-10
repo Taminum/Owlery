@@ -104,13 +104,13 @@ export default function Overview() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 [&>*]:min-w-0">
-        <TopTable title={t('table.hosts')} note="connection_count" firstCol={t('table.host')} rows={ov.top_hosts} />
-        <TopTable title={t('table.ips')} note="connection_count" firstCol={t('table.ip')} rows={ov.top_ips} mono />
-        <TopTable title={t('table.ports')} note="connection_count" firstCol={t('table.port')} rows={ov.top_ports} mono />
+        <TopTable title={t('table.hosts')} note={t('an.count')} firstCol={t('table.host')} rows={ov.top_hosts} />
+        <TopTable title={t('table.ips')} note={t('an.count')} firstCol={t('table.ip')} rows={ov.top_ips} mono />
+        <TopTable title={t('table.ports')} note={t('an.count')} firstCol={t('table.port')} rows={ov.top_ports} mono />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 [&>*]:min-w-0">
-        <div className="lg:col-span-5"><TopTable title={t('table.services')} note="connection_count · правила классификатора, уверенность указана" firstCol={t('table.service')} rows={ov.services} showConfidence /></div>
+        <div className="lg:col-span-5"><TopTable title={t('table.services')} note={t('an.count') + ' · правила классификатора, уверенность указана'} firstCol={t('table.service')} rows={ov.services} showConfidence /></div>
         <div className="lg:col-span-7"><RecentTable ov={ov} tz={tz} multiPanel={multi} /></div>
       </div>
     </div>
