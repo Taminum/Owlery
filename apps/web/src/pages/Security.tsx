@@ -10,7 +10,7 @@ import { errorText } from '../lib/errors'
 import { formatDateTime } from '../lib/format'
 import { useLoad } from '../hooks/useLoad'
 import type { VPS, VPSList } from '../lib/types'
-import { Card, Chip } from '../components/ui'
+import { Card, Chip, Tabs, Segmented } from '../components/ui'
 import { PageHead, TableSkeleton } from '../components/Analyzer'
 import { Journal } from '../components/SecurityJournal'
 import { PublicPorts, TLSTab } from '../components/SecurityChecks'
@@ -95,12 +95,7 @@ export default function Security() {
     <div className="space-y-4">
       <PageHead title={t('sec.title')} subtitle={t('sec.subtitle')}
         right={data?.can_create ? <PrimaryButton onClick={() => setAdding(true)}><span className="inline-flex items-center gap-2"><Plus size={16} aria-hidden />{t('sec.add')}</span></PrimaryButton> : undefined} />
-      <div role="tablist" aria-label={t('sec.title')} className="flex gap-2">
-        {(['servers', 'journal'] as const).map((x) => (
-          <button key={x} role="tab" type="button" aria-selected={view === x} onClick={() => setView(x)}
-            className={`h-8 rounded-control border px-3 text-[13px] ${view === x ? 'border-cyan bg-elevated text-fg' : 'border-line text-muted hover:text-fg'}`}>{t(x === 'servers' ? 'sec.view.servers' : 'sec.view.journal')}</button>
-        ))}
-      </div>
+      <Tabs label={t('sec.title')} value={view} onChange={setView} tabs={(['servers', 'journal'] as const).map((x) => ({ id: x, label: t(x === 'servers' ? 'sec.view.servers' : 'sec.view.journal') }))} />
       {view === 'journal' && <Journal />}
       {view === 'servers' && error && <p role="alert" className="text-[13px] text-red">{error}</p>}
       {view === 'servers' && !data && !error && <TableSkeleton />}
@@ -168,12 +163,7 @@ export function SecurityTabs({ v }: { v: VPS }) {
   const [tab, setTab] = useState<Tab>(wanted && TABS.includes(wanted) ? wanted : 'overview')
   return (
     <>
-        <div role="tablist" aria-label={t('sec.collectors')} className="flex flex-wrap gap-2">
-          {TABS.map((x) => (
-            <button key={x} role="tab" type="button" aria-selected={tab === x} onClick={() => setTab(x)}
-              className={`h-8 rounded-control border px-3 text-[13px] ${tab === x ? 'border-cyan bg-elevated text-fg' : 'border-line text-muted hover:text-fg'}`}>{t(TAB_LABEL[x])}</button>
-          ))}
-        </div>
+        <Segmented label={t('sec.collectors')} value={tab} onChange={setTab} options={TABS.map((x) => ({ value: x, label: t(TAB_LABEL[x]) }))} />
         {tab === 'overview' && <OverviewTab vpsId={v.id} />}
         {tab === 'fail2ban' && <Fail2banTab vpsId={v.id} />}
         {tab === 'ports' && <><PortsTab vpsId={v.id} /><PublicPorts vpsId={v.id} canEdit={v.can_edit} /></>}

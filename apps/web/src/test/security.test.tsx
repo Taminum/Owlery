@@ -102,7 +102,7 @@ describe('Security page', () => {
       if (r.path === '/api/v1/security/vps/v1/checks/ports/run') return { status: 202, body: { requested: 3 } }
     } })
     renderSec('/security/v1?tab=fail2ban')
-    await userEvent.click(await screen.findByRole('tab', { name: 'Порты' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Порты' }))
     expect(await screen.findByText(/Это не независимая точка/)).toBeInTheDocument()
     expect(screen.getByText(/Остальные порты не сканируются/)).toBeInTheDocument()
     expect(screen.getByText('отвечает')).toBeInTheDocument()
@@ -122,7 +122,7 @@ describe('Security page', () => {
       if (r.path === '/api/v1/security/vps/v1/tls') return { status: 200, body: { items: [ep({}), ep({ id: 't2', host: 'old.example.com', last_state: 'expired', last_not_after: '2026-10-10T00:00:00Z', last_obs: { days_left: -5 } }), ep({ id: 't3', host: 'new.example.com', last_state: null, last_checked_at: null, last_not_after: null, last_obs: {} })], vantage: { id: 'api_server', independent: false }, interval_hours: 24 } }
     } })
     renderSec('/security/v1?tab=fail2ban')
-    await userEvent.click(await screen.findByRole('tab', { name: 'TLS-сертификаты' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'TLS-сертификаты' }))
     expect(await screen.findByText(/через 47 дн./)).toBeInTheDocument()
     expect(screen.getByText(/истёк 5 дн. назад/)).toBeInTheDocument()
     expect(screen.getByText('истёк')).toBeInTheDocument()
@@ -174,12 +174,12 @@ describe('Security page', () => {
     await userEvent.click(screen.getByRole('checkbox', { name: 'Разрешить терминал' }))
     expect(screen.queryByText(/remnascope-shell/)).toBeNull()
     // Windows: one PowerShell block, with -allow-shell only when the terminal is allowed.
-    await userEvent.click(screen.getByRole('tab', { name: 'Windows' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Windows' }))
     expect(screen.getAllByText(/secagent\.exe" install/).length).toBeGreaterThan(0)
     expect(screen.queryByText(/-allow-shell/)).toBeNull()
     await userEvent.click(screen.getByRole('checkbox', { name: 'Разрешить терминал' }))
     expect(screen.getAllByText(/-allow-shell/).length).toBeGreaterThan(0)
-    await userEvent.click(screen.getByRole('tab', { name: 'Linux' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Linux' }))
     expect(screen.getAllByText(/fail2ban\.service\.d\/remnascope\.conf/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/journalctl -u remnascope-secagent/).length).toBeGreaterThan(0)
     await userEvent.click(screen.getByRole('button', { name: 'Секрет сохранён' }))
@@ -207,7 +207,7 @@ describe('Security page', () => {
     expect(screen.queryByText(/useradd|chown root:remnascope-sec/)).toBeNull()
     await userEvent.click(screen.getByRole('checkbox', { name: 'Разрешить веб-службы' }))
     expect(screen.queryByText(/state-dir \/var\/lib\/remnascope-secagent -allow-web/)).toBeNull()
-    await userEvent.click(screen.getByRole('tab', { name: 'Windows' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Windows' }))
     expect(screen.getByText(/secagent\.exe" install -server/)).toBeInTheDocument()
     expect(screen.queryByText(/Set-Content/)).toBeNull()
     // The helpers started from the same exe are stopped before it is replaced, or the download fails on a locked file.
