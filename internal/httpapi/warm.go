@@ -10,7 +10,8 @@ import (
 
 // WarmAnalytics keeps the Sites view of the long ranges ready: counting days of traffic takes seconds, so the first
 // person to open the page would wait for it. It asks for the same queries the page does (every panel, no filter),
-// as soon as the range moves on (every five minutes): the answers are cached, so a call within the same window costs nothing.
+// as soon as the range moves on (a quarter of an hour for a day, an hour for a week): the answers are cached, so a call
+// within the same window costs nothing.
 func (s *Server) WarmAnalytics(ctx context.Context) {
 	t := time.NewTimer(30 * time.Second)
 	defer t.Stop()

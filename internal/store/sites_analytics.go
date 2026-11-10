@@ -162,7 +162,7 @@ func (s *Store) allSites(ctx context.Context, q AnalyticsQuery) ([]SiteRow, erro
 	}
 	sitesCache.Lock()
 	if len(sitesCache.m) > 64 {
-		sitesCache.m = map[string]sitesEntry{}
+		dropOldest(sitesCache.m, 32, func(e sitesEntry) time.Time { return e.at })
 	}
 	sitesCache.m[key] = sitesEntry{rows: rows, at: time.Now()}
 	sitesCache.Unlock()
@@ -246,15 +246,16 @@ func (s *Store) Categories(ctx context.Context, q AnalyticsQuery) ([]CategoryRow
 	}
 	catCache.Lock()
 	if len(catCache.m) > 64 {
-		catCache.m = map[string]catEntry{}
+		dropOldest(catCache.m, 32, func(e catEntry) time.Time { return e.at })
 	}
 	catCache.m[key] = catEntry{rows: rows, at: time.Now()}
 	catCache.Unlock()
 	return rows, nil
 }
 
-// A few minutes old is fine for a summary of days of traffic, and it is what makes paging and filtering instant.
-var catCacheTTL = 5 * time.Minute
+// How long an answer may be reused. A preset range ends on a rounded time (see presetEnd in httpapi), so a new step is a
+// new key and this only has to outlast the longest step, an hour; an explicit from and to name a fixed window.
+var catCacheTTL = time.Hour
 
 type catEntry struct {
 	rows []CategoryRow
