@@ -58,6 +58,9 @@ function Detail({ k }: { k: string }) {
 
 interface Sub { panel_id: string; panel_name: string; username: string; status: string; expire_at: string | null; traffic_limit_bytes: number | null; traffic_used_bytes: number | null }
 
+/** Remnawave has no "never": a subscription without an end is stored with a date near the end of the century. */
+const isNoEnd = (iso: string) => new Date(iso).getFullYear() >= 2090
+
 function statusLabel(status: string): string {
   const key = `sub.st.${status}` as MsgKey
   return t(key) || status || '—'
@@ -81,7 +84,7 @@ function Subscriptions({ tz }: { tz: string }) {
           </tr></thead>
           <tbody>
             {data.users.map((u, i) => {
-              const left = u.expire_at ? (new Date(u.expire_at).getTime() - now) / 86_400_000 : null
+              const left = u.expire_at && !isNoEnd(u.expire_at) ? (new Date(u.expire_at).getTime() - now) / 86_400_000 : null
               const lim = u.traffic_limit_bytes ?? 0
               const pct = lim > 0 && u.traffic_used_bytes !== null ? Math.min(100, Math.round((u.traffic_used_bytes * 100) / lim)) : null
               return (
@@ -90,7 +93,7 @@ function Subscriptions({ tz }: { tz: string }) {
                   <td className="px-2 py-2 text-muted">{u.panel_name}</td>
                   <td className="px-2 py-2"><Chip tone={u.status === 'ACTIVE' ? 'green' : 'muted'}>{statusLabel(u.status)}</Chip></td>
                   <td className="whitespace-nowrap px-2 py-2">
-                    {u.expire_at ? (
+                    {u.expire_at && !isNoEnd(u.expire_at) ? (
                       <>
                         <span className="tnum mr-2">{formatDateTime(u.expire_at, tz)}</span>
                         {left !== null && left < 0 ? <Chip tone="red">{t('sub.expired')}</Chip>
