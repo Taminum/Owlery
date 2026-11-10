@@ -195,6 +195,26 @@ func serve(log *slog.Logger) error {
 	}
 	go alerts.Run(ctx, st, time.Minute, log)
 	go srv.WarmAnalytics(ctx)
+	go func() { // the half-hour sums the overview reads; while the past is still being filled, without the minute's pause
+		t := time.NewTimer(20 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+			}
+			more, err := st.RollupTick(ctx, time.Now().UTC())
+			if err != nil && ctx.Err() == nil {
+				log.Error("event rollup failed", "err", err)
+			}
+			if more && err == nil {
+				t.Reset(5 * time.Second)
+			} else {
+				t.Reset(time.Minute)
+			}
+		}
+	}()
 	go secChecker.Run(ctx)
 	go (&notify.Worker{Store: st, Ring: ring, Log: log}).Run(ctx)
 	go (&notify.Bot{Store: st, Ring: ring, Log: log}).Run(ctx)

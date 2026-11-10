@@ -328,6 +328,12 @@ func (s *Store) CommitBatch(ctx context.Context, c Commit) (CommitResult, error)
 			}
 			res.Accepted = int(tag.RowsAffected())
 			res.Duplicates += len(ids) - res.Accepted
+			// Lines from before the hours that are recounted anyway: their half-hours are counted again.
+			if late := lateBuckets(ts, time.Now().UTC()); res.Accepted > 0 && len(late) > 0 {
+				if _, err := tx.Exec(ctx, `INSERT INTO event_rollup_dirty (bucket) SELECT unnest($1::timestamptz[]) ON CONFLICT DO NOTHING`, late); err != nil {
+					return err
+				}
+			}
 		}
 		if len(dev) > 0 {
 			n, err := upsertDevices(ctx, tx, pid, aid, dev)
@@ -460,6 +466,12 @@ func addrPtr(a netip.Addr) *netip.Addr {
 func (s *Store) PurgeExpiredEvents(ctx context.Context, now time.Time) (int64, error) {
 	tag, err := s.pool.Exec(ctx, `DELETE FROM connection_events e USING panels p
 		WHERE e.panel_id = p.id AND e.ts < $1::timestamptz - make_interval(days => p.retention_days)`, now)
+	if err != nil {
+		return 0, err
+	}
+	// the sums of those events go with them
+	_, err = s.pool.Exec(ctx, `DELETE FROM event_rollup r USING panels p
+		WHERE r.panel_id = p.id AND r.bucket < $1::timestamptz - make_interval(days => p.retention_days)`, now)
 	return tag.RowsAffected(), err
 }
 
