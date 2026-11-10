@@ -66,6 +66,20 @@ func presetEnd(now time.Time, d time.Duration) time.Time {
 	return now.Truncate(step)
 }
 
+// pageEnd is where a preset range ends for a page. For a day and more it is presetEnd of a little while ago: when the
+// step moves on, the warm-up needs minutes to count the new window, and until then a page would have to count it
+// itself. So pages keep asking for the previous window, which is ready, and move to the new one once the warm-up has
+// had its time (four minutes for a day, twelve for a week and more).
+func pageEnd(now time.Time, d time.Duration) time.Time {
+	switch {
+	case d >= 7*24*time.Hour:
+		now = now.Add(-12 * time.Minute)
+	case d >= 24*time.Hour:
+		now = now.Add(-4 * time.Minute)
+	}
+	return presetEnd(now, d)
+}
+
 // resolveScope parses range, panels and nodes and enforces the caller's access. It writes the
 // error response itself and returns ok=false when the request cannot proceed.
 func (s *Server) resolveScope(w http.ResponseWriter, r *http.Request, a auth.Actor) (aScope, bool) {
@@ -80,7 +94,7 @@ func (s *Server) resolveScope(w http.ResponseWriter, r *http.Request, a auth.Act
 		}
 		// The end of a preset range is rounded down (see presetEnd) so that the same view asked again within that time
 		// is the same query: its cached answer is used instead of a recount.
-		sc.to = presetEnd(now, d)
+		sc.to = pageEnd(now, d)
 		sc.from = sc.to.Add(-d)
 	} else {
 		var e1, e2 error
