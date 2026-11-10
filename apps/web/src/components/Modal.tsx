@@ -67,25 +67,30 @@ export function Field({ label, hint, error, children, htmlFor }: { label: string
   )
 }
 
-export function PrimaryButton({ children, ...p }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+/** The three button sizes: l in a page head and in forms, m inside cards and over tables, s in a row of a table or a list. */
+export type ButtonSize = 'l' | 'm' | 's'
+type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & { size?: ButtonSize }
+const SIZE: Record<ButtonSize, string> = { l: 'h-10 rounded-control px-4 text-[14px]', m: 'h-8 rounded-control px-3 text-[13px]', s: 'h-6 rounded-[8px] px-2.5 text-xs' }
+
+export function PrimaryButton({ children, size = 'l', ...p }: ButtonProps) {
   return (
-    <button type="button" {...p} className={`h-10 rounded-control bg-blue px-4 text-[14px] font-medium text-white hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 ${p.className ?? ''}`}>
+    <button type="button" {...p} className={`${SIZE[size]} bg-blue font-medium text-white hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 ${p.className ?? ''}`}>
       {children}
     </button>
   )
 }
 
-export function GhostButton({ children, ...p }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+export function GhostButton({ children, size = 'l', ...p }: ButtonProps) {
   return (
-    <button type="button" {...p} className={`h-10 rounded-control border border-line bg-elevated px-4 text-[14px] text-fg hover:border-cyan/60 disabled:cursor-not-allowed disabled:opacity-40 ${p.className ?? ''}`}>
+    <button type="button" {...p} className={`${SIZE[size]} border border-line bg-elevated text-fg hover:border-cyan/60 disabled:cursor-not-allowed disabled:opacity-40 ${p.className ?? ''}`}>
       {children}
     </button>
   )
 }
 
-export function DangerButton({ children, ...p }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+export function DangerButton({ children, size = 'l', ...p }: ButtonProps) {
   return (
-    <button type="button" {...p} className={`h-10 rounded-control border border-red/60 bg-red/15 px-4 text-[14px] font-medium text-red hover:bg-red/25 disabled:cursor-not-allowed disabled:opacity-40 ${p.className ?? ''}`}>
+    <button type="button" {...p} className={`${SIZE[size]} border border-red/60 bg-red/15 font-medium text-red hover:bg-red/25 disabled:cursor-not-allowed disabled:opacity-40 ${p.className ?? ''}`}>
       {children}
     </button>
   )
