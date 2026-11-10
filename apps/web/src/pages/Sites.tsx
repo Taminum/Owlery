@@ -258,15 +258,15 @@ export default function Sites() {
         <Card title={`${t('an.total', { n: formatInt(data.total_connections) })} · ${t('an.groups', { n: formatInt(data.groups) })}`} note={t('sites.note')}>
           {data.rows.length === 0 ? <p className="py-6 text-center text-[13px] text-muted">{t('an.noMatch')}</p> : (
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-[13px]">
+              <table className="w-full dense border-collapse text-[13px]">
                 <caption className="sr-only">{t('sites.title')}</caption>
                 <thead><tr className="text-left text-xs text-muted">
                   {sortTh('site', t('sites.site'))}
                   {sortTh('category', t('sites.category'))}
                   {sortTh('visits', t('sites.visits'), true, t('sites.visitsHint'))}
                   {sortTh('connections', t('an.connections'), true)}
-                  <th scope="col" className="w-[130px] px-2 py-2 font-medium">{t('an.share')}</th>
-                  {sortTh('users', t('an.users'), true)}
+                  <th scope="col" className="w-[90px] px-2 py-2 font-medium">{t('an.share')}</th>
+                  {sortTh('users', t('sites.usersShort'), true, t('an.users'))}
                   {sortTh('devices', t('sites.devices'), true)}
                   {sortTh('hosts', t('sites.subs'), true)}
                   {sortTh('bytes', t('an.bytes'), true, t('an.bytesHint'))}
@@ -278,7 +278,7 @@ export default function Sites() {
                 <tbody>
                   {data.rows.map((r) => (
                     <tr key={r.site} className={`border-t border-line/60 ${sel === r.site ? 'bg-elevated' : ''}`}>
-                      <td className="max-w-[260px] px-2 py-2">
+                      <td className="max-w-[200px] px-2 py-2">
                         <button type="button" aria-pressed={sel === r.site} onClick={() => setSel(sel === r.site ? null : r.site)} className="max-w-full truncate text-left font-medium text-fg underline-offset-2 hover:text-cyan hover:underline" title={r.site}>{r.site || t('sites.noName')}</button>
                         {r.service && <div className="text-xs text-cyan">{r.service}</div>}
                       </td>
