@@ -9,6 +9,8 @@ export type Column<T> = {
   cell: (row: T) => ReactNode
   /** The value the column sorts by. A column without it has a plain header. */
   sort?: (row: T) => string | number | null | undefined
+  /** The first click puts the largest on top: for dates and counts, where the newest or the biggest is what one looks for. */
+  descFirst?: boolean
   align?: 'right'
   /** Extra classes for the cells of this column (text-muted, whitespace-nowrap and the like). */
   className?: string
@@ -58,8 +60,8 @@ export function DataTable<T>({ caption, columns, rows, rowKey, initialSort, page
   const page = sorted.slice(0, shown)
   const rest = sorted.length - page.length
 
-  function toggle(key: string) {
-    setSort((s) => (s?.key === key ? { key, desc: !s.desc } : { key, desc: false }))
+  function toggle(c: Column<T>) {
+    setSort((s) => (s?.key === c.key ? { key: c.key, desc: !s.desc } : { key: c.key, desc: !!c.descFirst }))
   }
 
   return (
@@ -75,7 +77,7 @@ export function DataTable<T>({ caption, columns, rows, rowKey, initialSort, page
                 return (
                   <th key={c.key} scope="col" aria-sort={c.sort ? (active ? (sort.desc ? 'descending' : 'ascending') : 'none') : undefined} className={`whitespace-nowrap ${right ? '!text-right' : ''}`}>
                     {c.sort ? (
-                      <button type="button" onClick={() => toggle(c.key)} className={`inline-flex items-center gap-1 hover:text-fg ${active ? 'text-fg' : ''}`}>
+                      <button type="button" onClick={() => toggle(c)} className={`inline-flex items-center gap-1 hover:text-fg ${active ? 'text-fg' : ''}`}>
                         {c.title}
                         {active && (sort.desc ? <ArrowDown size={12} aria-hidden className="text-cyan" /> : <ArrowUp size={12} aria-hidden className="text-cyan" />)}
                       </button>

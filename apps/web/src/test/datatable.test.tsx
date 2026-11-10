@@ -9,6 +9,7 @@ type Row = { id: string; name: string; size: number | null }
 const columns: Column<Row>[] = [
   { key: 'name', title: 'Имя', sort: (r) => r.name, cell: (r) => r.name },
   { key: 'size', title: 'Размер', sort: (r) => r.size, align: 'right', cell: (r) => r.size ?? '' },
+  { key: 'big', title: 'Сначала большие', sort: (r) => r.size, descFirst: true, cell: () => 'x' },
   { key: 'plain', title: 'Заметка', cell: () => 'x' },
 ]
 const names = () => screen.getAllByRole('row').slice(1).map((r) => within(r).getAllByRole('cell')[0].textContent)
@@ -25,6 +26,8 @@ describe('the one data table', () => {
     expect(names()).toEqual(['б10', 'б2', 'а'])
     await userEvent.click(screen.getByRole('button', { name: 'Размер' }))
     expect(names()).toEqual(['б2', 'б10', 'а']) // the empty one stays at the bottom
+    await userEvent.click(screen.getByRole('button', { name: 'Сначала большие' }))
+    expect(names()).toEqual(['б2', 'б10', 'а']) // a column of dates or counts starts from the top
     expect(screen.queryByRole('button', { name: 'Заметка' })).toBeNull() // a column with nothing to sort by is plain
   })
 
