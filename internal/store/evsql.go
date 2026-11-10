@@ -51,6 +51,9 @@ const SessionGap = 30 * time.Minute
 // from awg rows (an hour of activity is not a visit). AmneziaWG rows are only part of the picture when no
 // subject and no node filter is set: they belong to neither a panel user, a LAN device nor an inbound.
 //
+// The AmneziaWG hours are bounded on the column itself (hour > from - 1h, not hour + 1h > from), so the index on the hour
+// is used and the table is not read through.
+//
 // Parameters: $1 panels, $2 nodes, $3 from, $4 to, $5 subject kind, $6 subject panel, $7 subject id.
 // rt is MATERIALIZED on purpose: it is read from inside a per-event NOT EXISTS, and without it the
 // planner re-runs its aggregate over every router record for every node event (minutes on real data).
@@ -80,7 +83,7 @@ rt AS MATERIALIZED (
   SELECT i.panel_id, NULLIF(h.name, ''), host(h.remote_ip), h.remote_port, NULL::uuid, 'awg:' || host(h.client_ip), NULL::uuid, NULL::text,
          NULL::text, COALESCE(p.label, host(h.client_ip)), h.hour, h.up_bytes + h.down_bytes, true, h.site, NULL::text, h.country, h.flows::bigint, 'awg'::text
   FROM awg_flow_hourly h JOIN awg_instances i ON i.id = h.instance_id LEFT JOIN awg_peers p ON p.id = h.peer_id
-  WHERE i.panel_id = ANY($1::uuid[]) AND cardinality($2::uuid[]) = 0 AND h.hour + interval '1 hour' > $3 AND h.hour < $4
+  WHERE i.panel_id = ANY($1::uuid[]) AND cardinality($2::uuid[]) = 0 AND h.hour > $3::timestamptz - interval '1 hour' AND h.hour < $4
     AND ($5::text = '' OR ($5 = 'awg' AND i.panel_id = $6::uuid AND ($7::text = '*' OR host(h.client_ip) = $7::text)))
 )`
 

@@ -50,12 +50,27 @@ type NewDevice struct {
 
 // NewDevices lists devices whose first connection on record falls inside the window. History older than the
 // retention is gone, so a window longer than the retention is not asked for.
+//
+// It never reads the table through: the devices are few and the records are millions, so it walks the
+// (panel, device, time) index from one device to the next, asks the same index for each one's first record, and
+// only then reads the records of those that turn out to be new.
 func (s *Store) NewDevices(ctx context.Context, panelIDs []string, from, to time.Time) ([]NewDevice, error) {
-	rows, err := s.pool.Query(ctx, `SELECT panel_id, host(device_ip), COALESCE((array_agg(device_name ORDER BY started_at DESC) FILTER (WHERE device_name IS NOT NULL))[1], ''),
-			min(started_at), COALESCE(sum(up_bytes + down_bytes), 0)
-		FROM device_connections WHERE panel_id = ANY($1::uuid[])
-		GROUP BY panel_id, device_ip HAVING min(started_at) >= $2 AND min(started_at) < $3
-		ORDER BY min(started_at) DESC LIMIT 20`, uuids(panelIDs), from, to)
+	rows, err := s.pool.Query(ctx, `WITH RECURSIVE p AS (SELECT unnest($1::uuid[]) AS panel_id),
+		d AS (
+			SELECT p.panel_id, (SELECT min(c.device_ip) FROM device_connections c WHERE c.panel_id = p.panel_id) AS ip FROM p
+			UNION ALL
+			SELECT d.panel_id, (SELECT min(c.device_ip) FROM device_connections c WHERE c.panel_id = d.panel_id AND c.device_ip > d.ip) FROM d WHERE d.ip IS NOT NULL
+		),
+		f AS (
+			SELECT d.panel_id, d.ip, (SELECT min(c.started_at) FROM device_connections c WHERE c.panel_id = d.panel_id AND c.device_ip = d.ip) AS first
+			FROM d WHERE d.ip IS NOT NULL
+		)
+		SELECT f.panel_id, host(f.ip),
+			COALESCE((SELECT c.device_name FROM device_connections c WHERE c.panel_id = f.panel_id AND c.device_ip = f.ip AND c.device_name IS NOT NULL ORDER BY c.started_at DESC LIMIT 1), ''),
+			f.first,
+			(SELECT COALESCE(sum(c.up_bytes + c.down_bytes), 0) FROM device_connections c WHERE c.panel_id = f.panel_id AND c.device_ip = f.ip)
+		FROM f WHERE f.first >= $2 AND f.first < $3
+		ORDER BY f.first DESC LIMIT 20`, uuids(panelIDs), from, to)
 	if err != nil {
 		return nil, err
 	}

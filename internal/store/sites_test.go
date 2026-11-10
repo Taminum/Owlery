@@ -558,3 +558,48 @@ func TestVPNAndDNSCategoriesExistAndApply(t *testing.T) {
 		t.Fatalf("the new categories are missing: %v", cats)
 	}
 }
+
+// A device is new when its first record on file falls inside the window: one that was there before is not, one that
+// came after the window is not, and a second panel's devices are told apart. Bytes and the last name come from its records.
+func TestNewDevicesAreThoseFirstSeenInsideTheWindow(t *testing.T) {
+	e := newAnalyticsEnv(t)
+	router, err := e.s.CreateAgent(ctx, store.Scope{All: true}, e.home.ID, e.homeNodes[0].ID, "OpenWrt", "router", "4", store.HashAgentSecret("rt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	day := time.Date(2026, 10, 9, 0, 0, 0, 0, time.UTC)
+	add := func(key, ip, name string, at time.Time, up, down int) {
+		t.Helper()
+		var nm any
+		if name != "" {
+			nm = name
+		}
+		if _, err := e.s.Pool().Exec(ctx, `INSERT INTO device_connections (panel_id, agent_id, conn_key, started_at, updated_at, device_ip, device_name, destination_host, destination_port, protocol, up_bytes, down_bytes)
+			VALUES ($1, $2, $3, $4, $4, $5::inet, $6, 'x.example.org', 443, 'tcp', $7, $8)`, e.home.ID, router.ID, key, at, ip, nm, up, down); err != nil {
+			t.Fatal(err)
+		}
+	}
+	add("old1", "192.168.1.10", "Old", day.Add(-48*time.Hour), 1, 1)
+	add("old2", "192.168.1.10", "Old", day.Add(2*time.Hour), 1, 1) // seen in the window, but known before it
+	add("new1", "192.168.1.20", "", day.Add(3*time.Hour), 10, 20)
+	add("new2", "192.168.1.20", "Phone", day.Add(5*time.Hour), 100, 200) // the later name wins
+	add("new3", "192.168.1.30", "Tablet", day.Add(1*time.Hour), 5, 5)
+	add("late", "192.168.1.40", "Late", day.Add(30*time.Hour), 1, 1) // first seen after the window
+
+	got, err := e.s.NewDevices(ctx, []string{e.home.ID}, day, day.Add(24*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].IP != "192.168.1.20" || got[1].IP != "192.168.1.30" {
+		t.Fatalf("new devices, newest first: %+v", got)
+	}
+	if got[0].Name != "Phone" || got[0].Bytes != 330 || !got[0].First.Equal(day.Add(3*time.Hour)) || got[0].PanelID != e.home.ID {
+		t.Fatalf("the phone: %+v", got[0])
+	}
+	if none, err := e.s.NewDevices(ctx, []string{e.work.ID}, day, day.Add(24*time.Hour)); err != nil || len(none) != 0 {
+		t.Fatalf("another panel has none: %+v %v", none, err)
+	}
+	if none, err := e.s.NewDevices(ctx, nil, day, day.Add(24*time.Hour)); err != nil || len(none) != 0 {
+		t.Fatalf("no panels asked: %+v %v", none, err)
+	}
+}

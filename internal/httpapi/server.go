@@ -585,7 +585,15 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_, _ = w.Write(buf.Bytes())
 }
 
+// statusClientClosed is the conventional code for a request its sender gave up on.
+const statusClientClosed = 499
+
 func (s *Server) writeErr(w http.ResponseWriter, r *http.Request, status int, code, msg string) {
+	// A page that was left takes its requests with it: the query is cancelled and the handler reports a failure nobody
+	// will read. That is not a fault of the server, so it is not recorded as one (499, "the client closed the request").
+	if status == http.StatusInternalServerError && errors.Is(r.Context().Err(), context.Canceled) {
+		status, code, msg = statusClientClosed, "client_closed", "the request was cancelled"
+	}
 	writeJSON(w, status, apiError{Code: code, Message: msg, RequestID: reqID(r.Context())})
 }
 
