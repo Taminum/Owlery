@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -33,6 +34,16 @@ type secSummary struct {
 		Jails       int        `json:"jails"`
 		ObservedAt  *time.Time `json:"observed_at"`
 	} `json:"fail2ban"`
+	// Checks are the server's port and certificate checks; Win is the Windows picture (only where an agent sent one).
+	Checks ovChecks   `json:"checks"`
+	Win    *winGlance `json:"win,omitempty"`
+}
+
+type winGlance struct {
+	RDPFailed int64  `json:"rdp_failed"`
+	RDPOK     int64  `json:"rdp_ok"`
+	Blocked   *int   `json:"blocked_now,omitempty"`
+	BlockMode string `json:"block_mode,omitempty"`
 }
 
 func summaryOf(x store.SecSummary, ok bool, now time.Time) secSummary {
@@ -138,11 +149,34 @@ func (s *Server) listVPS(w http.ResponseWriter, r *http.Request, a auth.Actor, _
 		s.writeErr(w, r, http.StatusInternalServerError, "internal", "internal error")
 		return
 	}
+	ports, tls, err := s.Store.ChecksByVPS(r.Context(), a.Scope())
+	if err != nil {
+		s.writeErr(w, r, http.StatusInternalServerError, "internal", "internal error")
+		return
+	}
+	wins, err := s.Store.WinsecByVPS(r.Context(), a.Scope())
+	if err != nil {
+		s.writeErr(w, r, http.StatusInternalServerError, "internal", "internal error")
+		return
+	}
 	now := s.Now().UTC()
 	out := make([]vpsOut, 0, len(vs))
 	for _, v := range vs {
 		x, ok := sums[v.ID]
-		out = append(out, vpsOut{VPS: v, CanEdit: vpsCanEdit(a, v), Summary: summaryOf(x, ok, now)})
+		sum := summaryOf(x, ok, now)
+		sum.Checks = tallyChecks(ports[v.ID], tls[v.ID], now)
+		if st, has := wins[v.ID]; has {
+			var w secproto.Winsec
+			if json.Unmarshal(st.Data, &w) == nil {
+				g := &winGlance{RDPFailed: w.RemoteFailed, RDPOK: w.RemoteOK}
+				if w.Block != nil {
+					n := len(w.Block.Active)
+					g.Blocked, g.BlockMode = &n, w.Block.Mode
+				}
+				sum.Win = g
+			}
+		}
+		out = append(out, vpsOut{VPS: v, CanEdit: vpsCanEdit(a, v), Summary: sum})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": out, "can_create": a.IsOwner})
 }
