@@ -1,12 +1,13 @@
 import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ReferenceArea, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { C, SERIES } from '../lib/colors'
+import { C, seriesColors } from '../lib/colors'
 import { formatAxisTime, formatBytes, formatDateTime, formatInt, formatPct, sourceLabel } from '../lib/format'
 import { t } from '../i18n'
 import { useLook } from '../lib/chartLook'
 import type { Overview, Row } from '../lib/types'
 import { Card } from './ui'
 
-const axis = { stroke: C.muted, fontSize: 11, tickLine: false, axisLine: false } as const
+// a function, so the axis takes the colour of the theme the page has when the chart is drawn, not the one at load
+const axisLook = () => ({ stroke: C.muted, fontSize: 11, tickLine: false, axisLine: false }) as const
 
 /** Contiguous runs of buckets that have no collection data. */
 export function gapRuns(timeline: Overview['timeline'], granularity: number): { x1: number; x2: number }[] {
@@ -80,8 +81,8 @@ export function TimelineCard({ ov, tz }: { ov: Overview; tz: string }) {
               <linearGradient id="tl-udp" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.green} stopOpacity={0.6} /><stop offset="100%" stopColor={C.green} stopOpacity={0.1} /></linearGradient>
             </defs>
             <CartesianGrid stroke={C.line} strokeOpacity={0.5} vertical={false} />
-            <XAxis dataKey="ts" type="number" domain={['dataMin', 'dataMax']} scale="time" {...axis} tickCount={7} tickFormatter={(v: number) => formatAxisTime(v, tz, g)} />
-            <YAxis {...axis} width={44} tickFormatter={(v: number) => formatInt(v)} />
+            <XAxis dataKey="ts" type="number" domain={['dataMin', 'dataMax']} scale="time" {...axisLook()} tickCount={7} tickFormatter={(v: number) => formatAxisTime(v, tz, g)} />
+            <YAxis {...axisLook()} width={44} tickFormatter={(v: number) => formatInt(v)} />
             {runs.map((r) => (
               <ReferenceArea key={r.x1} x1={r.x1} x2={r.x2} fill={C.amber} fillOpacity={0.12} stroke={C.amber} strokeOpacity={0.4} strokeDasharray="4 3" ifOverflow="visible" />
             ))}
@@ -115,8 +116,8 @@ export function TrafficCard({ ov, tz }: { ov: Overview; tz: string }) {
               <linearGradient id="tr-up" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.amber} stopOpacity={0.45} /><stop offset="100%" stopColor={C.amber} stopOpacity={0.05} /></linearGradient>
             </defs>
             <CartesianGrid stroke={C.line} strokeOpacity={0.5} vertical={false} />
-            <XAxis dataKey="ts" type="number" domain={['dataMin', 'dataMax']} scale="time" {...axis} tickCount={7} tickFormatter={(v: number) => formatAxisTime(v, tz, g)} />
-            <YAxis {...axis} width={58} tickFormatter={(v: number) => formatBytes(v)} />
+            <XAxis dataKey="ts" type="number" domain={['dataMin', 'dataMax']} scale="time" {...axisLook()} tickCount={7} tickFormatter={(v: number) => formatAxisTime(v, tz, g)} />
+            <YAxis {...axisLook()} width={58} tickFormatter={(v: number) => formatBytes(v)} />
             <Tooltip cursor={{ stroke: C.muted, strokeOpacity: 0.4 }} content={<Tip tz={tz} source={ov.traffic.source} fmt={formatBytes} names={{ down: t('kpi.down'), up: t('kpi.up') }} />} />
             <Area {...look(data.length)} dataKey="down" stroke={C.cyan} strokeWidth={1.5} fill="url(#tr-down)" isAnimationActive={false} />
             <Area {...look(data.length)} dataKey="up" stroke={C.amber} strokeWidth={1.5} fill="url(#tr-up)" isAnimationActive={false} />
@@ -145,8 +146,8 @@ export function TrafficTotalCard({ ov, tz }: { ov: Overview; tz: string }) {
               <linearGradient id="tr-total" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.green} stopOpacity={0.45} /><stop offset="100%" stopColor={C.green} stopOpacity={0.05} /></linearGradient>
             </defs>
             <CartesianGrid stroke={C.line} strokeOpacity={0.5} vertical={false} />
-            <XAxis dataKey="ts" type="number" domain={['dataMin', 'dataMax']} scale="time" {...axis} tickCount={7} tickFormatter={(v: number) => formatAxisTime(v, tz, g)} />
-            <YAxis {...axis} width={58} tickFormatter={(v: number) => formatBytes(v)} />
+            <XAxis dataKey="ts" type="number" domain={['dataMin', 'dataMax']} scale="time" {...axisLook()} tickCount={7} tickFormatter={(v: number) => formatAxisTime(v, tz, g)} />
+            <YAxis {...axisLook()} width={58} tickFormatter={(v: number) => formatBytes(v)} />
             <Tooltip cursor={{ stroke: C.muted, strokeOpacity: 0.4 }} content={<Tip tz={tz} source={ov.traffic.source} fmt={formatBytes} names={{ bytes: t('tr.bytes') }} />} />
             <Area {...look(data.length)} dataKey="bytes" stroke={C.green} strokeWidth={1.5} fill="url(#tr-total)" isAnimationActive={false} />
           </AreaChart>
@@ -167,7 +168,7 @@ export function UsersDonut({ ov, multiPanel, onSelectPanel }: { ov: Overview; mu
           <ResponsiveContainer width="100%" height="100%" minWidth={0}>
             <PieChart>
               <Pie data={rows} dataKey="count" nameKey="label" innerRadius={62} outerRadius={90} stroke={C.surface} strokeWidth={2} isAnimationActive={false} onClick={(d) => d.payload?.panel_id && onSelectPanel(d.payload.panel_id)}>
-                {rows.map((r, i) => <Cell key={r.key} fill={SERIES[i % SERIES.length]} style={{ cursor: 'pointer' }} />)}
+                {rows.map((r, i) => <Cell key={r.key} fill={seriesColors()[i % 6]} style={{ cursor: 'pointer' }} />)}
               </Pie>
             </PieChart>
           </ResponsiveContainer>
@@ -180,7 +181,7 @@ export function UsersDonut({ ov, multiPanel, onSelectPanel }: { ov: Overview; mu
           {rows.map((r, i) => (
             <li key={r.key}>
               <button type="button" onClick={() => r.panel_id && onSelectPanel(r.panel_id)} className="tnum flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left text-[13px] hover:bg-elevated">
-                <i className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: SERIES[i % SERIES.length] }} aria-hidden />
+                <i className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: seriesColors()[i % 6] }} aria-hidden />
                 <span className="min-w-0 flex-1 truncate text-fg">{name(r)}</span>
                 <span className="text-muted">{formatInt(r.count)}</span>
                 <span className="w-12 text-right text-muted">{formatPct(r.share)}</span>

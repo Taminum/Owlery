@@ -10,6 +10,7 @@
   --color-muted: #91a0b2;
   --color-cyan: #38c7e8;
   --color-blue: #518bfa;
+  --color-btn: #3a6fd8; /* behind the white text of a filled button: 4.7 to 1, which the lighter blue of the bars cannot give */
   --color-green: #35c995;
   --color-amber: #f0b95d;
   --color-red: #f07178;
@@ -48,17 +49,17 @@ body {
    (green, amber, red) keep their meaning in every theme. Nothing here applies unless the attribute is set. */
 :root[data-kawaii-theme='kawaii_dark'] {
   --color-canvas: #150f1f; --color-sidebar: #1b1328; --color-surface: #221833; --color-elevated: #2b2040; --color-line: #3d2f57;
-  --color-fg: #f4eefb; --color-muted: #b7aacd; --color-cyan: #c9a6ff; --color-blue: #93a9ff;
+  --color-fg: #f4eefb; --color-muted: #b7aacd; --color-cyan: #c9a6ff; --color-blue: #93a9ff; --color-btn: #5566cf;
 }
 :root[data-kawaii-theme='sakura_light'] {
   color-scheme: light;
   --color-canvas: #fff7f9; --color-sidebar: #ffeef3; --color-surface: #ffffff; --color-elevated: #fff0f5; --color-line: #efcad8;
-  --color-fg: #3a2230; --color-muted: #765868; --color-cyan: #c93a76; --color-blue: #6f52c9;
-  --color-green: #17855a; --color-amber: #9a6200; --color-red: #c0303b;
+  --color-fg: #3a2230; --color-muted: #765868; --color-cyan: #c93a76; --color-blue: #6f52c9; --color-btn: #6f52c9;
+  --color-green: #137a52; --color-amber: #9a6200; --color-red: #c0303b;
 }
 :root[data-kawaii-theme='neko_terminal'] {
   --color-canvas: #07161a; --color-sidebar: #0a1e24; --color-surface: #0e262d; --color-elevated: #12313a; --color-line: #1f4852;
-  --color-fg: #e3fbf6; --color-muted: #90bab4; --color-cyan: #55e6c4; --color-blue: #6aaeff;
+  --color-fg: #e3fbf6; --color-muted: #90bab4; --color-cyan: #55e6c4; --color-blue: #6aaeff; --color-btn: #2a74c9;
 }
 
 .ember-root { position: fixed; right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); z-index: 30; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; pointer-events: none; }
