@@ -88,6 +88,11 @@ body {
   table.w-full th { text-align: left; }
   table.w-full td { vertical-align: middle; }
 }
+/* On a phone a data table keeps the width its columns need and scrolls sideways inside its card, instead of squeezing every column
+   until the words are cut ("Пользовате", "Пам"). */
+@media (max-width: 640px) {
+  table.w-full { min-width: 34rem; }
+}
 table.w-full th { font-size: 12px; font-weight: 500; color: var(--color-muted); }
 table.w-full tbody tr { border-top: 1px solid color-mix(in oklab, var(--color-line) 60%, transparent); transition: background-color 80ms; }
 table.w-full tbody tr:hover { background-color: rgb(255 255 255 / 0.03); }
