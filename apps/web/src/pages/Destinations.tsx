@@ -6,7 +6,7 @@ import { useApp } from '../lib/context'
 import { formatBytes, formatDateTime, formatInt } from '../lib/format'
 import { useAnalytics } from '../hooks/useAnalytics'
 import type { DestResponse, DestRow, NetworksResponse } from '../lib/types'
-import { Card, Chip } from '../components/ui'
+import { Card, Chip, Skeleton } from '../components/ui'
 import { CoverageLine, NoDataPanel, ShareBar, TableSkeleton, confidenceLabel } from '../components/Analyzer'
 import { hasAwg } from '../components/SourceMarks'
 import { controlCls } from '../components/Popover'
@@ -69,7 +69,7 @@ function Children({ params, ctx, depth, subject, tz }: { params: Record<string, 
   const { filters } = useApp()
   const { data, error } = useAnalytics<DestResponse>('destinations', filters, { ...params, subject, limit: '100' })
   if (error) return <tr><td colSpan={8} className="px-3 py-2 text-[13px] text-red">{error}</td></tr>
-  if (!data) return <tr><td colSpan={8} className="px-3 py-2 text-[13px] text-muted">{t('state.loading')}</td></tr>
+  if (!data) return <tr aria-busy="true"><td colSpan={8} className="px-3 py-2"><Skeleton className="h-5" /></td></tr>
   const max = Math.max(0, ...data.rows.map((r) => r.share))
   return <>{data.rows.map((r) => <Node key={`${r.kind}:${r.key}`} r={r} max={max} tz={tz} depth={depth} subject={subject} ctx={ctx} />)}</>
 }

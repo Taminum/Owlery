@@ -5,7 +5,7 @@ import { t, type MsgKey } from '../i18n'
 import { api } from '../lib/api'
 import { formatInt } from '../lib/format'
 import { useLoad } from '../hooks/useLoad'
-import { Card, Chip, Segmented } from '../components/ui'
+import { Card, Chip, Segmented, Skeleton } from '../components/ui'
 import { PageHead } from '../components/Analyzer'
 import { GhostButton, PrimaryButton, inputCls } from '../components/Modal'
 
@@ -96,7 +96,7 @@ function useIntel<T>(kind: string, target: string, extra: string, nonce: number,
 
 function Result<T>({ q, children, refresh }: { q: ReturnType<typeof useIntel<T>>; children: (env: Envelope<T>) => React.ReactNode; refresh?: () => void }) {
   if (q.error) return <p role="alert" className="text-[13px] text-red">{q.error}</p>
-  if (!q.data) return <p className="text-[13px] text-muted">{t('state.loading')}</p>
+  if (!q.data) return <div className="space-y-2" aria-busy="true" aria-label={t('state.loading')}>{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-16" />)}</div>
   const env = q.data
   return (
     <>

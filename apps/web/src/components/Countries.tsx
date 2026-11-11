@@ -3,7 +3,7 @@ import { useApp } from '../lib/context'
 import { formatBytes, formatInt } from '../lib/format'
 import { useAnalytics } from '../hooks/useAnalytics'
 import type { CountriesResponse } from '../lib/types'
-import { Card } from './ui'
+import { Card, Skeleton } from './ui'
 import { ShareBar } from './Analyzer'
 
 /** A flag from the two-letter code (a pair of regional-indicator letters). Where the system has no
@@ -18,7 +18,7 @@ export function CountriesCard({ subject = '', limit = 12, compact = false }: { s
   const max = data ? Math.max(0, ...data.rows.map((r) => r.share)) : 0
   const body = () => {
     if (error) return <p role="alert" className="text-[13px] text-red">{error}</p>
-    if (!data) return <p className="py-6 text-center text-[13px] text-muted">{t('state.loading')}</p>
+    if (!data) return <div className="space-y-2" aria-busy="true" aria-label={t('state.loading')}>{Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-6" />)}</div>
     if (data.meta.state === 'no_data' || data.rows.length === 0) return <p className="py-6 text-center text-[13px] text-muted">{t('geo.none')}</p>
     return (
       <>
