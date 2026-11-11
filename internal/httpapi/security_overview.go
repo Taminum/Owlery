@@ -144,49 +144,8 @@ func (s *Server) secOverview(w http.ResponseWriter, r *http.Request, a auth.Acto
 		fail()
 		return
 	}
+	o.Checks = tallyChecks(ports, tls, now)
 	ck := &o.Checks
-	seen := func(t *time.Time) {
-		if t != nil && (ck.LastCheckedAt == nil || t.After(*ck.LastCheckedAt)) {
-			ck.LastCheckedAt = t
-		}
-	}
-	for _, p := range ports {
-		if !p.Enabled {
-			continue
-		}
-		ck.PortsTotal++
-		seen(p.LastCheckedAt)
-		res := ""
-		if p.LastResult != nil {
-			res = *p.LastResult
-		}
-		switch {
-		// The same rule as the alert: a port that was already open at the first check is the baseline, not news.
-		case !p.Expected && res == secevents.PortReachable && (p.UnexpectedSince != nil || p.Source == "discovered"):
-			ck.PortsUnexpected++
-		case p.Expected && res != "" && res != secevents.PortReachable && res != secevents.PortError:
-			ck.PortsDown++
-		}
-	}
-	for _, e := range tls {
-		if !e.Enabled {
-			continue
-		}
-		ck.TLSTotal++
-		seen(e.LastCheckedAt)
-		if e.LastNotAfter != nil && (ck.TLSNearestEnd == nil || e.LastNotAfter.Before(*ck.TLSNearestEnd)) {
-			t := *e.LastNotAfter
-			ck.TLSNearestEnd = &t
-		}
-		st := ""
-		if e.LastState != nil {
-			st = *e.LastState
-		}
-		expiring := e.LastNotAfter != nil && e.LastNotAfter.Sub(now) <= tlsWarnDays*24*time.Hour
-		if expiring || tlsBroken[st] {
-			ck.TLSProblems++
-		}
-	}
 
 	// Last event and the count of the last day.
 	if u, err := uuid.Parse(v.ID); err == nil {
@@ -274,4 +233,52 @@ func (s *Server) secEventDetail(w http.ResponseWriter, r *http.Request, a auth.A
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"event": e, "related": related})
+}
+
+// tallyChecks counts a server's enabled port and certificate checks the way the card and the alerts judge them.
+func tallyChecks(ports []store.PortEndpoint, tls []store.TLSEndpoint, now time.Time) ovChecks {
+	var ck ovChecks
+	seen := func(t *time.Time) {
+		if t != nil && (ck.LastCheckedAt == nil || t.After(*ck.LastCheckedAt)) {
+			ck.LastCheckedAt = t
+		}
+	}
+	for _, p := range ports {
+		if !p.Enabled {
+			continue
+		}
+		ck.PortsTotal++
+		seen(p.LastCheckedAt)
+		res := ""
+		if p.LastResult != nil {
+			res = *p.LastResult
+		}
+		switch {
+		// The same rule as the alert: a port that was already open at the first check is the baseline, not news.
+		case !p.Expected && res == secevents.PortReachable && (p.UnexpectedSince != nil || p.Source == "discovered"):
+			ck.PortsUnexpected++
+		case p.Expected && res != "" && res != secevents.PortReachable && res != secevents.PortError:
+			ck.PortsDown++
+		}
+	}
+	for _, e := range tls {
+		if !e.Enabled {
+			continue
+		}
+		ck.TLSTotal++
+		seen(e.LastCheckedAt)
+		if e.LastNotAfter != nil && (ck.TLSNearestEnd == nil || e.LastNotAfter.Before(*ck.TLSNearestEnd)) {
+			t := *e.LastNotAfter
+			ck.TLSNearestEnd = &t
+		}
+		st := ""
+		if e.LastState != nil {
+			st = *e.LastState
+		}
+		expiring := e.LastNotAfter != nil && e.LastNotAfter.Sub(now) <= tlsWarnDays*24*time.Hour
+		if expiring || tlsBroken[st] {
+			ck.TLSProblems++
+		}
+	}
+	return ck
 }

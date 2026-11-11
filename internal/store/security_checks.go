@@ -596,3 +596,59 @@ func (s *Store) AcceptOpenPorts(ctx context.Context, sc Scope, vpsID string) (in
 		WHERE vps_id=$1 AND enabled AND NOT expected AND last_result='reachable'`, uuid.MustParse(vpsID))
 	return int(tag.RowsAffected()), err
 }
+
+// ChecksByVPS returns every enabled port and certificate endpoint of the servers the scope can see, grouped by
+// server, so a list of servers can say "2 ports, 1 certificate" without one query per row.
+func (s *Store) ChecksByVPS(ctx context.Context, sc Scope) (map[string][]PortEndpoint, map[string][]TLSEndpoint, error) {
+	pred, args := vpsVisible(sc, 0)
+	ports, tls := map[string][]PortEndpoint{}, map[string][]TLSEndpoint{}
+	pr, err := s.pool.Query(ctx, `SELECT `+portCols+` FROM security_port_endpoints WHERE enabled AND vps_id IN (SELECT v.id FROM security_vps v WHERE `+pred+`)`, args...)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer pr.Close()
+	for pr.Next() {
+		p, err := scanPort(pr)
+		if err != nil {
+			return nil, nil, err
+		}
+		ports[p.VPSID] = append(ports[p.VPSID], p)
+	}
+	if err := pr.Err(); err != nil {
+		return nil, nil, err
+	}
+	tr, err := s.pool.Query(ctx, `SELECT `+tlsCols+` FROM security_tls_endpoints WHERE enabled AND vps_id IN (SELECT v.id FROM security_vps v WHERE `+pred+`)`, args...)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer tr.Close()
+	for tr.Next() {
+		e, err := scanTLS(tr)
+		if err != nil {
+			return nil, nil, err
+		}
+		tls[e.VPSID] = append(tls[e.VPSID], e)
+	}
+	return ports, tls, tr.Err()
+}
+
+// WinsecByVPS returns the last Windows snapshot of each visible server that has one.
+func (s *Store) WinsecByVPS(ctx context.Context, sc Scope) (map[string]SnapshotState, error) {
+	pred, args := vpsVisible(sc, 0)
+	rows, err := s.pool.Query(ctx, `SELECT st.vps_id, st.status, st.observed_at, st.received_at, st.data FROM security_snapshot_state st
+		JOIN security_vps v ON v.id = st.vps_id WHERE st.category = 'winsec' AND `+pred, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]SnapshotState{}
+	for rows.Next() {
+		var id uuid.UUID
+		st := SnapshotState{Category: "winsec"}
+		if err := rows.Scan(&id, &st.Status, &st.ObservedAt, &st.ReceivedAt, &st.Data); err != nil {
+			return nil, err
+		}
+		out[id.String()] = st
+	}
+	return out, rows.Err()
+}

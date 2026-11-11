@@ -1,9 +1,10 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { t, type MsgKey } from '../i18n'
 import { api } from '../lib/api'
 import { formatRate } from '../lib/format'
 import { useLoad } from '../hooks/useLoad'
-import type { VPSList } from '../lib/types'
+import type { VPSList, VPSSummary } from '../lib/types'
 import { Chip } from './ui'
 import { DataTable, type Column } from './DataTable'
 import { tone, type Host } from './HostView'
@@ -61,13 +62,13 @@ export function LoadTable({ list }: { list: Server[] }) {
   return <DataTable caption={t('srv.view.load')} rows={list} rowKey={(s) => s.id} columns={columns} initialSort={{ key: 'disk', desc: true }} pageSize={200} />
 }
 
-type Summary = { agent: 'none' | 'waiting' | 'online' | 'offline'; fail2ban: { state: string; banned: number; total_banned: number } }
+type Summary = Pick<VPSSummary, 'agent' | 'checks' | 'win'> & { fail2ban: { state: string; banned: number; total_banned: number } }
 
 const isWindows = (s: Server) => /windows/i.test(s.os || s.host?.os || '')
 
 /** What guards a machine, in a few words: the blocker on Windows, Fail2ban elsewhere, or the reason there is nothing to say. */
 function guard(s: Server, sum: Summary | undefined): string {
-  if (isWindows(s)) return t('srv.guard.rdp')
+  if (isWindows(s)) return sum?.win ? `${t('srv.guard.rdp')} · ${t('srv.guard.rdpFailed', { n: sum.win.rdp_failed })}` : t('srv.guard.rdp')
   if (!sum || sum.agent === 'none') return t('srv.guard.noAgent')
   const f = sum.fail2ban
   return f.state === 'ok' || f.state === 'stale' ? t('sec.fail2ban') : t(`sec.state.${f.state}` as MsgKey)
@@ -82,14 +83,31 @@ export function ProtectTable({ list }: { list: Server[] }) {
     const x = byId.get(s.id)?.fail2ban
     return x && (x.state === 'ok' || x.state === 'stale') ? x : null
   }
+  // Blocks now: Fail2ban's bans on Linux, the RDP blocker's addresses on Windows.
+  const blocked = (s: Server) => (isWindows(s) ? byId.get(s.id)?.win?.blocked_now ?? null : f2b(s)?.banned ?? null)
+  const [now] = useState(() => Date.now())
+  const daysLeft = (iso: string | null | undefined) => (iso ? Math.floor((new Date(iso).getTime() - now) / 86_400_000) : null)
   const columns: Column<Server>[] = [
     { key: 'name', title: t('srv.col.machine'), sort: (s) => s.name, cell: (s) => <Link to={`/servers/${s.id}?view=security`} className="font-medium text-fg hover:text-cyan hover:underline">{s.name}</Link> },
     { key: 'agent', title: t('srv.col.agent'), sort: (s) => byId.get(s.id)?.agent ?? 'none', cell: (s) => {
       const a = byId.get(s.id)?.agent ?? 'none'
       return <Chip tone={a === 'online' ? 'green' : a === 'offline' ? 'amber' : 'muted'}>{t(`sec.card.agent.${a}` as MsgKey)}</Chip>
     } },
-    { key: 'now', title: t('srv.col.bannedNow'), sort: (s) => f2b(s)?.banned ?? null, descFirst: true, align: 'right', cell: (s) => f2b(s)?.banned ?? '—' },
+    { key: 'now', title: t('srv.col.bannedNow'), sort: (s) => blocked(s), descFirst: true, align: 'right', cell: (s) => blocked(s) ?? '—' },
     { key: 'total', title: t('srv.col.bannedTotal'), sort: (s) => f2b(s)?.total_banned ?? null, descFirst: true, align: 'right', className: 'text-muted', cell: (s) => f2b(s)?.total_banned ?? '—' },
+    { key: 'ports', title: t('srv.col.ports'), sort: (s) => { const c = byId.get(s.id)?.checks; return c && c.ports_total > 0 ? c.ports_unexpected * 1000 + c.ports_down * 100 + c.ports_total : null }, descFirst: true, cell: (s) => {
+      const c = byId.get(s.id)?.checks
+      if (!c || c.ports_total === 0) return <span className="text-muted">—</span>
+      return <span className="inline-flex items-center gap-1.5"><span className="tnum">{c.ports_total}</span>
+        {c.ports_unexpected > 0 && <Chip tone="red">{t('srv.ports.unexpected', { n: c.ports_unexpected })}</Chip>}
+        {c.ports_down > 0 && <Chip tone="amber">{t('srv.ports.down', { n: c.ports_down })}</Chip>}</span>
+    } },
+    { key: 'tls', title: t('srv.col.tls'), sort: (s) => { const c = byId.get(s.id)?.checks; return c && c.tls_total > 0 ? daysLeft(c.tls_nearest_end) ?? 99999 : null }, cell: (s) => {
+      const c = byId.get(s.id)?.checks
+      if (!c || c.tls_total === 0) return <span className="text-muted">—</span>
+      const d = daysLeft(c.tls_nearest_end)
+      return <span className="inline-flex items-center gap-1.5">{d !== null && <span className="tnum">{t('srv.tls.days', { d })}</span>}{c.tls_problems > 0 && <Chip tone="red">{t('srv.tls.problems', { n: c.tls_problems })}</Chip>}</span>
+    } },
     { key: 'guard', title: t('srv.col.guard'), sort: (s) => guard(s, byId.get(s.id)), className: 'text-muted', cell: (s) => guard(s, byId.get(s.id)) },
   ]
   return (

@@ -262,6 +262,8 @@ export interface ServerAlert { id: string; kind: string; subject: string; label:
 export interface VPSSummary {
   agent: 'none' | 'waiting' | 'online' | 'offline'
   fail2ban: { state: string; banned: number; total_banned: number; jails: number; observed_at: string | null }
+  checks?: { ports_total: number; ports_unexpected: number; ports_down: number; tls_total: number; tls_problems: number; tls_nearest_end: string | null }
+  win?: { rdp_failed: number; rdp_ok: number; blocked_now?: number; block_mode?: string }
 }
 export interface VPSList { items: VPS[]; can_create: boolean }
 

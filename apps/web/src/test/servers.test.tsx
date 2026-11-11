@@ -25,8 +25,8 @@ const fleet = [
   srv('ccc', 'Alice-box', { status: 'unknown', host: null, agent: null }),
 ]
 const secItems = [
-  { id: 'a', name: 'owlery', summary: { agent: 'online', fail2ban: { state: 'ok', banned: 1, total_banned: 4867, jails: 2, observed_at: null } } },
-  { id: 'bb', name: 'home-pc', summary: { agent: 'online', fail2ban: { state: 'waiting', banned: 0, total_banned: 0, jails: 0, observed_at: null } } },
+  { id: 'a', name: 'owlery', summary: { agent: 'online', fail2ban: { state: 'ok', banned: 1, total_banned: 4867, jails: 2, observed_at: null }, checks: { ports_total: 3, ports_unexpected: 1, ports_down: 0, tls_total: 1, tls_problems: 0, tls_nearest_end: new Date(Date.now() + 20.5 * 86_400_000).toISOString() } } },
+  { id: 'bb', name: 'home-pc', summary: { agent: 'online', fail2ban: { state: 'waiting', banned: 0, total_banned: 0, jails: 0, observed_at: null }, win: { rdp_failed: 120, rdp_ok: 2, blocked_now: 4, block_mode: 'block' } } },
   { id: 'ccc', name: 'Alice-box', summary: { agent: 'none', fail2ban: { state: 'agent_required', banned: 0, total_banned: 0, jails: 0, observed_at: null } } },
 ]
 
@@ -82,7 +82,11 @@ describe('servers: one page, four views', () => {
     const row = (n: string) => screen.getByRole('link', { name: n }).closest('tr')!
     expect(within(row('owlery')).getByText('Fail2ban')).toBeInTheDocument()
     expect(within(row('owlery')).getByText('4867')).toBeInTheDocument()
-    expect(within(row('home-pc')).getByText('Защита RDP')).toBeInTheDocument()
+    expect(within(row('home-pc')).getByText(/Защита RDP · неудачных входов: 120/)).toBeInTheDocument()
+    expect(within(row('home-pc')).getByText('4')).toBeInTheDocument() // the blocker's addresses stand where Fail2ban's bans do
+    expect(within(row('owlery')).getByText('лишних: 1')).toBeInTheDocument()
+    expect(within(row('owlery')).getByText('20 дн.')).toBeInTheDocument()
+    expect(within(row('Alice-box')).getAllByText('—').length).toBeGreaterThanOrEqual(2)
     expect(within(row('Alice-box')).getByText('нужен агент')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'owlery' })).toHaveAttribute('href', '/servers/a?view=security')
   })
