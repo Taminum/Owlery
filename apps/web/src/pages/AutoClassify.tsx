@@ -6,7 +6,7 @@ import { errorText } from '../lib/errors'
 import { formatInt, formatPct } from '../lib/format'
 import { useLoad } from '../hooks/useLoad'
 import type { AutoDryRun, AutoModels, AutoQueue, AutoStatus, RulesResponse } from '../lib/types'
-import { Card, Chip, Segmented } from '../components/ui'
+import { Card, Chip, Segmented, Skeleton } from '../components/ui'
 import { DataTable } from '../components/DataTable'
 import { Field, GhostButton, PrimaryButton, inputCls } from '../components/Modal'
 
@@ -283,6 +283,6 @@ function Body({ data, reload }: { data: AutoStatus; reload: () => void }) {
 export default function AutoClassify() {
   const { data, error, reload } = useLoad((s) => api.get<AutoStatus>('/api/v1/autoclassify', s), [], 5000)
   if (error) return <p role="alert" className="text-[13px] text-red">{error}</p>
-  if (!data) return <p className="text-[13px] text-muted">{t('state.loading')}</p>
+  if (!data) return <div className="space-y-4" aria-busy="true" aria-label={t('state.loading')}><Skeleton className="h-10 w-72" /><Skeleton className="h-[180px]" /></div>
   return <Body data={data} reload={reload} />
 }
