@@ -1,8 +1,9 @@
+import { DestinationsView } from './Destinations'
 import { DataTable } from '../components/DataTable'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useEffect, useMemo, useState } from 'react'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { t } from '../i18n'
+import { t, type MsgKey } from '../i18n'
 import { C } from '../lib/colors'
 import { useLook } from '../lib/chartLook'
 import { useApp } from '../lib/context'
@@ -10,7 +11,7 @@ import { formatAxisTime, formatBytes, formatDateTime, formatInt, tzOffsetMinutes
 import { useAnalytics } from '../hooks/useAnalytics'
 import { hasAwg } from '../components/SourceMarks'
 import type { ActivityResponse, RulesResponse, SiteDetailResponse, SitesResponse } from '../lib/types'
-import { Card, Chip, RowMenu } from '../components/ui'
+import { Card, Chip, RowMenu, Segmented, Tabs } from '../components/ui'
 import { CoverageLine, NoDataPanel, PageHead, ShareBar, TableSkeleton } from '../components/Analyzer'
 import { controlCls } from '../components/Popover'
 import { Drawer } from '../components/Drawer'
@@ -174,12 +175,20 @@ function RuleDialog({ site, onClose, onDone }: { site: string; onClose: () => vo
   )
 }
 
+type View = 'sites' | 'categories' | 'services' | 'addresses' | 'activity' | 'countries'
+const VIEWS: View[] = ['sites', 'categories', 'services', 'addresses', 'activity', 'countries']
+const TAB_LABEL: Record<View, MsgKey> = { sites: 'sites.tab.sites', categories: 'sites.tab.categories', services: 'sites.tab.services', addresses: 'sites.tab.addresses', activity: 'sites.tab.activity', countries: 'sites.tab.countries' }
+
 export default function Sites() {
   const nav = useNavigate()
   const { filters } = useApp()
   const { state: auth } = useAuth()
   const isOwner = auth.status === 'authed' && auth.me.account.is_owner
-  const [view, setView] = useState<'sites' | 'categories' | 'activity' | 'countries'>('sites')
+  const [params, setParams] = useSearchParams()
+  const wanted = params.get('view') as View | null
+  const view: View = wanted && VIEWS.includes(wanted) ? wanted : 'sites'
+  const setView = (v: View) => setParams(v === 'sites' ? {} : { view: v }, { replace: true })
+  const [addr, setAddr] = useState<'host' | 'ip' | 'networks'>('host')
   const [newOnly, setNewOnly] = useState(false)
   const [ruleFor, setRuleFor] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -201,7 +210,8 @@ export default function Sites() {
   )
   const [sel, setSel] = useState<string | null>(null)
   const q = useDebounced(search.trim(), 300)
-  const { data, error, reload } = useAnalytics<SitesResponse>('sites', filters, { q, subject, category, zone, ...(newOnly ? { new: '1' } : {}), sort, dir, limit: String(PAGE), offset: String(offset) })
+  const listView = view === 'sites' || view === 'categories'
+  const { data, error, reload } = useAnalytics<SitesResponse>('sites', filters, { q, subject, category, zone, ...(newOnly ? { new: '1' } : {}), sort, dir, limit: String(PAGE), offset: String(offset) }, listView)
   const tz = filters.tz
   const max = data ? Math.max(0, ...data.rows.map((r) => r.share)) : 0
   const catMax = data ? Math.max(0, ...data.categories.map((c) => c.share)) : 0
@@ -209,17 +219,15 @@ export default function Sites() {
   return (
     <div className="space-y-4">
       <PageHead title={t('sites.title')} subtitle={t('sites.subtitle')} />
+      <Tabs label={t('sites.title')} value={view} onChange={setView} tabs={VIEWS.map((v) => ({ id: v, label: t(TAB_LABEL[v]) }))} />
       <div className="flex flex-wrap items-center gap-3">
-        <div role="group" aria-label={t('sites.title')} className="flex h-10 items-center rounded-control border border-line bg-surface p-0.5">
-          {(['sites', 'categories', 'activity', 'countries'] as const).map((v) => (
-            <button key={v} type="button" aria-pressed={view === v} onClick={() => setView(v)}
-              className={`h-8 rounded-[8px] px-3 text-[13px] ${view === v ? 'bg-elevated font-medium text-fg shadow-[inset_0_0_0_1px_var(--color-cyan)]' : 'text-muted hover:text-fg'}`}>{t(v === 'sites' ? 'sites.tab.sites' : v === 'categories' ? 'sites.tab.categories' : v === 'activity' ? 'sites.tab.activity' : 'sites.tab.countries')}</button>
-          ))}
-        </div>
         <SubjectSelect value={subject} onChange={(v) => { setSubject(v); setOffset(0); setSel(null) }} />
+        {view !== 'activity' && view !== 'countries' && <>
         <label className="sr-only" htmlFor="site-search">{t('sites.search')}</label>
         <input id="site-search" type="search" value={search} maxLength={100} onChange={(e) => { setSearch(e.target.value); setOffset(0) }} placeholder={t('sites.search')} autoComplete="off" spellCheck={false}
           className={`${controlCls} min-w-[220px] flex-1 sm:max-w-sm`} />
+        </>}
+        {view === 'sites' && <>
         <div role="group" aria-label={t('sites.zone')} className="flex h-10 items-center rounded-control border border-line bg-surface p-0.5">
           {([['', 'sites.zone.all'], ['ru', 'sites.zone.ru'], ['other', 'sites.zone.other']] as const).map(([v, k]) => (
             <button key={v} type="button" aria-pressed={zone === v} onClick={() => { setZone(v); setOffset(0) }}
@@ -228,17 +236,27 @@ export default function Sites() {
         </div>
         <button type="button" aria-pressed={newOnly} onClick={() => { setNewOnly((v) => !v); setOffset(0) }}
           className={`${controlCls} ${newOnly ? 'border-cyan text-fg' : 'text-muted'}`} title={t('sites.newHint')}>{t('sites.newOnly')}</button>
+        </>}
         {category && (
           <button type="button" onClick={() => { setCategory(''); setOffset(0) }} className={`${controlCls} inline-flex items-center gap-2`} aria-label={t('sites.clearCategory')}>
             {category} <span aria-hidden>×</span>
           </button>
         )}
       </div>
-      {data && <CoverageLine meta={data.meta} tz={tz} />}
-      {error && <p role="alert" className="text-[13px] text-red">{error}</p>}
-      {!data && !error && <TableSkeleton />}
-      {data?.meta.state === 'no_data' && <NoDataPanel meta={data.meta} />}
+      {listView && data && <CoverageLine meta={data.meta} tz={tz} />}
+      {listView && error && <p role="alert" className="text-[13px] text-red">{error}</p>}
+      {listView && !data && !error && <TableSkeleton />}
+      {listView && data?.meta.state === 'no_data' && <NoDataPanel meta={data.meta} />}
       {view === 'activity' && <ActivityView subject={subject} />}
+      {view === 'services' && <DestinationsView key={`service|${subject}|${q}`} group="service" subject={subject} q={q} />}
+      {view === 'addresses' && (
+        <div className="space-y-4">
+          <Segmented label={t('sites.tab.addresses')} value={addr} onChange={setAddr} options={[
+            { value: 'host', label: t('an.group.host') }, { value: 'ip', label: t('an.group.ip') }, { value: 'networks', label: t('an.group.networks') },
+          ]} />
+          <DestinationsView key={`${addr}|${subject}|${q}`} group={addr} subject={subject} q={q} />
+        </div>
+      )}
       {view === 'countries' && <CountriesCard subject={subject} limit={40} />}
       {data && data.meta.state === 'ok' && view === 'categories' && (
         <Card title={t('sites.tab.categories')} note={t('sites.catNote')}>

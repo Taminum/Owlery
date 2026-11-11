@@ -24,7 +24,7 @@ const base = {
   'nav.devices': 'Устройства',
   'nav.channels': 'Каналы',
   'nav.live': 'Сейчас',
-  'nav.sites': 'Сайты',
+  'nav.sites': 'Сайты и домены',
   'nav.panels': 'Панели',
   'nav.alerts': 'Оповещения',
   'nav.settings': 'Настройки',
