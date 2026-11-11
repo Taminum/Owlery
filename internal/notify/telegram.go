@@ -84,6 +84,34 @@ func Send(ctx context.Context, token, chatID, text string) error {
 	return err
 }
 
+// Button is one inline button under a message. Data comes back as a press (at most 64 bytes).
+type Button struct{ Text, Data string }
+
+// SendButtons posts a message with one row of inline buttons.
+func SendButtons(ctx context.Context, token, chatID, text string, row []Button) error {
+	r := []rune(text)
+	if len(r) > 4000 {
+		text = string(r[:4000]) + "…"
+	}
+	kb := make([]map[string]string, 0, len(row))
+	for _, b := range row {
+		kb = append(kb, map[string]string{"text": b.Text, "callback_data": b.Data})
+	}
+	_, err := call(ctx, token, "sendMessage", map[string]any{"chat_id": chatID, "text": text, "disable_web_page_preview": true,
+		"reply_markup": map[string]any{"inline_keyboard": [][]map[string]string{kb}}})
+	return err
+}
+
+// AnswerPress tells Telegram a press was received and shows a short note to whoever pressed.
+func AnswerPress(ctx context.Context, token, pressID, note string) {
+	_, _ = call(ctx, token, "answerCallbackQuery", map[string]any{"callback_query_id": pressID, "text": note})
+}
+
+// ClearButtons takes the buttons off a message once they have been used.
+func ClearButtons(ctx context.Context, token, chatID string, messageID int64) {
+	_, _ = call(ctx, token, "editMessageReplyMarkup", map[string]any{"chat_id": chatID, "message_id": messageID, "reply_markup": map[string]any{"inline_keyboard": [][]map[string]string{}}})
+}
+
 // Chat is a conversation that wrote to the bot.
 type Chat struct {
 	ID    string `json:"id"`
@@ -153,12 +181,16 @@ type Update struct {
 	Date    int64
 	Text    string
 	HasText bool
+	// A press of an inline button: its id, its data and the message it was under.
+	PressID   string
+	PressData string
+	MessageID int64
 }
 
 // Updates asks Telegram for what was written to the bot after offset, waiting up to waitSec seconds for something
 // to arrive. An offset of -1 gives only the newest update. Only text messages are returned.
 func Updates(ctx context.Context, token string, offset int64, waitSec int) ([]Update, int64, error) {
-	r, err := call(ctx, token, "getUpdates", map[string]any{"offset": offset, "timeout": waitSec, "limit": 20, "allowed_updates": []string{"message"}})
+	r, err := call(ctx, token, "getUpdates", map[string]any{"offset": offset, "timeout": waitSec, "limit": 20, "allowed_updates": []string{"message", "callback_query"}})
 	if err != nil {
 		return nil, 0, err
 	}
@@ -171,6 +203,16 @@ func Updates(ctx context.Context, token string, offset int64, waitSec int) ([]Up
 				ID int64 `json:"id"`
 			} `json:"chat"`
 		} `json:"message"`
+		Press *struct {
+			ID      string `json:"id"`
+			Data    string `json:"data"`
+			Message *struct {
+				ID   int64 `json:"message_id"`
+				Chat struct {
+					ID int64 `json:"id"`
+				} `json:"chat"`
+			} `json:"message"`
+		} `json:"callback_query"`
 	}
 	if err := json.Unmarshal(r.Result, &raw); err != nil {
 		return nil, 0, SendError{ErrBadAnswer}
@@ -180,6 +222,10 @@ func Updates(ctx context.Context, token string, offset int64, waitSec int) ([]Up
 	for _, u := range raw {
 		if u.ID > last {
 			last = u.ID
+		}
+		if u.Press != nil && u.Press.Message != nil {
+			out = append(out, Update{ID: u.ID, ChatID: strconv.FormatInt(u.Press.Message.Chat.ID, 10), PressID: u.Press.ID, PressData: u.Press.Data, MessageID: u.Press.Message.ID})
+			continue
 		}
 		if u.Message == nil {
 			continue

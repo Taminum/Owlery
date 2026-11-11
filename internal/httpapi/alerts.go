@@ -20,6 +20,7 @@ type alertOut struct {
 	OpenedAt   time.Time  `json:"opened_at"`
 	LastSeenAt time.Time  `json:"last_seen_at"`
 	ResolvedAt *time.Time `json:"resolved_at"`
+	AckedAt    *time.Time `json:"acked_at"`
 }
 
 // listAlerts returns the alerts of the panels the caller may see (and asked for).
@@ -70,7 +71,7 @@ func (s *Server) listAlerts(w http.ResponseWriter, r *http.Request, a auth.Actor
 				}
 			}
 			out.Alerts = append(out.Alerts, alertOut{ID: x.ID, PanelID: x.PanelID, PanelName: name, Kind: x.Kind, Subject: x.Subject, Label: x.Label, Detail: x.Detail,
-				OpenedAt: x.OpenedAt.UTC(), LastSeenAt: x.LastSeenAt.UTC(), ResolvedAt: x.ResolvedAt})
+				OpenedAt: x.OpenedAt.UTC(), LastSeenAt: x.LastSeenAt.UTC(), ResolvedAt: x.ResolvedAt, AckedAt: x.AckedAt})
 		}
 	}
 	writeJSON(w, http.StatusOK, out)

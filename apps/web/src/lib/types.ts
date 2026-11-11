@@ -207,7 +207,7 @@ export interface SiteDetailResponse {
 }
 export interface SubjectA { subject: string; kind: 'user' | 'raw' | 'device' | 'path' | 'awg'; label: string; panel_name: string; connections: number }
 export interface SubjectsResponse { subjects: SubjectA[] }
-export interface AlertRow { id: string; panel_id: string; panel_name: string; kind: string; subject?: string; label: string; detail: string; opened_at: string; last_seen_at: string; resolved_at: string | null }
+export interface AlertRow { id: string; panel_id: string; panel_name: string; kind: string; subject?: string; label: string; detail: string; opened_at: string; last_seen_at: string; resolved_at: string | null; acked_at?: string | null }
 export interface AlertsResponse { alerts: AlertRow[]; open: number }
 export interface RuleRow { id: string; pattern: string; service: string; category: string; source: string; created_at: string | null }
 export interface RulesResponse { rules: RuleRow[]; categories: string[]; can_edit: boolean }

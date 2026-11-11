@@ -104,7 +104,7 @@ export default function Alerts() {
     } },
   ]
   const columns: Column<AlertRow>[] = [
-    { key: 'what', title: t('al.what'), sort: (a) => a.label, cell: (a) => <><span className="font-medium">{a.label}</span> <Chip tone="muted">{a.panel_name}</Chip></> },
+    { key: 'what', title: t('al.what'), sort: (a) => a.label, cell: (a) => <><span className="font-medium">{a.label}</span> <Chip tone="muted">{a.panel_name}</Chip>{a.acked_at && !a.resolved_at && <> <Chip tone="green">{t('al.acked')}</Chip></>}</> },
     { key: 'detail', title: t('al.detail'), className: 'text-muted', cell: (a) => a.detail },
     { key: 'opened', title: t('al.opened'), sort: (a) => a.opened_at, descFirst: true, className: 'tnum whitespace-nowrap text-muted', cell: (a) => formatDateTime(a.opened_at, tz) },
     { key: 'closed', title: t('al.closed'), sort: (a) => a.resolved_at, descFirst: true, className: 'tnum whitespace-nowrap text-muted', cell: (a) => (a.resolved_at ? formatDateTime(a.resolved_at, tz) : '') },

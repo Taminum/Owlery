@@ -43,6 +43,7 @@ type Alert struct {
 	OpenedAt   time.Time  `json:"opened_at"`
 	LastSeenAt time.Time  `json:"last_seen_at"`
 	ResolvedAt *time.Time `json:"resolved_at"`
+	AckedAt    *time.Time `json:"acked_at"`
 }
 
 // Condition is one thing the evaluator found to be wrong right now.
@@ -106,7 +107,7 @@ func (s *Store) ListAlerts(ctx context.Context, panelIDs []string, withUnscoped,
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
-	rs, err := s.pool.Query(ctx, `SELECT id, panel_id, kind, subject, label, detail, opened_at, last_seen_at, resolved_at FROM alerts
+	rs, err := s.pool.Query(ctx, `SELECT id, panel_id, kind, subject, label, detail, opened_at, last_seen_at, resolved_at, acked_at FROM alerts
 		WHERE (panel_id = ANY($1::uuid[]) OR ($4 AND panel_id IS NULL)) AND ($2 = false OR resolved_at IS NULL)
 		  AND ((resolved_at IS NULL AND opened_at <= now() - make_interval(secs => $5))
 		    OR (resolved_at IS NOT NULL AND resolved_at - opened_at >= make_interval(secs => $5)))
@@ -120,7 +121,7 @@ func (s *Store) ListAlerts(ctx context.Context, panelIDs []string, withUnscoped,
 		var a Alert
 		var id uuid.UUID
 		var pid *uuid.UUID
-		if err := rs.Scan(&id, &pid, &a.Kind, &a.Subject, &a.Label, &a.Detail, &a.OpenedAt, &a.LastSeenAt, &a.ResolvedAt); err != nil {
+		if err := rs.Scan(&id, &pid, &a.Kind, &a.Subject, &a.Label, &a.Detail, &a.OpenedAt, &a.LastSeenAt, &a.ResolvedAt, &a.AckedAt); err != nil {
 			return nil, err
 		}
 		a.ID = id.String()

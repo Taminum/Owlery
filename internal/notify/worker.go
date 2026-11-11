@@ -76,6 +76,11 @@ func (w *Worker) Run(ctx context.Context) {
 
 // SendTo sends a text to one channel and records how it went.
 func (w *Worker) SendTo(ctx context.Context, ch store.NotifyChannel, text string) error {
+	return w.sendTo(ctx, ch, text, nil)
+}
+
+// sendTo is SendTo with a row of buttons under the message when there is one.
+func (w *Worker) sendTo(ctx context.Context, ch store.NotifyChannel, text string, row []Button) error {
 	sec, err := w.Store.NotifyChannelSecret(ctx, ch.ID)
 	if err != nil {
 		return err
@@ -85,7 +90,11 @@ func (w *Worker) SendTo(ctx context.Context, ch store.NotifyChannel, text string
 		_ = w.Store.NotifyResult(ctx, ch.ID, false, "key")
 		return SendError{"key"}
 	}
-	err = Send(ctx, s.Token, s.ChatID, text)
+	if len(row) > 0 {
+		err = SendButtons(ctx, s.Token, s.ChatID, text, row)
+	} else {
+		err = Send(ctx, s.Token, s.ChatID, text)
+	}
 	if err != nil {
 		code := ErrNetwork
 		if se, ok := err.(SendError); ok {
@@ -112,10 +121,22 @@ func alertLine(n store.PendingAlertNotice) string {
 	if n.Closed {
 		return "✅ Закрыто: " + n.Label
 	}
+	line := "⚠️ " + n.Label
 	if n.Detail != "" {
-		return "⚠️ " + n.Label + "\n" + n.Detail
+		line += "\n" + n.Detail
 	}
-	return "⚠️ " + n.Label
+	if n.Repeats >= 3 {
+		line += fmt.Sprintf("\n🔁 Уже %d-й раз за час: то уходит, то возвращается", n.Repeats)
+	}
+	return line
+}
+
+// alertButtons are the three presses under a newly opened alert; they work only where the channel's bot listens.
+func alertButtons(c store.NotifyChannel, n store.PendingAlertNotice) []Button {
+	if !c.Commands || n.Closed {
+		return nil
+	}
+	return []Button{{"✓ Принять", "ack:" + n.ID}, {"🔧 Работы 2 ч", "mnt:" + n.ID}, {"🔕 Тише на час", "mute:1"}}
 }
 
 // quietNow says whether the channel is in its quiet hours or muted: only critical alerts are announced then.
@@ -217,6 +238,7 @@ func (w *Worker) alerts(ctx context.Context, chans []store.NotifyChannel) {
 			continue
 		}
 		var texts []string
+		var rows [][]Button
 		if len(list) > maxPerRound {
 			var b strings.Builder
 			fmt.Fprintf(&b, "Owlery: оповещений за раз: %d\n", len(list))
@@ -231,11 +253,16 @@ func (w *Worker) alerts(ctx context.Context, chans []store.NotifyChannel) {
 		} else {
 			for _, n := range list {
 				texts = append(texts, alertLine(n))
+				rows = append(rows, alertButtons(c, n))
 			}
 		}
 		allSent := true
-		for _, tx := range texts {
-			if err := w.SendTo(ctx, c, tx); err != nil {
+		for i, tx := range texts {
+			var row []Button
+			if i < len(rows) {
+				row = rows[i]
+			}
+			if err := w.sendTo(ctx, c, tx, row); err != nil {
 				allSent = false
 				break
 			}
