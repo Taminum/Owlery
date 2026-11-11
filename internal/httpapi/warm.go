@@ -73,8 +73,14 @@ func (s *Server) warmOnce(ctx context.Context) {
 		// the pages set no limit, and a question with one is a different question that warms nothing.
 		page := store.AnalyticsQuery{PanelIDs: ids, From: q.From, To: q.To}
 		dq := page
-		dq.GroupBy = "site"
-		_, _, _, e1 := s.Store.Destinations(ctx, dq)
+		// Every grouping a tab of the Sites and domains page opens on: the first call of each would otherwise take seconds.
+		var e1 error
+		for _, g := range []string{"site", "service", "host", "ip"} {
+			dq.GroupBy = g
+			if _, _, _, err := s.Store.Destinations(ctx, dq); err != nil {
+				e1 = errors.Join(e1, err)
+			}
+		}
 		_, _, e2 := s.Store.UsersAnalytics(ctx, page)
 		_, e3 := s.Store.Subjects(ctx, page)
 		_, e4 := s.Store.Countries(ctx, page)
