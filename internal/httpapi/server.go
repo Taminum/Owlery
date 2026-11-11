@@ -106,6 +106,7 @@ type Server struct {
 	Log            *slog.Logger
 	Now            func() time.Time
 
+	stats     healthStats // how the API's answers are going, for the owner's health page
 	dummyHash string
 	csrfKey   []byte
 	svcKey    []byte // signs the tickets and cookies of web services
@@ -216,6 +217,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/panels/{id}/users", s.session(s.listUsers))
 	mux.Handle("GET /api/v1/subscriptions", s.session(s.subscriptions))
 	mux.Handle("GET /api/v1/modules", s.session(s.moduleList))
+	mux.Handle("GET /api/v1/panel-health", s.session(s.panelHealth))
 	mux.Handle("PUT /api/v1/modules/{id}", s.session(s.moduleSet))
 	mux.Handle("GET /api/v1/servers", s.session(s.serverList))
 	mux.Handle("GET /api/v1/summary", s.session(s.fleetSummary))
@@ -438,7 +440,9 @@ func (s *Server) accessLog(next http.Handler) http.Handler {
 		start := time.Now()
 		sw := &statusWriter{ResponseWriter: w, status: 200}
 		next.ServeHTTP(sw, r)
-		s.Log.Info("request", "request_id", reqID(r.Context()), "method", r.Method, "path", r.URL.Path, "status", sw.status, "ms", time.Since(start).Milliseconds())
+		took := time.Since(start)
+		s.stats.note(s.Now(), r.Method, r.URL.Path, sw.status, took)
+		s.Log.Info("request", "request_id", reqID(r.Context()), "method", r.Method, "path", r.URL.Path, "status", sw.status, "ms", took.Milliseconds())
 	})
 }
 

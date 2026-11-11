@@ -215,6 +215,21 @@ func serve(log *slog.Logger) error {
 			}
 		}
 	}()
+	go func() { // the size of the database, once in a while: the page of the panel's health draws its growth
+		t := time.NewTimer(30 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+			}
+			if err := st.SampleDBSize(ctx, time.Now().UTC()); err != nil && ctx.Err() == nil {
+				log.Error("database size sample failed", "err", err)
+			}
+			t.Reset(6 * time.Hour)
+		}
+	}()
 	go secChecker.Run(ctx)
 	go (&notify.Worker{Store: st, Ring: ring, Log: log}).Run(ctx)
 	go (&notify.Bot{Store: st, Ring: ring, Log: log}).Run(ctx)
