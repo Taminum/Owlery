@@ -38,7 +38,7 @@ export function Card({
 export function Chip({ icon: Icon, tone = 'muted', children }: { icon?: LucideIcon; tone?: 'muted' | 'amber' | 'green' | 'red' | 'cyan'; children: ReactNode }) {
   const color = { muted: 'text-muted border-line', amber: 'text-amber border-amber/40', green: 'text-green border-green/40', red: 'text-red border-red/40', cyan: 'text-cyan border-cyan/40' }[tone]
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${color}`}>
+    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-medium ${color}`}>
       {Icon && <Icon size={13} aria-hidden />}
       {children}
     </span>
