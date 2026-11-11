@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import './index.css'
 import './lib/density'
 import { AuthProvider } from './lib/auth'
@@ -13,13 +13,12 @@ import Devices from './pages/Devices'
 import Digest from './pages/Digest'
 import Awg from './pages/Awg'
 import Billing from './pages/Billing'
-import Hosts from './pages/Hosts'
 import Servers from './pages/Servers'
 import ServerCard from './pages/ServerCard'
 import Start from './pages/Start'
 import Intel from './pages/Intel'
 import { DnsMapDetail } from './pages/DnsMap'
-import Security, { SecurityDetail } from './pages/Security'
+import { SecurityDetail } from './pages/Security'
 import Sites from './pages/Sites'
 import Traffic from './pages/Traffic'
 import Nodes from './pages/Nodes'
@@ -45,11 +44,11 @@ createRoot(document.getElementById('root')!).render(
             <Route path="sites" element={<Sites />} />
             <Route path="intel" element={<Intel />} />
             <Route path="intel/dns/:id" element={<DnsMapDetail />} />
-            <Route path="security" element={<Security />} />
+            <Route path="security" element={<Navigate to="/servers?view=protect" replace />} />
             <Route path="security/:id" element={<SecurityDetail />} />
             <Route path="awg" element={<Awg />} />
             <Route path="billing" element={<Billing />} />
-            <Route path="hosts" element={<Hosts />} />
+            <Route path="hosts" element={<Navigate to="/servers?view=load" replace />} />
             <Route path="servers" element={<Servers />} />
             <Route path="servers/:id" element={<ServerCard />} />
             <Route path="start" element={<Start />} />
