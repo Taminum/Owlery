@@ -53,7 +53,8 @@ describe('automatic classification settings', () => {
     expect(screen.getByText('не задан')).toBeInTheDocument()
     expect(screen.getByText(/secrets\/gemini_api_key/)).toBeInTheDocument()
     expect(screen.queryByLabelText(/Ключ Gemini/i, { selector: 'input' })).not.toBeInTheDocument() // there is no field to type a key into
-    expect(screen.getByRole('button', { name: 'Запустить прогон' })).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Пробный прогон' }))
+    expect(await screen.findByRole('button', { name: 'Запустить прогон' })).toBeDisabled()
   })
 
   it('offers only the provider’s models, saves the choice, and then allows a dry run', async () => {
@@ -72,8 +73,10 @@ describe('automatic classification settings', () => {
     await openTab()
     const select = await screen.findByLabelText('Модель')
     await waitFor(() => expect(within(select).getAllByRole('option').length).toBe(3)) // "not chosen" + the two models
-    expect(screen.getByRole('button', { name: 'Запустить прогон' })).toBeDisabled() // no model yet
-    await userEvent.selectOptions(select, 'gemini-a-flash')
+    await userEvent.click(screen.getByRole('button', { name: 'Пробный прогон' }))
+    expect(await screen.findByRole('button', { name: 'Запустить прогон' })).toBeDisabled() // no model yet
+    await userEvent.click(screen.getByRole('button', { name: 'Настройки' }))
+    await userEvent.selectOptions(await screen.findByLabelText('Модель'), 'gemini-a-flash')
     const batch = screen.getByLabelText('Размер пакета')
     await userEvent.clear(batch)
     await userEvent.type(batch, '12')
@@ -83,6 +86,7 @@ describe('automatic classification settings', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Сохранить' }))
     await waitFor(() => expect(calls.some((c) => c.method === 'PUT')).toBe(true))
     expect(calls.find((c) => c.method === 'PUT')!.body).toEqual({ model: 'gemini-a-flash', batch_size: 12, daily_limit: 250 })
+    await userEvent.click(screen.getByRole('button', { name: 'Пробный прогон' }))
     const start = await screen.findByRole('button', { name: 'Запустить прогон' })
     await waitFor(() => expect(start).toBeEnabled())
     await userEvent.click(start)
@@ -105,6 +109,7 @@ describe('automatic classification settings', () => {
     } })
     renderSettings()
     await openTab()
+    await userEvent.click(await screen.findByRole('button', { name: 'Пробный прогон' }))
     const table = await screen.findByRole('table', { name: 'Пробный прогон' })
     expect(within(table).getByText('steamstuff.com')).toBeInTheDocument()
     expect(screen.getByText('75,0%')).toBeInTheDocument() // 3 of 4 answered

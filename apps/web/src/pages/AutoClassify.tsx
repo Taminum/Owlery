@@ -6,7 +6,8 @@ import { errorText } from '../lib/errors'
 import { formatInt, formatPct } from '../lib/format'
 import { useLoad } from '../hooks/useLoad'
 import type { AutoDryRun, AutoModels, AutoQueue, AutoStatus, RulesResponse } from '../lib/types'
-import { Card, Chip } from '../components/ui'
+import { Card, Chip, Segmented } from '../components/ui'
+import { DataTable } from '../components/DataTable'
 import { Field, GhostButton, PrimaryButton, inputCls } from '../components/Modal'
 
 type Filter = 'all' | 'invalid' | 'low' | 'undetermined'
@@ -170,10 +171,9 @@ function RowFix({ site, current, cats }: { site: string; current: string; cats: 
       <input list="ac-cats" value={cat} onChange={(e) => { setCat(e.target.value); setState('idle') }} aria-label={`${t('sites.category')}: ${site}`}
         className="h-8 w-40 rounded-control border border-line bg-transparent px-2 text-[13px]" />
       <datalist id="ac-cats">{cats.map((c) => <option key={c} value={c} />)}</datalist>
-      <button type="button" disabled={state === 'busy' || !cat.trim() || state === 'done'} onClick={() => void apply()}
-        className="h-8 rounded-control border border-line px-2.5 text-[13px] text-muted hover:text-fg disabled:opacity-50">
-        {state === 'done' ? '✓' : state === 'err' ? '!' : 'Применить'}
-      </button>
+      <GhostButton size="m" disabled={state === 'busy' || !cat.trim() || state === 'done'} onClick={() => void apply()}>
+        {state === 'done' ? '✓' : state === 'err' ? '!' : t('ac.apply')}
+      </GhostButton>
     </div>
   )
 }
@@ -242,43 +242,19 @@ function DryRun({ status, reload }: { status: AutoStatus; reload: () => void }) 
               <ul className="flex flex-wrap gap-2 text-xs">{cats.map(([c, n]) => <li key={c}><Chip tone="muted">{c}: {n}</Chip></li>)}</ul>
             </div>
           )}
-          <div role="group" aria-label={t('ac.filter')} className="flex flex-wrap gap-2">
-            {FILTERS.map(([f, k]) => (
-              <button key={f} type="button" aria-pressed={filter === f} onClick={() => setFilter(f)}
-                className={`h-8 rounded-control border px-3 text-[13px] ${filter === f ? 'border-cyan bg-elevated text-fg' : 'border-line text-muted hover:text-fg'}`}>{t(k as 'ac.f.all')}</button>
-            ))}
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-[13px]">
-              <caption className="sr-only">{t('ac.dryrun')}</caption>
-              <thead><tr className="text-left text-xs text-muted">
-                <th scope="col" className="px-2 py-2 font-medium">{t('sites.site')}</th>
-                <th scope="col" className="px-2 py-2 font-medium">{t('sites.category')}</th>
-                <th scope="col" className="px-2 py-2 font-medium">{t('rules.service')}</th>
-                <th scope="col" className="px-2 py-2 text-right font-medium">{t('ac.confidence')}</th>
-                <th scope="col" className="px-2 py-2 font-medium">{t('ac.reason')}</th>
-                <th scope="col" className="px-2 py-2 text-right font-medium">{t('an.connections')}</th>
-                <th scope="col" className="px-2 py-2 font-medium">Изменить</th>
-              </tr></thead>
-              <tbody>
-                {items.map((i) => (
-                  <tr key={i.site} className="border-t border-line/60 align-top">
-                    <td className="px-2 py-2 font-medium">{i.site}<div className="text-xs text-muted">{i.picked_by === 'top' ? t('ac.pickedTop') : t('ac.pickedRandom')}</div></td>
-                    <td className="px-2 py-2">
-                      {!i.valid ? <span className="text-red">{issueText(i.issue ?? '')}</span>
-                        : i.undetermined ? <span className="text-muted">{t('ac.undetermined')}</span>
-                        : <>{i.category}{i.confidence < 0.6 && <span className="ml-2 text-xs text-amber">{t('ac.guess')}</span>}</>}
-                    </td>
-                    <td className="px-2 py-2 text-muted">{i.service || '—'}</td>
-                    <td className="tnum px-2 py-2 text-right">{i.valid ? `${Math.round(i.confidence * 100)}%` : '—'}</td>
-                    <td className="max-w-[360px] px-2 py-2 text-muted">{i.reason}</td>
-                    <td className="tnum px-2 py-2 text-right text-muted">{formatInt(i.connections)}</td>
-                    <td className="px-2 py-2"><RowFix site={i.site} current={i.valid && !i.undetermined ? i.category ?? '' : ''} cats={ruleCats} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Segmented label={t('ac.filter')} value={filter} onChange={setFilter} options={FILTERS.map(([f, k]) => ({ value: f, label: t(k as 'ac.f.all') }))} />
+          <DataTable caption={t('ac.dryrun')} rows={items} rowKey={(i) => i.site} columns={[
+            { key: 'site', title: t('sites.site'), sort: (i) => i.site, cell: (i) => <><span className="font-medium">{i.site}</span><div className="text-xs text-muted">{i.picked_by === 'top' ? t('ac.pickedTop') : t('ac.pickedRandom')}</div></> },
+            { key: 'cat', title: t('sites.category'), sort: (i) => (i.valid && !i.undetermined ? i.category ?? '' : null), cell: (i) => (
+              !i.valid ? <span className="text-red">{issueText(i.issue ?? '')}</span>
+                : i.undetermined ? <span className="text-muted">{t('ac.undetermined')}</span>
+                : <>{i.category}{i.confidence < 0.6 && <span className="ml-2 text-xs text-amber">{t('ac.guess')}</span>}</>) },
+            { key: 'service', title: t('rules.service'), sort: (i) => i.service || null, className: 'text-muted', cell: (i) => i.service || '—' },
+            { key: 'conf', title: t('ac.confidence'), sort: (i) => (i.valid ? i.confidence : null), descFirst: true, align: 'right', cell: (i) => (i.valid ? `${Math.round(i.confidence * 100)}%` : '—') },
+            { key: 'reason', title: t('ac.reason'), className: 'max-w-[360px] whitespace-normal text-muted', cell: (i) => i.reason },
+            { key: 'conn', title: t('an.connections'), sort: (i) => i.connections, descFirst: true, align: 'right', className: 'text-muted', cell: (i) => formatInt(i.connections) },
+            { key: 'fix', title: t('ac.change'), cell: (i) => <RowFix site={i.site} current={i.valid && !i.undetermined ? i.category ?? '' : ''} cats={ruleCats} /> },
+          ]} />
           <p className="text-xs leading-5 text-muted">{t('ac.confidenceNote')}</p>
         </div>
       )}
@@ -286,16 +262,27 @@ function DryRun({ status, reload }: { status: AutoStatus; reload: () => void }) 
   )
 }
 
+type Part = 'queue' | 'settings' | 'dryrun'
+
+function Body({ data, reload }: { data: AutoStatus; reload: () => void }) {
+  // Where the work is blocked (no key, no model) the person starts at the settings; otherwise at the queue.
+  const [part, setPart] = useState<Part>(!data.key_present || !data.settings.model ? 'settings' : 'queue')
+  return (
+    <div className="space-y-4">
+      <p className="text-[13px] text-muted">{t('ac.intro')}</p>
+      <Segmented label={t('ac.parts')} value={part} onChange={setPart} options={[
+        { value: 'queue', label: t('ac.part.queue') }, { value: 'settings', label: t('ac.part.settings') }, { value: 'dryrun', label: t('ac.part.dryrun') },
+      ]} />
+      {part === 'settings' && <Settings key={`${data.settings.model}|${data.settings.batch_size}|${data.settings.daily_limit}`} status={data} reload={reload} />}
+      {part === 'queue' && <Queue status={data} reload={reload} />}
+      {part === 'dryrun' && <DryRun status={data} reload={reload} />}
+    </div>
+  )
+}
+
 export default function AutoClassify() {
   const { data, error, reload } = useLoad((s) => api.get<AutoStatus>('/api/v1/autoclassify', s), [], 5000)
   if (error) return <p role="alert" className="text-[13px] text-red">{error}</p>
   if (!data) return <p className="text-[13px] text-muted">{t('state.loading')}</p>
-  return (
-    <div className="space-y-4">
-      <p className="text-[13px] text-muted">{t('ac.intro')}</p>
-      <Settings key={`${data.settings.model}|${data.settings.batch_size}|${data.settings.daily_limit}`} status={data} reload={reload} />
-      <Queue status={data} reload={reload} />
-      <DryRun status={data} reload={reload} />
-    </div>
-  )
+  return <Body data={data} reload={reload} />
 }
