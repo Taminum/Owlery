@@ -10,6 +10,7 @@ import { TimelineCard, TrafficCard, TrafficTotalCard, UsersDonut } from '../comp
 import { AgentsNotConnected, FailureState, NoData, OverviewSkeleton, SyncPending } from '../components/States'
 import { useNavigate } from 'react-router-dom'
 import { Card, Chip } from '../components/ui'
+import { PageHead } from '../components/Analyzer'
 import { StartHint } from './Start'
 import type { Overview as OverviewData } from '../lib/types'
 
@@ -74,6 +75,7 @@ export default function Overview() {
 
   return (
     <div className={`space-y-4 transition-opacity ${loading ? 'opacity-70' : ''}`} aria-busy={loading}>
+      <PageHead title={t('vpn.title')} subtitle={t('vpn.subtitle')} />
       <ScopeBar ov={ov} tz={tz} panelName={panelName} fetchedAt={fetchedAt} />
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">

@@ -32,6 +32,13 @@ describe('overview traffic from panel counters', () => {
     expect(screen.getByText(/без разделения на вход и выход/)).toBeInTheDocument()
   })
 
+  it('names the page and says what it shows, so it does not open on bare tiles', async () => {
+    mockApi({ me: owner, handler: overviewReply(emptyOverview({ demo: false })) })
+    renderApp('/')
+    expect(await screen.findByRole('heading', { level: 1, name: 'Обзор VPN' })).toBeInTheDocument()
+    expect(screen.getByText(/Что происходит у VPN за выбранный период/)).toBeInTheDocument()
+  })
+
   it('still says there are no counters when the panel has sent none', async () => {
     const ov = emptyOverview({ demo: false })
     ov.traffic = { ...ov.traffic, series: [], total_bytes: null, total_series: [] }
