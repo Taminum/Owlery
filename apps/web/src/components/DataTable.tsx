@@ -81,7 +81,7 @@ export function DataTable<T>({ caption, columns, rows, rowKey, initialSort, page
                 return (
                   <th key={c.key} scope="col" title={c.hint} aria-sort={c.sort ? (active ? (sort.desc ? 'descending' : 'ascending') : 'none') : undefined} className={`whitespace-nowrap ${right ? '!text-right' : ''}`}>
                     {c.sort ? (
-                      <button type="button" onClick={() => toggle(c)} className={`inline-flex items-center gap-1 hover:text-fg ${active ? 'text-fg' : ''}`}>
+                      <button type="button" onClick={() => toggle(c)} className={`inline-flex items-center gap-1 py-1.5 hover:text-fg ${active ? 'text-fg' : ''}`}>
                         {c.title}
                         {active && (sort.desc ? <ArrowDown size={12} aria-hidden className="text-cyan" /> : <ArrowUp size={12} aria-hidden className="text-cyan" />)}
                       </button>

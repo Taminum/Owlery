@@ -172,7 +172,7 @@ export default function ServerCard() {
   const choice = CHOICE[group].filter((x) => views(group).includes(x))
   return (
     <div className="space-y-4">
-      <Link to="/servers" className="inline-flex items-center gap-2 text-[13px] text-muted hover:text-fg"><ArrowLeft size={15} aria-hidden />{t('srv.back')}</Link>
+      <Link to="/servers" className="inline-flex items-center gap-2 py-2 text-[13px] text-muted hover:text-fg"><ArrowLeft size={15} aria-hidden />{t('srv.back')}</Link>
       <PageHead title={s.name} subtitle={[s.os || s.host?.os, s.provider, placeText(s)].filter(Boolean).join(' · ') || t('srv.subtitle')} right={<div className="flex items-center gap-3"><About s={s} onEdit={() => setEditing(true)} /><StatusChip s={s} /></div>} />
 
       {s.maint_until && <MaintenanceBanner until={s.maint_until} note={s.maint_note} canEdit={s.can_edit} serverId={s.id} onChange={q.reload} />}
