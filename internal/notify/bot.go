@@ -146,8 +146,15 @@ func (b *Bot) poll(ctx context.Context, id string) {
 			_ = b.Store.SetBotOffset(ctx, id, last+1)
 		}
 		for _, u := range ups {
-			if u.ChatID != s.ChatID || !u.HasText {
+			if u.ChatID != s.ChatID {
 				continue // only the channel's own chat may ask
+			}
+			if u.PressID != "" {
+				b.press(ctx, ch, s, u)
+				continue
+			}
+			if !u.HasText {
+				continue
 			}
 			now := b.now()
 			if now.Unix()-u.Date > 120 {
@@ -256,4 +263,46 @@ func (b *Bot) handle(ctx context.Context, ch store.NotifyChannel, s Secret, text
 		out = "Не получилось собрать ответ, попробуйте ещё раз чуть позже."
 	}
 	reply(out)
+}
+
+// Presses carry "ack:<alert id>", "mnt:<alert id>" (a two-hour maintenance window for the machine the alert is about)
+// or "mute:1" (everything but the urgent held for an hour). Each does one small thing and says what it did.
+func (b *Bot) press(ctx context.Context, ch store.NotifyChannel, s Secret, u Update) {
+	kind, arg, _ := strings.Cut(u.PressData, ":")
+	note := "Не получилось, попробуйте ещё раз."
+	done := false
+	switch kind {
+	case "ack":
+		ok, err := b.Store.AckAlert(ctx, arg)
+		switch {
+		case err != nil:
+		case ok:
+			note, done = "Принято: напоминаний не будет", true
+		default:
+			note, done = "Это уже закрыто", true
+		}
+	case "mnt":
+		vps, _, err := b.Store.VPSOfAlert(ctx, arg)
+		switch {
+		case err != nil:
+		case vps == "":
+			note = "У этой тревоги нет своей машины"
+		default:
+			until := b.now().UTC().Add(2 * time.Hour)
+			if err := b.Store.SetMaintenance(ctx, vps, until, "из Telegram"); err == nil {
+				note, done = "Работы на 2 часа: об этой машине тихо", true
+			}
+		}
+	case "mute":
+		until := b.now().UTC().Add(time.Hour)
+		if _, err := b.Store.PatchNotifyChannel(ctx, ch.ID, store.NotifyPatch{SetMute: true, MutedUntil: &until}); err == nil {
+			note, done = "Тихо на час, срочное всё равно придёт", true
+		}
+	default:
+		note = "Эта кнопка устарела"
+	}
+	AnswerPress(ctx, s.Token, u.PressID, note)
+	if done {
+		ClearButtons(ctx, s.Token, s.ChatID, u.MessageID)
+	}
 }

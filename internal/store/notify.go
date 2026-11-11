@@ -212,14 +212,20 @@ type PendingAlertNotice struct {
 	Detail   string
 	Closed   bool
 	OpenedAt time.Time
+	Subject  string
+	// Repeats counts the alerts of this kind and subject opened in the last hour, this one included: a thing that keeps
+	// going and coming back says so in the message instead of arriving as a series of separate news.
+	Repeats int
 }
 
 // PendingAlertNotices lists alerts not yet announced: opened ones, and closed ones whose opening was announced.
 func (s *Store) PendingAlertNotices(ctx context.Context, limit int) ([]PendingAlertNotice, error) {
 	rows, err := s.pool.Query(ctx, `
-SELECT id, kind, label, detail, false, opened_at FROM alerts WHERE resolved_at IS NULL AND notified_open_at IS NULL AND opened_at <= now() - make_interval(secs => $2)
+SELECT id, kind, label, detail, false, opened_at, subject,
+  (SELECT count(*) FROM alerts b WHERE b.kind = a.kind AND b.subject = a.subject AND b.opened_at > now() - interval '1 hour')
+  FROM alerts a WHERE resolved_at IS NULL AND notified_open_at IS NULL AND opened_at <= now() - make_interval(secs => $2)
 UNION ALL
-SELECT id, kind, label, detail, true, opened_at FROM alerts WHERE resolved_at IS NOT NULL AND notified_open_at IS NOT NULL AND notified_close_at IS NULL
+SELECT id, kind, label, detail, true, opened_at, subject, 0 FROM alerts WHERE resolved_at IS NOT NULL AND notified_open_at IS NOT NULL AND notified_close_at IS NULL
 ORDER BY 6 LIMIT $1`, limit, AlertGrace.Seconds())
 	if err != nil {
 		return nil, err
@@ -229,7 +235,7 @@ ORDER BY 6 LIMIT $1`, limit, AlertGrace.Seconds())
 	for rows.Next() {
 		var n PendingAlertNotice
 		var id uuid.UUID
-		if err := rows.Scan(&id, &n.Kind, &n.Label, &n.Detail, &n.Closed, &n.OpenedAt); err != nil {
+		if err := rows.Scan(&id, &n.Kind, &n.Label, &n.Detail, &n.Closed, &n.OpenedAt, &n.Subject, &n.Repeats); err != nil {
 			return nil, err
 		}
 		n.ID = id.String()
@@ -257,7 +263,7 @@ func (s *Store) MarkAlertsNotified(ctx context.Context, opened, closed []string)
 // reminder) is older than the cut-off.
 func (s *Store) AlertsDueReminder(ctx context.Context, before time.Time, limit int) ([]PendingAlertNotice, error) {
 	rows, err := s.pool.Query(ctx, `SELECT id, kind, label, detail, opened_at FROM alerts
-		WHERE resolved_at IS NULL AND notified_open_at IS NOT NULL AND COALESCE(reminded_at, notified_open_at) < $1 ORDER BY opened_at LIMIT $2`, before, limit)
+		WHERE resolved_at IS NULL AND acked_at IS NULL AND notified_open_at IS NOT NULL AND COALESCE(reminded_at, notified_open_at) < $1 ORDER BY opened_at LIMIT $2`, before, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -292,4 +298,41 @@ func (s *Store) SetBotOffset(ctx context.Context, id string, offset int64) error
 	}
 	_, err = s.pool.Exec(ctx, `UPDATE notify_channels SET bot_offset=$2 WHERE id=$1`, u, offset)
 	return err
+}
+
+// AckAlert marks an open alert as accepted: it is no longer repeated. It reports false when there is no such open alert.
+func (s *Store) AckAlert(ctx context.Context, id string) (bool, error) {
+	u, err := uuid.Parse(id)
+	if err != nil {
+		return false, nil
+	}
+	tag, err := s.pool.Exec(ctx, `UPDATE alerts SET acked_at = COALESCE(acked_at, now()) WHERE id = $1 AND resolved_at IS NULL`, u)
+	return tag.RowsAffected() > 0, err
+}
+
+// VPSOfAlert finds the machine an open alert is about: its subject is the machine, its agent, or one of its checked
+// ports or certificates (possibly followed by ":" and a detail). It is empty for what belongs to no machine.
+func (s *Store) VPSOfAlert(ctx context.Context, id string) (vpsID, label string, err error) {
+	u, perr := uuid.Parse(id)
+	if perr != nil {
+		return "", "", nil
+	}
+	var subject string
+	if err = s.pool.QueryRow(ctx, `SELECT subject, label FROM alerts WHERE id = $1`, u).Scan(&subject, &label); err != nil {
+		return "", "", nil
+	}
+	base := SubjectBase(subject)
+	if _, perr := uuid.Parse(base); perr != nil {
+		return "", label, nil
+	}
+	err = s.pool.QueryRow(ctx, `
+		SELECT v FROM (
+			SELECT id::text AS v FROM security_vps WHERE id::text = $1
+			UNION SELECT vps_id::text FROM security_agents WHERE id::text = $1
+			UNION SELECT vps_id::text FROM security_tls_endpoints WHERE id::text = $1
+			UNION SELECT vps_id::text FROM security_port_endpoints WHERE id::text = $1) x LIMIT 1`, base).Scan(&vpsID)
+	if err != nil {
+		return "", label, nil
+	}
+	return vpsID, label, nil
 }

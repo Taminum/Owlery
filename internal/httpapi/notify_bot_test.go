@@ -14,6 +14,7 @@ import (
 
 	"github.com/Taminum/Owlery/internal/notify"
 	"github.com/Taminum/Owlery/internal/secproto"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 // botTelegram is a bot that has a queue of messages written to it.
@@ -28,6 +29,13 @@ func (f *botTelegram) push(id int64, chat int64, text string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.queue = append(f.queue, map[string]any{"update_id": id, "message": map[string]any{"date": time.Now().Unix(), "text": text, "chat": map[string]any{"id": chat}}})
+}
+
+// pushPress queues a press of an inline button under a message of the chat.
+func (f *botTelegram) pushPress(id int64, chat int64, data string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.queue = append(f.queue, map[string]any{"update_id": id, "callback_query": map[string]any{"id": "p" + data, "data": data, "message": map[string]any{"message_id": 7, "chat": map[string]any{"id": chat}}}})
 }
 
 func (f *botTelegram) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -258,4 +266,50 @@ func TestNotificationTuningFiltersByGroupHoldsInQuietHoursAndRemindsOfWhatStaysO
 	if n := len(fake.replies()) - base; n != 3 {
 		t.Fatalf("a reminder was repeated at once: %v", fake.replies()[base:])
 	}
+}
+
+func TestPressingTheButtonsUnderAnAlertAcceptsItAndOpensAMaintenanceWindow(t *testing.T) {
+	w := newWorld(t)
+	fake := &botTelegram{}
+	srv := httptest.NewServer(fake)
+	defer srv.Close()
+	old := notify.BaseURL
+	notify.BaseURL = srv.URL
+	defer func() { notify.BaseURL = old }()
+	ctx := context.Background()
+
+	vps, err := w.h.st.CreateVPS(ctx, "", "exit-press", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kinds := []string{"host_mem"}
+	if _, _, err := w.h.st.ApplyConditions(ctx, kinds, []store.Condition{{PanelID: w.home.ID, Kind: "host_mem", Subject: vps.ID, Label: "Память на exit-press", Detail: "93%"}}, time.Now().Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	list, err := w.h.st.ListAlerts(ctx, []string{w.home.ID}, false, true, 10)
+	if err != nil || len(list) != 1 {
+		t.Fatalf("%v %v", list, err)
+	}
+	id := list[0].ID
+
+	if st, b := w.owner.do("POST", "/api/v1/notify/channels", map[string]any{"name": "Me", "token": tgToken, "chat_id": "424242", "digest_hour": nil, "digest_tz": "UTC"}); st != 201 {
+		t.Fatalf("%d %s", st, b)
+	}
+	bctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	bot := &notify.Bot{Store: w.h.st, Ring: w.h.srv.Ring, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	go bot.Run(bctx)
+	time.Sleep(1500 * time.Millisecond)
+
+	fake.pushPress(20, 999, "ack:"+id) // another chat: nothing happens
+	fake.pushPress(21, 424242, "ack:"+id)
+	fake.pushPress(22, 424242, "mnt:"+id)
+	waitFor(t, "the acceptance", func() bool {
+		l, _ := w.h.st.ListAlerts(ctx, []string{w.home.ID}, false, true, 10)
+		return len(l) == 1 && l[0].AckedAt != nil
+	})
+	waitFor(t, "the maintenance window", func() bool {
+		m, _ := w.h.st.ActiveMaintenance(ctx, time.Now().UTC())
+		return len(m) == 1 && m[0].VPSID == vps.ID
+	})
 }
