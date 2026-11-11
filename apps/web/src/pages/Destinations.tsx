@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ChevronRight, Globe2, Layers, Network, Tags } from 'lucide-react'
 import { t } from '../i18n'
 import { useApp } from '../lib/context'
@@ -7,30 +7,11 @@ import { formatBytes, formatDateTime, formatInt } from '../lib/format'
 import { useAnalytics } from '../hooks/useAnalytics'
 import type { DestResponse, DestRow, NetworksResponse } from '../lib/types'
 import { Card, Chip } from '../components/ui'
-import { CoverageLine, NoDataPanel, PageHead, ShareBar, TableSkeleton, confidenceLabel } from '../components/Analyzer'
+import { CoverageLine, NoDataPanel, ShareBar, TableSkeleton, confidenceLabel } from '../components/Analyzer'
 import { hasAwg } from '../components/SourceMarks'
 import { controlCls } from '../components/Popover'
-import { SubjectSelect } from '../components/SubjectSelect'
 
-const GROUPS = [
-  { id: 'site', label: 'an.group.site' },
-  { id: 'category', label: 'an.group.category' },
-  { id: 'service', label: 'an.group.service' },
-  { id: 'host', label: 'an.group.host' },
-  { id: 'ip', label: 'an.group.ip' },
-  { id: 'networks', label: 'an.group.networks' },
-] as const
-type Group = (typeof GROUPS)[number]['id']
 const PAGE = 50
-
-function useDebounced<T>(value: T, ms: number): T {
-  const [v, setV] = useState(value)
-  useEffect(() => {
-    const id = setTimeout(() => setV(value), ms)
-    return () => clearTimeout(id)
-  }, [value, ms])
-  return v
-}
 
 const KIND_ICON: Record<string, typeof Globe2> = { ip: Network, service: Layers, category: Tags }
 
@@ -136,40 +117,28 @@ function NetworksView({ subject }: { subject: string }) {
   )
 }
 
-export default function Destinations() {
+/** The groupings of the destinations that a tab of the Sites and domains page shows. */
+export type DestGroup = 'service' | 'host' | 'ip' | 'networks'
+
+/**
+ * One grouping of where the connections go (services, domains and addresses, bare addresses, networks), without a page
+ * around it: the filters belong to the page that holds it. The page gives it the person whose traffic it is about and the
+ * search words (already waited out), and keys it by them, so paging starts over when any of them changes.
+ */
+export function DestinationsView({ group, subject, q }: { group: DestGroup; subject: string; q: string }) {
   const { filters } = useApp()
-  const [group, setGroup] = useState<Group>('site')
-  const [search, setSearch] = useState('')
-  const [subject, setSubject] = useState('')
   const [offset, setOffset] = useState(0)
-  const q = useDebounced(search.trim(), 300)
-  const { data, error } = useAnalytics<DestResponse>('destinations', filters, { group_by: group === 'networks' ? 'ip' : group, q, subject, limit: String(PAGE), offset: String(offset) }, group !== 'networks')
+  const { data, error } = useAnalytics<DestResponse>('destinations', filters, { group_by: group, q, subject, limit: String(PAGE), offset: String(offset) }, group !== 'networks')
   const tz = filters.tz
   const max = data ? Math.max(0, ...data.rows.map((r) => r.share)) : 0
-
-  const reset = () => setOffset(0)
-
+  if (group === 'networks') return <NetworksView subject={subject} />
   return (
     <div className="space-y-4">
-      <PageHead title={t('an.domains.title')} subtitle={t('an.domains.subtitle')} />
-      <div className="flex flex-wrap items-center gap-3">
-        <div role="group" aria-label={t('an.domains.title')} className="flex h-10 items-center rounded-control border border-line bg-surface p-0.5">
-          {GROUPS.map((g) => (
-            <button key={g.id} type="button" aria-pressed={group === g.id} onClick={() => { setGroup(g.id); reset() }}
-              className={`h-8 rounded-[8px] px-3 text-[13px] ${group === g.id ? 'bg-elevated font-medium text-fg shadow-[inset_0_0_0_1px_var(--color-cyan)]' : 'text-muted hover:text-fg'}`}>{t(g.label)}</button>
-          ))}
-        </div>
-        <SubjectSelect value={subject} onChange={(v) => { setSubject(v); reset() }} />
-        <label className="sr-only" htmlFor="dest-search">{t('an.search')}</label>
-        <input id="dest-search" type="search" value={search} maxLength={100} onChange={(e) => { setSearch(e.target.value); reset() }} placeholder={t('an.search')} autoComplete="off" spellCheck={false}
-          className={`${controlCls} min-w-[240px] flex-1 sm:max-w-sm`} />
-      </div>
-      {group === 'networks' && <NetworksView subject={subject} />}
-      {group !== 'networks' && data && <CoverageLine meta={data.meta} tz={tz} />}
-      {group !== 'networks' && error && <p role="alert" className="text-[13px] text-red">{error}</p>}
-      {group !== 'networks' && !data && !error && <TableSkeleton />}
-      {group !== 'networks' && data?.meta.state === 'no_data' && <NoDataPanel meta={data.meta} />}
-      {group !== 'networks' && data && data.meta.state === 'ok' && (
+      {data && <CoverageLine meta={data.meta} tz={tz} />}
+      {error && <p role="alert" className="text-[13px] text-red">{error}</p>}
+      {!data && !error && <TableSkeleton />}
+      {data?.meta.state === 'no_data' && <NoDataPanel meta={data.meta} />}
+      {data && data.meta.state === 'ok' && (
         <Card note={t('an.classNote')} title={`${t('an.total', { n: formatInt(data.total_connections) })} · ${t('an.groups', { n: formatInt(data.groups) })}`}>
           {data.rows.length === 0 ? <p className="py-6 text-center text-[13px] text-muted">{t('an.noMatch')}</p> : (
             <div className="overflow-x-auto">

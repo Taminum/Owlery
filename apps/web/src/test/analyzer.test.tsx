@@ -4,7 +4,6 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from '../lib/auth'
 import { setCsrf } from '../lib/api'
 import { Layout } from '../components/Layout'
-import Destinations from '../pages/Destinations'
 import Sites from '../pages/Sites'
 import { mockApi, owner, type Req } from './helpers'
 import type { AMeta, DestResponse, SiteDetailResponse, SitesResponse, SubjectsResponse } from '../lib/types'
@@ -34,7 +33,6 @@ function renderPage(path: string) {
       <AuthProvider>
         <Routes>
           <Route element={<Layout />}>
-            <Route path="domains" element={<Destinations />} />
             <Route path="sites" element={<Sites />} />
           </Route>
         </Routes>
@@ -45,8 +43,8 @@ function renderPage(path: string) {
 
 const q = (r: Req) => new URL(r.url, 'http://x').searchParams
 
-describe('domains: sites with their subdomains', () => {
-  it('opens a site to show the hosts below it, scoped to the chosen subject', async () => {
+describe('services: a service opens into its sites and their hosts', () => {
+  it('opens a service to show its sites and the hosts below them, scoped to the chosen subject', async () => {
     const calls: Req[] = []
     mockApi({
       me: owner,
@@ -55,19 +53,22 @@ describe('domains: sites with their subdomains', () => {
         if (r.path === '/api/v1/analytics/subjects') return { status: 200, body: subjects }
         if (r.path === '/api/v1/analytics/destinations') {
           const p = q(r)
-          const rows = p.get('group_by') === 'host'
+          const g = p.get('group_by')
+          const rows = g === 'host'
             ? [row('www.pixiv.net', 'domain', { connections: 6, service: 'pixiv', category: 'Аниме и арт' }), row('i.pximg.net', 'domain', { connections: 4 })]
-            : [row('pixiv.net', 'site', { connections: 10, service: 'pixiv', category: 'Аниме и арт', bytes: 2048, router_connections: 10 })]
-          const body: DestResponse = { meta: meta(), group_by: p.get('group_by') as 'host', rows, groups: rows.length, total_connections: 10, limit: 50, offset: 0 } as DestResponse
+            : g === 'site'
+              ? [row('pixiv.net', 'site', { connections: 10, service: 'pixiv', category: 'Аниме и арт', bytes: 2048, router_connections: 10 })]
+              : [{ ...row('pixiv', 'domain', { connections: 10 }), kind: 'service', service: 'pixiv' }]
+          const body: DestResponse = { meta: meta(), group_by: g as 'host', rows, groups: rows.length, total_connections: 10, limit: 50, offset: 0 } as DestResponse
           return { status: 200, body }
         }
         return undefined
       },
     })
-    renderPage('/domains')
-    const site = await screen.findByText('pixiv.net')
-    expect(site).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Сайты и поддомены' })).toHaveAttribute('aria-pressed', 'true')
+    renderPage('/sites?view=services')
+    expect(await screen.findByRole('tab', { name: 'Службы', selected: true })).toBeInTheDocument()
+    await userEvent.click(await screen.findByRole('button', { name: /Показать поддомены: pixiv$/ }))
+    expect(await screen.findByText('pixiv.net')).toBeInTheDocument()
     expect(screen.getByText('2,00 КБ')).toBeInTheDocument() // bytes exist only for router rows
     expect(screen.queryByText('www.pixiv.net')).not.toBeInTheDocument()
 
@@ -76,16 +77,17 @@ describe('domains: sites with their subdomains', () => {
     expect(screen.getByText('i.pximg.net')).toBeInTheDocument()
     const hostCall = calls.filter((c) => c.path === '/api/v1/analytics/destinations' && q(c).get('group_by') === 'host').at(-1)!
     expect(q(hostCall).get('site')).toBe('pixiv.net')
+    expect(q(hostCall).get('service')).toBe('pixiv') // the service filter travels down with the site
 
     // Choosing a device narrows the request; clearing it removes the parameter.
     await userEvent.selectOptions(screen.getByLabelText('Чей трафик'), 'device:p-home|192.168.1.5')
     await waitFor(() => {
-      const last = calls.filter((c) => c.path === '/api/v1/analytics/destinations' && q(c).get('group_by') === 'site').at(-1)!
+      const last = calls.filter((c) => c.path === '/api/v1/analytics/destinations' && q(c).get('group_by') === 'service').at(-1)!
       expect(q(last).get('subject')).toBe('device:p-home|192.168.1.5')
     })
     await userEvent.selectOptions(screen.getByLabelText('Чей трафик'), '')
     await waitFor(() => {
-      const last = calls.filter((c) => c.path === '/api/v1/analytics/destinations' && q(c).get('group_by') === 'site').at(-1)!
+      const last = calls.filter((c) => c.path === '/api/v1/analytics/destinations' && q(c).get('group_by') === 'service').at(-1)!
       expect(q(last).has('subject')).toBe(false)
     })
   })
@@ -95,19 +97,19 @@ describe('domains: sites with their subdomains', () => {
       me: owner,
       handler: (r) => {
         if (r.path === '/api/v1/analytics/subjects') return { status: 200, body: { subjects: [] } }
-        if (r.path === '/api/v1/analytics/destinations') return { status: 200, body: { meta: meta(), group_by: 'site', rows: [row('example.org', 'site')], groups: 1, total_connections: 10, limit: 50, offset: 0 } }
+        if (r.path === '/api/v1/analytics/destinations') return { status: 200, body: { meta: meta(), group_by: 'host', rows: [row('example.org', 'domain')], groups: 1, total_connections: 10, limit: 50, offset: 0 } }
         return undefined
       },
     })
-    renderPage('/domains')
+    renderPage('/sites?view=addresses')
     const cell = (await screen.findByText('example.org')).closest('tr')!
     expect(within(cell).getByTitle(/Нет данных о байтах/)).toHaveTextContent('—')
     expect(within(cell).queryByText(/0 Б/)).not.toBeInTheDocument()
   })
 })
 
-describe('domains: who owns a bare IP', () => {
-  it('names the owner next to an address, and groups bare IPs by owner on the Networks tab', async () => {
+describe('addresses: who owns a bare IP', () => {
+  it('names the owner next to an address, and groups bare IPs by owner on the Networks view', async () => {
     const calls: Req[] = []
     mockApi({
       me: owner,
@@ -116,11 +118,11 @@ describe('domains: who owns a bare IP', () => {
         if (r.path === '/api/v1/analytics/subjects') return { status: 200, body: { subjects: [] } }
         if (r.path === '/api/v1/analytics/destinations') return { status: 200, body: { meta: meta(), group_by: 'ip', rows: [{ ...row('1.1.1.1', 'domain'), kind: 'ip', owner: 'Cloudflare, Inc.', asn: 13335 }, { ...row('192.0.2.7', 'domain'), kind: 'ip' }], groups: 2, total_connections: 20, limit: 50, offset: 0 } }
         if (r.path === '/api/v1/analytics/networks') return { status: 200, body: { meta: meta(), ip_only: 120, matched: 100, unknown: 20,
-          rows: [{ asn: 13335, org: 'Cloudflare, Inc.', connections: 70, share: 70, ips: 12, bytes: null, examples: ['1.1.1.1', '1.0.0.1'] }, { asn: 15169, org: 'Google LLC', connections: 30, share: 30, ips: 4, bytes: 2048, examples: ['8.8.8.8'] }] } }
+          rows: [{ asn: 13335, org: 'Cloudflare, Inc.', connections: 70, share: 70, ips: 12, bytes: null, examples: ['1.1.1.1', '1.0.0.1'] }, { asn: 15169, org: 'Google LLC', connections: 30, share: 30, ips: 4, bytes: null, examples: ['8.8.8.8'] }] } }
         return undefined
       },
     })
-    renderPage('/domains')
+    renderPage('/sites?view=addresses')
     await userEvent.click(await screen.findByRole('button', { name: 'Только IP' }))
     const cf = (await screen.findByText('1.1.1.1')).closest('tr')!
     expect(within(cf).getByText('Cloudflare, Inc.')).toBeInTheDocument()
@@ -133,35 +135,6 @@ describe('domains: who owns a bare IP', () => {
     expect(screen.getByText(/Владелец известен у 100 из 120 соединений без домена/)).toBeInTheDocument()
     expect(screen.getByText(/а не сайт и не то, что делал человек/)).toBeInTheDocument()
     expect(calls.some((c) => c.path === '/api/v1/analytics/networks')).toBe(true)
-  })
-})
-
-describe('domains: category, service, site, host tree', () => {
-  it('opens a category into its services, a service into its sites, passing the filters down', async () => {
-    const calls: Req[] = []
-    const body = (group: string, rows: unknown[]) => ({ meta: meta(), group_by: group, rows, groups: rows.length, total_connections: 10, limit: 50, offset: 0 })
-    mockApi({
-      me: owner,
-      handler: (r) => {
-        calls.push(r)
-        if (r.path === '/api/v1/analytics/subjects') return { status: 200, body: { subjects: [] } }
-        if (r.path !== '/api/v1/analytics/destinations') return undefined
-        const g = q(r).get('group_by')
-        if (g === 'category') return { status: 200, body: body(g, [{ ...row('Аниме и арт', 'domain'), kind: 'category' }]) }
-        if (g === 'service') return { status: 200, body: body(g, [{ ...row('pixiv', 'domain'), kind: 'service', service: 'pixiv' }]) }
-        if (g === 'site') return { status: 200, body: body(g, [{ ...row('pixiv.net', 'site'), category: 'Аниме и арт' }]) }
-        return { status: 200, body: body('site', []) }
-      },
-    })
-    renderPage('/domains')
-    await userEvent.click(await screen.findByRole('button', { name: 'Категории' }))
-    await userEvent.click(await screen.findByRole('button', { name: /Показать поддомены: Аниме и арт/ }))
-    await userEvent.click(await screen.findByRole('button', { name: /Показать поддомены: pixiv$/ }))
-    expect(await screen.findByRole('button', { name: /Показать поддомены: pixiv.net/ })).toBeInTheDocument()
-    const siteCall = calls.filter((c) => q(c).get('group_by') === 'site' && q(c).get('service') === 'pixiv').at(-1)!
-    expect(q(siteCall).get('category')).toBe('Аниме и арт') // the category filter travels down with the service
-    // The category is visible on a narrow screen too.
-    expect(screen.getAllByText('Аниме и арт').length).toBeGreaterThan(1)
   })
 })
 
@@ -233,12 +206,40 @@ describe('sites page', () => {
     })
     renderPage('/sites')
     await screen.findByRole('button', { name: 'pixiv.net' })
-    await userEvent.click(screen.getByRole('button', { name: 'Категории' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Категории' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Аниме и арт' }))
     await waitFor(() => {
       const last = calls.filter((c) => c.path === '/api/v1/analytics/sites').at(-1)!
       expect(q(last).get('category')).toBe('Аниме и арт')
     })
     expect(screen.getByRole('button', { name: 'Сбросить категорию' })).toBeInTheDocument()
+  })
+})
+
+describe('sites and domains: one page', () => {
+  it('has six tabs, and shows the filters only where they apply', async () => {
+    mockApi({
+      me: owner,
+      handler: (r) => {
+        if (r.path === '/api/v1/analytics/subjects') return { status: 200, body: { subjects: [] } }
+        if (r.path === '/api/v1/analytics/destinations') return { status: 200, body: { meta: meta(), group_by: 'service', rows: [], groups: 0, total_connections: 0, limit: 50, offset: 0 } }
+        if (r.path === '/api/v1/analytics/sites') return { status: 200, body: { meta: meta(), rows: [], categories: [], groups: 0, total_connections: 0, limit: 50, offset: 0 } }
+        return undefined
+      },
+    })
+    renderPage('/sites')
+    await screen.findByRole('tab', { name: 'Сайты', selected: true })
+    expect(screen.getAllByRole('tab').map((x) => x.textContent)).toEqual(['Сайты', 'Категории', 'Службы', 'Адреса', 'Когда', 'Страны'])
+    expect(screen.getByRole('group', { name: 'Зона сайта' })).toBeInTheDocument() // the zone belongs to the list of sites
+    expect(screen.getByRole('button', { name: /Только новые/ })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('tab', { name: 'Службы' }))
+    expect(screen.queryByRole('group', { name: 'Зона сайта' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Только новые/ })).toBeNull()
+    expect(screen.getByLabelText('Чей трафик')).toBeInTheDocument() // whose traffic and the search stay
+    expect(screen.getByRole('searchbox')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('tab', { name: 'Адреса' }))
+    expect(screen.getByRole('button', { name: 'Домены и IP', pressed: true })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('tab', { name: 'Страны' }))
+    expect(screen.queryByRole('searchbox')).toBeNull() // a view of countries has nothing to search
   })
 })

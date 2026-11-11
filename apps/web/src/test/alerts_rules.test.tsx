@@ -136,7 +136,7 @@ describe('sites: new only, hand-made categories, activity', () => {
       },
     })
     renderAt('/sites')
-    await userEvent.click(await screen.findByRole('button', { name: 'Когда' }))
+    await userEvent.click(await screen.findByRole('tab', { name: 'Когда' }))
     expect(await screen.findByLabelText('пт 17:00 9')).toBeInTheDocument()
     expect(screen.getByLabelText('пн 00:00 0')).toBeInTheDocument()
     expect(Number.isInteger(Number(q(calls.find((c) => c.path === '/api/v1/analytics/activity')!).get('tz_offset')))).toBe(true)
@@ -284,7 +284,7 @@ describe('countries', () => {
       },
     })
     renderAt('/sites')
-    await userEvent.click(await screen.findByRole('button', { name: 'Страны' }))
+    await userEvent.click(await screen.findByRole('tab', { name: 'Страны' }))
     const list = await screen.findByRole('list', { name: 'Страны назначения' })
     expect(within(list).getByText('Россия')).toBeInTheDocument()
     expect(within(list).getByText('US')).toBeInTheDocument()

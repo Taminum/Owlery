@@ -5,7 +5,6 @@ import './index.css'
 import './lib/density'
 import { AuthProvider } from './lib/auth'
 import { Layout } from './components/Layout'
-import Destinations from './pages/Destinations'
 import Alerts from './pages/Alerts'
 import Channels from './pages/Channels'
 import Live from './pages/Live'
@@ -52,7 +51,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="servers" element={<Servers />} />
             <Route path="servers/:id" element={<ServerCard />} />
             <Route path="start" element={<Start />} />
-            <Route path="domains" element={<Destinations />} />
+            <Route path="domains" element={<Navigate to="/sites" replace />} />
             <Route path="users" element={<Users />} />
             <Route path="nodes" element={<Nodes />} />
             <Route path="devices" element={<Devices />} />
