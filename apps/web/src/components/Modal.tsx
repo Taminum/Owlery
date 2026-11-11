@@ -74,7 +74,7 @@ const SIZE: Record<ButtonSize, string> = { l: 'h-10 rounded-control px-4 text-[1
 
 export function PrimaryButton({ children, size = 'l', ...p }: ButtonProps) {
   return (
-    <button type="button" {...p} className={`${SIZE[size]} bg-blue font-medium text-white hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 ${p.className ?? ''}`}>
+    <button type="button" {...p} className={`${SIZE[size]} bg-btn font-medium text-white hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 ${p.className ?? ''}`}>
       {children}
     </button>
   )

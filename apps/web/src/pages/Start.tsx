@@ -63,7 +63,7 @@ function StepCard({ s, open, onToggle }: { s: Step; open: boolean; onToggle: () 
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <GhostButton onClick={onToggle} aria-expanded={open}>{t('start.howto')}</GhostButton>
-          <Link to={s.to} className="inline-flex h-10 items-center rounded-control bg-blue px-4 text-[14px] font-medium text-white hover:brightness-110">{t('start.open')}</Link>
+          <Link to={s.to} className="inline-flex h-10 items-center rounded-control bg-btn px-4 text-[14px] font-medium text-white hover:brightness-110">{t('start.open')}</Link>
         </div>
       </div>
       {open && (
@@ -120,7 +120,7 @@ export function StartHint() {
   if (!(auth.status === 'authed' && auth.me.account.is_owner)) return null
   return (
     <Card title={t('start.hint.title')} note={t('start.hint.text')}>
-      <Link to="/start" className="inline-flex h-10 items-center gap-2 rounded-control bg-blue px-4 text-[14px] font-medium text-white hover:brightness-110"><Rocket size={16} aria-hidden />{t('start.hint.go')}</Link>
+      <Link to="/start" className="inline-flex h-10 items-center gap-2 rounded-control bg-btn px-4 text-[14px] font-medium text-white hover:brightness-110"><Rocket size={16} aria-hidden />{t('start.hint.go')}</Link>
     </Card>
   )
 }

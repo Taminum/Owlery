@@ -91,7 +91,7 @@ function CustomRange({ filters, update }: Pick<Props, 'filters' | 'update'>) {
           <label className="block text-xs text-muted">{t('filter.to')}
             <input type="datetime-local" value={to} onChange={(e) => setTo(e.target.value)} className={`${controlCls} mt-1 block w-full`} />
           </label>
-          <button type="submit" disabled={!valid} className="h-9 w-full rounded-control bg-blue text-[13px] font-medium text-white disabled:opacity-40">{t('filter.apply')}</button>
+          <button type="submit" disabled={!valid} className="h-9 w-full rounded-control bg-btn text-[13px] font-medium text-white disabled:opacity-40">{t('filter.apply')}</button>
         </form>
       )}
     </Popover>
