@@ -6,7 +6,7 @@ import { api } from '../lib/api'
 import { formatBytes, formatDateTime, formatRate } from '../lib/format'
 import { useLoad } from '../hooks/useLoad'
 import type { ServerAlert } from '../lib/types'
-import { Card, Tabs } from '../components/ui'
+import { Card, Segmented, Tabs } from '../components/ui'
 import { PageHead, TableSkeleton } from '../components/Analyzer'
 import { GhostButton } from '../components/Modal'
 import { HardwareSection } from '../components/HardwareView'
@@ -28,6 +28,25 @@ import { NetworkView } from '../components/NetworkView'
 
 type Tab = 'overview' | 'resources' | 'terminal' | 'desktop' | 'screen' | 'manage' | 'services' | 'security' | 'protect' | 'docker' | 'alerts' | 'network' | 'history'
 const TABS: Tab[] = ['overview', 'resources', 'terminal', 'desktop', 'screen', 'manage', 'services', 'security', 'protect', 'docker', 'alerts', 'network', 'history']
+
+/**
+ * The thirteen views of a machine are shown as six tabs. The address still names the view (?view=protect), so every link
+ * that was ever made keeps working: a group is only what a view is shown under, and a view that is not a tab of its own
+ * (network, history) is a part of the page of its group.
+ */
+type Group = 'overview' | 'load' | 'access' | 'manage' | 'protect' | 'alerts'
+const GROUPS: { id: Group; views: Tab[] }[] = [
+  { id: 'overview', views: ['overview', 'network'] },
+  { id: 'load', views: ['resources', 'docker'] },
+  { id: 'access', views: ['terminal', 'desktop', 'screen'] },
+  { id: 'manage', views: ['manage', 'services'] },
+  { id: 'protect', views: ['security', 'protect'] },
+  { id: 'alerts', views: ['alerts', 'history'] },
+]
+const groupOf = (v: Tab): Group => GROUPS.find((g) => g.views.includes(v))?.id ?? 'overview'
+/** The views that a group offers as a choice inside it; the others (network, history) are sections of a page. */
+const CHOICE: Record<Group, Tab[]> = { overview: [], load: ['resources', 'docker'], access: ['terminal', 'desktop', 'screen'], manage: ['manage', 'services'], protect: ['security', 'protect'], alerts: [] }
+const PART_LABEL: Partial<Record<Tab, MsgKey>> = { terminal: 'srv.tab.terminal', desktop: 'srv.tab.desktop', screen: 'srv.tab.screen', resources: 'srv.part.resources', docker: 'srv.part.docker', manage: 'srv.part.manage', services: 'srv.part.services', security: 'srv.part.security', protect: 'srv.part.protect' }
 
 function AlertList({ items, empty }: { items: ServerAlert[]; empty: string }) {
   if (items.length === 0) return <p className="text-[13px] text-muted">{empty}</p>
@@ -136,14 +155,21 @@ export default function ServerCard() {
   const q = useLoad((sig) => api.get<Server>(`/api/v1/servers/${id}`, sig), [id], 5_000)
   const [editing, setEditing] = useState(false)
   const wanted = params.get('view') as Tab | null
-  const tab: Tab = wanted && TABS.includes(wanted) ? wanted : 'overview'
+  const requested: Tab = wanted && TABS.includes(wanted) ? wanted : 'overview'
   const setTab = (x: Tab) => setParams(x === 'overview' ? {} : { view: x }, { replace: true })
   const s = q.data
+  const tab = requested
 
   if (q.error) return <p role="alert" className="text-[13px] text-red">{q.error}</p>
   if (!s) return <TableSkeleton />
   const open = (s.alerts ?? []).filter((a) => !a.resolved_at)
   const isWindows = /windows/i.test(s.os || s.host?.os || '')
+  // What of a group is offered on this machine: what needs the owner, Windows or Docker is left out where it does not apply.
+  const views = (g: Group): Tab[] => GROUPS.find((x) => x.id === g)!.views.filter((x) => ((x !== 'terminal' && x !== 'desktop' && x !== 'screen' && x !== 'manage' && x !== 'services') || s.can_edit) && (x !== 'protect' || isWindows) && (x !== 'docker' || !!s.docker))
+  const offered = views
+  const firstOf = (g: Group): Tab => views(g)[0]
+  const group = groupOf(tab)
+  const choice = CHOICE[group].filter((x) => views(group).includes(x))
   return (
     <div className="space-y-4">
       <Link to="/servers" className="inline-flex items-center gap-2 text-[13px] text-muted hover:text-fg"><ArrowLeft size={15} aria-hidden />{t('srv.back')}</Link>
@@ -151,10 +177,13 @@ export default function ServerCard() {
 
       {s.maint_until && <MaintenanceBanner until={s.maint_until} note={s.maint_note} canEdit={s.can_edit} serverId={s.id} onChange={q.reload} />}
 
-      <Tabs label={s.name} value={tab} onChange={setTab}
-        tabs={TABS.filter((x) => ((x !== 'terminal' && x !== 'desktop' && x !== 'screen' && x !== 'manage' && x !== 'services') || s.can_edit) && (x !== 'protect' || isWindows) && (x !== 'docker' || !!s.docker) && (x !== 'alerts' || s.host?.has_data)).map((x) => ({ id: x, label: t((x === 'network' && s.nodes.length === 0 ? 'srv.tab.net' : `srv.tab.${x}`) as MsgKey), badge: x === 'history' && open.length > 0 ? open.length : undefined }))} />
+      <Tabs label={s.name} value={group} onChange={(g) => setTab(firstOf(g))}
+        tabs={GROUPS.filter((g) => offered(g.id).length > 0).map((g) => ({ id: g.id, label: t(`srv.group.${g.id}` as MsgKey), badge: g.id === 'alerts' && open.length > 0 ? open.length : undefined }))} />
+      {choice.length > 1 && (
+        <Segmented label={t(`srv.group.${group}` as MsgKey)} value={tab} onChange={setTab} options={choice.map((x) => ({ value: x, label: t(PART_LABEL[x] as MsgKey) }))} />
+      )}
 
-      {tab === 'overview' && (
+      {group === 'overview' && (
         <div className="space-y-5">
           <div className="grid gap-4 lg:grid-cols-2">
             <Now s={s} />
@@ -162,9 +191,11 @@ export default function ServerCard() {
           </div>
           {s.hardware && <HardwareSection hw={s.hardware} host={s.host} />}
           {s.can_edit && s.agent && <WakeOnLan serverId={s.id} onChange={q.reload} />}
+          <NetworkView s={s} />
         </div>
       )}
       {tab === 'resources' && (s.host?.has_data ? <HostDetail host={s.host} /> : <p className="text-[13px] text-muted">{t('srv.noData')}</p>)}
+      {tab === 'docker' && <DockerView info={s.docker} />}
       {tab === 'security' && (
         <div className="space-y-4">
           <AgentBlock vpsId={s.id} canEdit={s.can_edit} hostOS={s.os || s.host?.os} />
@@ -173,11 +204,15 @@ export default function ServerCard() {
         </div>
       )}
       {tab === 'protect' && isWindows && <RdpProtect serverId={s.id} />}
-      {tab === 'docker' && <DockerView info={s.docker} />}
-      {tab === 'alerts' && (
+      {group === 'alerts' && (
         <div className="space-y-4">
-          <Maintenance serverId={s.id} canEdit={s.can_edit} until={s.maint_until} note={s.maint_note} onChange={q.reload} />
-          <AlertRules serverId={s.id} name={s.name} />
+          {s.host?.has_data && (
+            <>
+              <Maintenance serverId={s.id} canEdit={s.can_edit} until={s.maint_until} note={s.maint_note} onChange={q.reload} />
+              <AlertRules serverId={s.id} name={s.name} />
+            </>
+          )}
+          <Card title={t('srv.history.title')}><AlertList items={s.alerts ?? []} empty={t('srv.history.empty')} /></Card>
         </div>
       )}
       {tab === 'terminal' && s.can_edit && <TerminalView serverId={s.id} />}
@@ -185,8 +220,6 @@ export default function ServerCard() {
       {tab === 'screen' && s.can_edit && <ScreenView serverId={s.id} canLaunch={!!s.agent?.can_shell && !!s.agent?.can_admin} />}
       {tab === 'manage' && s.can_edit && <ManageView serverId={s.id} />}
       {tab === 'services' && s.can_edit && <ServicesView serverId={s.id} serverName={s.name} />}
-      {tab === 'network' && <NetworkView s={s} />}
-      {tab === 'history' && <Card title={t('srv.history.title')}><AlertList items={s.alerts ?? []} empty={t('srv.history.empty')} /></Card>}
 
       {editing && <InventoryDialog s={s} onClose={() => setEditing(false)} onDone={() => { setEditing(false); q.reload() }} />}
     </div>
