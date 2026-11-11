@@ -512,6 +512,8 @@ export const serversText = {
   'prot.blocked.empty': 'Сейчас никто не заблокирован.',
   'prot.wouldList': 'Заблокировала бы, если бы блокировала',
   'prot.col.ip': 'Адрес',
+  'prot.col.when': 'Заблокирован',
+  'prot.col.whenWould': 'Заблокировала бы',
   'prot.col.why': 'Почему',
   'prot.col.until': 'До',
   'prot.why': '{n} неудач за {m} мин',

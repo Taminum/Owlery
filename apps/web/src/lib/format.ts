@@ -61,6 +61,23 @@ export function formatDateTime(iso: string | number, tz: string, now: Date = new
   }).format(d)
 }
 
+/** A moment down to the second, for when the exact time matters (when an address was blocked). The year only if it is not this one. */
+export function formatDateTimeSec(iso: string | number, tz: string, now: Date = new Date()): string {
+  const d = typeof iso === 'number' ? new Date(iso * 1000) : new Date(iso)
+  const zone = tzOpt(tz)
+  const year = (x: Date) => new Intl.DateTimeFormat('en-GB', { year: 'numeric', timeZone: zone }).format(x)
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    ...(year(d) !== year(now) ? { year: 'numeric' as const } : {}),
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+    timeZone: zone,
+  }).format(d)
+}
+
 /** What a source of figures is called for a person; the technical name stays in the tooltip. */
 const SOURCE_NAMES: Record<string, string> = {
   agent_access_log: 'журналы нод',

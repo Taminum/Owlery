@@ -3,7 +3,7 @@ import { X } from 'lucide-react'
 import { t } from '../i18n'
 import { api } from '../lib/api'
 import { errorText } from '../lib/errors'
-import { formatDateTime } from '../lib/format'
+import { formatDateTime, formatDateTimeSec } from '../lib/format'
 import { useLoad } from '../hooks/useLoad'
 import type { BlockEntry, BlockSettings, BlockView } from '../lib/types'
 import { Card } from './ui'
@@ -26,12 +26,13 @@ function Notice({ children }: { children: string }) {
   return <p role="status" className="rounded-control border border-amber/40 bg-amber/10 px-3 py-2 text-[13px] text-amber">{children}</p>
 }
 
-function EntryTable({ rows, action, label, windowMin }: { rows: BlockEntry[]; action?: (ip: string) => void; label: string; windowMin: number }) {
+function EntryTable({ rows, action, label, windowMin, whenLabel }: { rows: BlockEntry[]; action?: (ip: string) => void; label: string; windowMin: number; whenLabel: string }) {
   return (
     <table className="w-full text-[13px]">
       <thead>
         <tr className="text-left text-xs text-muted">
           <th className="py-1 font-normal">{t('prot.col.ip')}</th>
+          <th className="py-1 font-normal">{whenLabel}</th>
           <th className="py-1 font-normal">{t('prot.col.why')}</th>
           <th className="py-1 font-normal">{t('prot.col.until')}</th>
           <th />
@@ -41,6 +42,7 @@ function EntryTable({ rows, action, label, windowMin }: { rows: BlockEntry[]; ac
         {rows.map((e) => (
           <tr key={e.ip + e.since} className="border-t border-line/60">
             <td className="py-1.5 font-mono">{e.ip}</td>
+            <td className="tnum whitespace-nowrap" title={new Date(e.since).toISOString()}>{formatDateTimeSec(e.since, 'local')}</td>
             <td>{e.shared ? t('prot.why.shared') : t('prot.why', { n: e.failed, m: windowMin })}</td>
             <td className="tnum text-muted">{e.until ? formatDateTime(e.until, 'local') : t('prot.forever')}</td>
             <td className="text-right">{action && <GhostButton onClick={() => action(e.ip)}>{label}</GhostButton>}</td>
@@ -179,13 +181,13 @@ export function RdpProtect({ serverId }: { serverId: string }) {
 
       <Card title={t('prot.blocked')}>
         {st && st.active.length > 0
-          ? <EntryTable rows={st.active} action={canUnblock ? unblock : undefined} label={t('prot.unblock')} windowMin={st.window_min} />
+          ? <EntryTable rows={st.active} action={canUnblock ? unblock : undefined} label={t('prot.unblock')} windowMin={st.window_min} whenLabel={t('prot.col.when')} />
           : <p className="text-[13px] text-muted">{t('prot.blocked.empty')}</p>}
       </Card>
 
       {st && st.would.length > 0 && (
         <Card title={t('prot.wouldList')}>
-          <EntryTable rows={st.would} action={canUnblock ? unblock : undefined} label={t('prot.exclude')} windowMin={st.window_min} />
+          <EntryTable rows={st.would} action={canUnblock ? unblock : undefined} label={t('prot.exclude')} windowMin={st.window_min} whenLabel={t('prot.col.whenWould')} />
         </Card>
       )}
     </div>

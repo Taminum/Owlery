@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { RdpProtect } from '../components/RdpProtect'
 import { setCsrf } from '../lib/api'
 import { mockApi, owner, type Req } from './helpers'
@@ -80,5 +80,20 @@ describe('Защита RDP, the shared list', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }))
     await waitFor(() => expect(api.find('PUT', '/api/v1/servers/s1/block')).toHaveLength(1))
     expect(api.find('PUT', '/api/v1/servers/s1/block')[0].body).toMatchObject({ share: false })
+  })
+})
+
+describe('Защита RDP: точное время блокировки', () => {
+  it('shows when an address was blocked down to the second, and when it would have been', async () => {
+    const blocked = { mode: 'block', threshold: 5, window_min: 10, ttl_hours: 24, total: 1, would: [{ ip: '198.51.100.7', since: '2026-11-04T10:00:07Z', failed: 6 }], active: [{ ip: '198.51.100.8', since: '2026-11-04T10:30:41Z', failed: 5 }] }
+    backend(view({ state: blocked }))
+    render(<RdpProtect serverId="s1" />)
+    const row = (await screen.findByText('198.51.100.8')).closest('tr')!
+    expect(within(row).getByText(/10:30:41|\d{2}:\d{2}:41/)).toBeInTheDocument() // the second is there; the hour depends on the time zone of the machine running the test
+    expect(row.querySelector('td[title="2026-11-04T10:30:41.000Z"]')).not.toBeNull() // and the exact moment in UTC for whoever hovers
+    expect(screen.getByRole('columnheader', { name: 'Заблокирован' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Заблокировала бы' })).toBeInTheDocument()
+    const would = screen.getByText('198.51.100.7').closest('tr')!
+    expect(within(would).getByText(/:07$/)).toBeInTheDocument()
   })
 })
