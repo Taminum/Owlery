@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { BarChart3, Bell, HardDrive, Compass, Wallet, Cpu, Rocket, Gauge, Globe2, Laptop, Shield, ShieldCheck, Telescope, LayoutDashboard, History, Radio, Server, Settings, Users, Waypoints, X, LogOut, UserRound, ChevronsLeft, ChevronsRight, type LucideIcon } from 'lucide-react'
+import { BarChart3, Bell, HardDrive, Compass, Wallet, Rocket, Gauge, Globe2, Laptop, Shield, Telescope, LayoutDashboard, History, Radio, Server, Settings, Users, Waypoints, X, LogOut, UserRound, ChevronsLeft, ChevronsRight, type LucideIcon } from 'lucide-react'
 import { t, type MsgKey } from '../i18n'
 import { api } from '../lib/api'
 import { useLoad } from '../hooks/useLoad'
@@ -22,8 +22,6 @@ const SECTIONS: Section[] = [
   ] },
   { key: 'nav.section.servers', items: [
     { to: '/servers', key: 'nav.servers', icon: HardDrive },
-    { to: '/hosts', key: 'nav.hosts', icon: Cpu },
-    { to: '/security', key: 'nav.security', icon: ShieldCheck, module: 'security' },
     { to: '/channels', key: 'nav.channels', icon: Gauge, module: 'remnawave' },
   ] },
   { key: 'nav.section.traffic', items: [
