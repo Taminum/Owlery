@@ -243,3 +243,6 @@ func (s *Store) SaveNetReport(ctx context.Context, id string, r netdev.Report, n
 
 // AlertNetDown: a network device that used to report has been silent for a while.
 const AlertNetDown = "net_down"
+
+// AlertNetConnFull: the connection tracking table of a router is nearly full, and new connections will be dropped.
+const AlertNetConnFull = "net_conn_full"
