@@ -12,6 +12,7 @@ import { notifyTuneText } from './ru.notifytune'
 import { startText } from './ru.start'
 import { routersText } from './ru.routers'
 import { lanText } from './ru.lan'
+import { mapText } from './ru.map'
 import { serversText } from './ru.servers'
 // All UI text lives here so a second locale can be added without touching components.
 const base = {
@@ -152,6 +153,6 @@ const base = {
   'a11y.statusLag': 'отстаёт',
 } as const
 
-export const ru = { ...base, ...m1, ...intel, ...intel2, ...awgText, ...securityText, ...dnsText, ...digestText, ...kawaiiText, ...billingText, ...hostsText, ...notifyTuneText, ...startText, ...serversText, ...routersText, ...lanText } as const
+export const ru = { ...base, ...m1, ...intel, ...intel2, ...awgText, ...securityText, ...dnsText, ...digestText, ...kawaiiText, ...billingText, ...hostsText, ...notifyTuneText, ...startText, ...serversText, ...routersText, ...lanText, ...mapText } as const
 
 export type MsgKey = keyof typeof ru

@@ -28,6 +28,7 @@ import Panels from './pages/Panels'
 import Placeholder from './pages/Placeholder'
 import Routers from './pages/Routers'
 import LanDevices from './pages/LanDevices'
+import NetworkMap from './pages/NetworkMap'
 import Settings from './pages/Settings'
 
 createRoot(document.getElementById('root')!).render(
@@ -61,6 +62,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="panels" element={<Panels />} />
             <Route path="routers" element={<Routers />} />
             <Route path="lan" element={<LanDevices />} />
+            <Route path="map" element={<NetworkMap />} />
             <Route path="settings" element={<Settings />} />
             <Route path="*" element={<Placeholder />} />
           </Route>

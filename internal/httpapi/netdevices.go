@@ -294,33 +294,47 @@ func (s *Server) createNetDevice(w http.ResponseWriter, r *http.Request, a auth.
 	writeJSON(w, http.StatusCreated, map[string]any{"device": d, "token": token, "script": buildDeviceScript(d.Kind, r.Host, token)})
 }
 
+// updateNetDevice renames a device and/or says which router it stands behind; what is left out is not touched.
 func (s *Server) renameNetDevice(w http.ResponseWriter, r *http.Request, a auth.Actor, _ store.Session) {
 	if !s.ownerOnly(w, r, a) {
 		return
 	}
 	var in struct {
-		Name string `json:"name"`
+		Name     *string `json:"name"`
+		ParentID *string `json:"parent_id"`
 	}
 	if !s.decode(w, r, &in) {
 		return
 	}
-	if strings.TrimSpace(in.Name) == "" || len(in.Name) > 60 {
-		s.writeErr(w, r, http.StatusUnprocessableEntity, "invalid_name", "a name of up to 60 characters is required")
-		return
+	id := r.PathValue("id")
+	fail := func(err error) {
+		switch {
+		case errors.Is(err, store.ErrConflict):
+			s.writeErr(w, r, http.StatusConflict, "name_taken", "cannot do that: the name is taken, or the parent would make a loop")
+		case errors.Is(err, store.ErrNotFound):
+			s.writeErr(w, r, http.StatusNotFound, "not_found", "no such device")
+		default:
+			s.writeErr(w, r, http.StatusInternalServerError, "internal", "internal error")
+		}
 	}
-	err := s.Store.RenameNetDevice(r.Context(), r.PathValue("id"), in.Name)
-	switch {
-	case errors.Is(err, store.ErrConflict):
-		s.writeErr(w, r, http.StatusConflict, "name_taken", "a device with this name already exists")
-		return
-	case errors.Is(err, store.ErrNotFound):
-		s.writeErr(w, r, http.StatusNotFound, "not_found", "no such device")
-		return
-	case err != nil:
-		s.writeErr(w, r, http.StatusInternalServerError, "internal", "internal error")
-		return
+	if in.Name != nil {
+		if strings.TrimSpace(*in.Name) == "" || len(*in.Name) > 60 {
+			s.writeErr(w, r, http.StatusUnprocessableEntity, "invalid_name", "a name of up to 60 characters is required")
+			return
+		}
+		if err := s.Store.RenameNetDevice(r.Context(), id, *in.Name); err != nil {
+			fail(err)
+			return
+		}
+		s.audit(r, a, "", "netdevice.rename", "netdevice", id, map[string]any{"name": strings.TrimSpace(*in.Name)})
 	}
-	s.audit(r, a, "", "netdevice.rename", "netdevice", r.PathValue("id"), map[string]any{"name": strings.TrimSpace(in.Name)})
+	if in.ParentID != nil {
+		if err := s.Store.SetNetParent(r.Context(), id, *in.ParentID); err != nil {
+			fail(err)
+			return
+		}
+		s.audit(r, a, "", "netdevice.parent", "netdevice", id, map[string]any{"parent": *in.ParentID})
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 

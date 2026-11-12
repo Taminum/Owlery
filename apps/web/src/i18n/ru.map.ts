@@ -1,0 +1,21 @@
+// The map of the networks: each router at the edge is a network of its own, with what stands behind it.
+export const mapText = {
+  'nav.map': 'Карта сети',
+  'map.title': 'Карта сети',
+  'map.subtitle': 'Кто за кем стоит. Каждая сеть со своим выходом в интернет рисуется отдельно, линии идут по тому, что вы указали в карточке роутера.',
+  'map.mode': 'Что показывать',
+  'map.mode.all': 'Устройства',
+  'map.mode.routers': 'Только роутеры',
+  'map.empty': 'Роутеров пока нет. Добавьте их на странице «Роутеры», и здесь появится карта.',
+  'map.network': 'Сеть «{name}»',
+  'map.internet': 'Интернет',
+  'map.viaPort': 'порт {port}',
+  'map.noRate': 'скорость пока неизвестна',
+  'map.silent': 'не отвечает',
+  'map.never': 'ещё не присылал данные',
+  'map.conns': '{n} соед.',
+  'map.more': 'ещё {n}',
+  'map.noClients': 'устройств нет',
+  'map.hint': 'Если роутер стоит за другим роутером, откройте «Роутеры» и выберите у него «Подключён к». Все устройства сети видны на странице «Устройства в сети».',
+  'map.open': 'Открыть «Роутеры»',
+} as const
