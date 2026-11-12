@@ -88,6 +88,27 @@ func (s *Store) ListNetDevices(ctx context.Context, now time.Time) ([]NetDevice,
 	return out, rows.Err()
 }
 
+// RenameNetDevice changes the name of a live device.
+func (s *Store) RenameNetDevice(ctx context.Context, id, name string) error {
+	vid, err := ParseID(id)
+	if err != nil {
+		return ErrNotFound
+	}
+	name = cleanText(name, 60)
+	if name == "" {
+		return errors.New("store: empty name")
+	}
+	tag, err := s.pool.Exec(ctx, `UPDATE net_devices SET name=$2 WHERE id=$1 AND archived_at IS NULL`, vid, name)
+	var pe *pgconn.PgError
+	if errors.As(err, &pe) && pe.Code == "23505" {
+		return ErrConflict
+	}
+	if err == nil && tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return err
+}
+
 func (s *Store) DeleteNetDevice(ctx context.Context, id string) error {
 	vid, err := ParseID(id)
 	if err != nil {

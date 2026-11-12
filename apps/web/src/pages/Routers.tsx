@@ -32,13 +32,42 @@ function why(e: unknown): string {
   return t('rt.err.other')
 }
 
-function DeviceCard({ d, tz, onRemove }: { d: Device; tz: string; onRemove: () => void }) {
+function RenameDialog({ d, onClose, onDone }: { d: Device; onClose: () => void; onDone: () => void }) {
+  const [name, setName] = useState(d.name)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const save = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      await api.patch(`/api/v1/net-devices/${d.id}`, { name: name.trim() })
+      onDone()
+      onClose()
+    } catch (e) {
+      setError(why(e))
+      setBusy(false)
+    }
+  }
+  return (
+    <Modal title={t('rt.renameTitle')} onClose={onClose} busy={busy}>
+      <label htmlFor="rt-rename" className="mb-1.5 block text-[13px] font-medium">{t('rt.name')}</label>
+      <input id="rt-rename" data-autofocus className={inputCls} value={name} maxLength={60} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && name.trim() && void save()} />
+      {error && <p role="alert" className="mt-2 text-xs text-red">{error}</p>}
+      <div className="mt-4 flex gap-2">
+        <PrimaryButton size="m" onClick={save} disabled={busy || !name.trim() || name.trim() === d.name}>{t('rt.save')}</PrimaryButton>
+        <GhostButton size="m" onClick={onClose} disabled={busy}>{t('common.cancel')}</GhostButton>
+      </div>
+    </Modal>
+  )
+}
+
+function DeviceCard({ d, tz, onRename, onRemove }: { d: Device; tz: string; onRename: () => void; onRemove: () => void }) {
   const v = d.view
   const memPct = v.mem_total > 0 ? Math.round(((v.mem_total - v.mem_free) * 100) / v.mem_total) : null
   const [now] = useState(() => Date.now())
   const sub = [v.board, v.version && `RouterOS ${v.version}`].filter(Boolean).join(', ')
   return (
-    <Card title={d.name} note={sub} right={<GhostButton size="s" onClick={onRemove}>{t('rt.remove')}</GhostButton>}>
+    <Card title={d.name} note={sub} right={<div className="flex gap-2"><GhostButton size="s" onClick={onRename}>{t('rt.rename')}</GhostButton><GhostButton size="s" onClick={onRemove}>{t('rt.remove')}</GhostButton></div>}>
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2 text-[13px]">
           {d.last_seen === null ? <Chip tone="amber">{t('rt.never')}</Chip>
@@ -138,6 +167,7 @@ export default function Routers() {
   const { data, error, reload } = useLoad((s) => api.get<{ devices: Device[] }>('/api/v1/net-devices', s), [], 30_000)
   const [adding, setAdding] = useState(false)
   const [removing, setRemoving] = useState<Device | null>(null)
+  const [renaming, setRenaming] = useState<Device | null>(null)
   const [busy, setBusy] = useState(false)
   const remove = async () => {
     if (!removing) return
@@ -156,7 +186,8 @@ export default function Routers() {
       {error && <p role="alert" className="text-[13px] text-red">{error}</p>}
       {!data && !error && <Skeleton className="h-40" />}
       {data && data.devices.length === 0 && <p className="text-[13px] text-muted">{t('rt.empty')}</p>}
-      {data?.devices.map((d) => <DeviceCard key={d.id} d={d} tz={filters.tz} onRemove={() => setRemoving(d)} />)}
+      {data?.devices.map((d) => <DeviceCard key={d.id} d={d} tz={filters.tz} onRename={() => setRenaming(d)} onRemove={() => setRemoving(d)} />)}
+      {renaming && <RenameDialog d={renaming} onClose={() => setRenaming(null)} onDone={reload} />}
       {adding && <NewDialog onClose={() => setAdding(false)} onMade={reload} />}
       {removing && (
         <Modal title={t('rt.removeTitle', { name: removing.name })} onClose={() => setRemoving(null)} busy={busy}>
