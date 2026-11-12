@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 const (
@@ -88,7 +89,32 @@ func ParseUptime(s string) (int64, bool) {
 	return n(m[1])*7*86400 + n(m[2])*86400 + n(m[3])*3600 + n(m[4])*60 + n(m[5]), true
 }
 
+// fromCP1251 turns bytes that are not valid UTF-8 into text, reading them as Windows-1251: WinBox on a Russian Windows stores
+// comments and names that way, and RouterOS sends them out unchanged. Letters are mapped; any other high byte becomes "?".
+func fromCP1251(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c < 0x80:
+			b.WriteByte(c)
+		case c >= 0xC0:
+			b.WriteRune(rune(0x410 + int(c) - 0xC0))
+		case c == 0xA8:
+			b.WriteRune('Ё')
+		case c == 0xB8:
+			b.WriteRune('ё')
+		default:
+			b.WriteByte('?')
+		}
+	}
+	return b.String()
+}
+
 func clean(s string, n int) string {
+	if !utf8.ValidString(s) {
+		s = fromCP1251(s)
+	}
 	s = strings.Map(func(r rune) rune {
 		if r < 0x20 || r == 0x7f {
 			return ' '
@@ -97,6 +123,9 @@ func clean(s string, n int) string {
 	}, strings.TrimSpace(s))
 	if len(s) > n {
 		s = s[:n]
+		for !utf8.ValidString(s) { // do not cut a letter in half
+			s = s[:len(s)-1]
+		}
 	}
 	return s
 }

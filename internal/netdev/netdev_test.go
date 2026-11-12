@@ -1,6 +1,9 @@
 package netdev
 
-import "testing"
+import (
+	"testing"
+	"unicode/utf8"
+)
 
 func TestParseReadsStatsInterfacesAndClientsAndIgnoresJunk(t *testing.T) {
 	r, err := Parse("board=hAP ax3\nversion=7.16 (stable)\nuptime=1w2d03:04:05\ncpu=7\nmem_free=500\nmem_total=1000\ntemp=47\nif=ether1,100,200,true\nif=bad,x,1,true\nif=ether2,1,2,false\nclient=192.168.88.20,aa:bb:cc:dd:ee:01,home-pc\nclient=999.1.1.1,aa:bb:cc:dd:ee:02\nclient=192.168.88.21,zz\nrandom text\n")
@@ -55,5 +58,21 @@ func TestParseConnectionsAndNat(t *testing.T) {
 	}
 	if r.Nat[0].Comment != "defconf: masquerade" {
 		t.Fatalf("comment: %+v", r.Nat[0])
+	}
+}
+
+func TestCleanReadsWindows1251(t *testing.T) {
+	// "Автокад" as cp1251 bytes, and the same word already in UTF-8.
+	if got := clean("\xc0\xe2\xf2\xee\xea\xe0\xe4", 40); got != "Автокад" {
+		t.Fatalf("cp1251: %q", got)
+	}
+	if got := clean("Автокад", 40); got != "Автокад" {
+		t.Fatalf("utf8: %q", got)
+	}
+	if got := clean("Ёж ёлка", 40); got != "Ёж ёлка" {
+		t.Fatalf("yo: %q", got)
+	}
+	if got := clean("ПриветМир", 8); !utf8.ValidString(got) || len(got) > 8 {
+		t.Fatalf("cut: %q", got)
 	}
 }
