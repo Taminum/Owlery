@@ -175,6 +175,9 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 	a := &agent{cfg: cfg, url: url, hc: hc, epoch: newEpoch(), probes: make(chan struct{}, maxProbes), admins: make(chan struct{}, 4), socks: seccollect.NewSocketWatch(10 * time.Minute), host: newHostReader(cfg), runCtx: ctx}
 	a.checkUpdateTrial()
+	if !cfg.NoHost {
+		a.hbuf = newHostBuffer(cfg.StateDir)
+	}
 	a.hw = seccollect.NewHardware(seccollect.ExecRunner{Timeout: 90 * time.Second})
 	if runtime.GOOS == "linux" && cfg.ContainersFile != "" {
 		// The unit that lists the containers lists their details beside it; a machine without the unit has no such file.
@@ -209,6 +212,12 @@ func Run(ctx context.Context, cfg Config) error {
 			return nil
 		}
 		cfg.Log.Warn("connection ended", "err", err)
+		if a.hbuf != nil {
+			// Nobody is listening: keep the reading for later, so the break is not a hole in the charts.
+			if berr := a.hbuf.Add(a.host.Read(time.Now())); berr != nil {
+				cfg.Log.Warn("could not keep a reading for later", "err", berr)
+			}
+		}
 		if time.Since(start) > time.Minute {
 			delay = time.Second
 		}
@@ -240,6 +249,7 @@ type agent struct {
 	hw       *seccollect.HardwareReader
 	docker   *seccollect.DockerReader // nil off Linux or without a containers list
 	host     *seccollect.HostReader
+	hbuf     *hostBuffer // readings kept on disk while the server cannot be reached (nil without a state directory)
 	updating atomic.Bool
 	runCtx   context.Context // lives as long as the agent: a terminal outlives a reconnect of the reports
 	shells   *secshell.Runner
@@ -388,6 +398,11 @@ func (a *agent) session(ctx context.Context) error {
 		a.seq = w.AckSeq
 	}
 	a.onConnected()
+	if err := a.hbuf.Take(secproto.MaxBacklogItems, func(p []secproto.Host) error {
+		return write(ctx, c, secproto.HostBacklog{Type: "host_backlog", Items: p})
+	}); err != nil {
+		return err
+	}
 	a.cfg.Log.Info("connected", "ack_seq", w.AckSeq, "server_interval_s", w.IntervalSeconds, "can_ban", ban)
 
 	// From here on one goroutine reads every frame: acknowledgements go to the sender, commands to the

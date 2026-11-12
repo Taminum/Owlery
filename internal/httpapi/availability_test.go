@@ -53,3 +53,33 @@ func TestAvailabilityKeepsDayTotalsAfterTheSamplesAreGone(t *testing.T) {
 		t.Errorf("an unknown machine: %d", st)
 	}
 }
+
+func TestHostBacklogFillsMinutesButNeverReplacesTheCurrentReading(t *testing.T) {
+	w := newAgentWorld(t)
+	ctx := context.Background()
+	id := mkVPS(t, w, "box2", "203.0.113.92", w.work.ID)
+	st := w.h.st
+	now := time.Now().UTC()
+	if err := st.SaveHost(ctx, id, secproto.Host{Type: "host", At: now, OS: "Ubuntu now", CPUPct: 1}, now); err != nil {
+		t.Fatal(err)
+	}
+	old := now.Add(-3 * time.Hour)
+	items := []secproto.Host{
+		{Type: "host", At: old, OS: "Ubuntu OLD", CPUPct: 5},
+		{Type: "host", At: old.Add(time.Minute), OS: "Ubuntu OLD", CPUPct: 6},
+		{Type: "host", At: now.Add(time.Hour), OS: "future"},     // dropped
+		{Type: "host", At: now.AddDate(0, 0, -9), OS: "ancient"}, // dropped
+	}
+	n, err := st.SaveHostBacklog(ctx, id, items, now)
+	if err != nil || n != 2 {
+		t.Fatalf("%d %v", n, err)
+	}
+	var samples int
+	if err := st.Pool().QueryRow(ctx, `SELECT count(*) FROM host_samples WHERE vps_id=$1`, id).Scan(&samples); err != nil || samples != 3 {
+		t.Fatalf("%d %v", samples, err)
+	}
+	var os string
+	if err := st.Pool().QueryRow(ctx, `SELECT os FROM host_info WHERE vps_id=$1`, id).Scan(&os); err != nil || os != "Ubuntu now" {
+		t.Fatalf("the current reading must stay: %q %v", os, err)
+	}
+}

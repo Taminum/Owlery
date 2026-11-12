@@ -269,6 +269,15 @@ type HostDisk struct {
 	Used  int64  `json:"u"`
 }
 
+// HostBacklog carries the readings an agent took while it could not reach the server, oldest first, without the process lists.
+// The server keeps them as minute samples only. Sent once after a reconnect, never acknowledged.
+type HostBacklog struct {
+	Type  string `json:"type"` // "host_backlog"
+	Items []Host `json:"items"`
+}
+
+const MaxBacklogItems = 120
+
 type Host struct {
 	Type string    `json:"type"` // "host"
 	At   time.Time `json:"at"`
