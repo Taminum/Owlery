@@ -78,6 +78,13 @@ describe('server card: six tabs', () => {
     expect(screen.getByRole('tab', { name: 'Нагрузка' })).toHaveAttribute('aria-selected', 'true')
   })
 
+  it('says when the system waits for a restart and how many updates wait', async () => {
+    open('/servers/s1', server({ os: 'Ubuntu 24.04', host: host({ os: 'Ubuntu 24.04', reboot_required: true, updates_pending: 12, updates_security: 5 }) }))
+    expect(await screen.findByText('нужна перезагрузка')).toBeInTheDocument()
+    expect(screen.getByText(/Ждут обновления: 12/)).toBeInTheDocument()
+    expect(screen.getByText('из них безопасности: 5')).toBeInTheDocument()
+  })
+
   it('opens every old address on the tab that holds it, with the right choice inside', async () => {
     const cases: [string, string, string | null][] = [
       ['?view=network', 'Обзор', null],

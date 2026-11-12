@@ -215,3 +215,16 @@ func TestNetworkHealthParsers(t *testing.T) {
 		t.Fatal("garbage gave numbers")
 	}
 }
+
+func TestParseUpdatesAvailable(t *testing.T) {
+	all, sec := ParseUpdatesAvailable("\n12 updates can be applied immediately.\n5 of these updates are standard security updates.\nTo see these additional updates run: apt list --upgradable\n")
+	if all != 12 || sec != 5 {
+		t.Fatalf("%d %d", all, sec)
+	}
+	if a, s := ParseUpdatesAvailable("0 updates can be applied immediately.\n"); a != 0 || s != 0 {
+		t.Fatal(a, s)
+	}
+	if a, s := ParseUpdatesAvailable("garbage 999999999 text here"); a != 0 || s != 0 {
+		t.Fatal("unknown text must read as nothing", a, s)
+	}
+}

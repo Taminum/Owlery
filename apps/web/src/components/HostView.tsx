@@ -10,6 +10,7 @@ export interface Host {
   id: string; name: string; online: boolean; has_data: boolean; updated_at: string | null
   os: string; kernel: string; arch: string; cpu_model: string; cpus: number; mem_total: number; swap_total: number
   cpu: number | null; load1: number; load5: number; load15: number; mem_used: number; swap_used: number; uptime: number
+  reboot_required?: boolean; updates_pending?: number; updates_security?: number
   estab: number; syn_recv: number; rx_bps: number; tx_bps: number; rx_pps: number
   disks: Disk[]; procs: Proc[]; units: Unit[]; cpu_spark: (number | null)[]; mem_spark: number[]
 }

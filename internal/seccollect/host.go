@@ -219,6 +219,7 @@ func (h *HostReader) readProcfs(now time.Time) secproto.Host {
 	out.Syncookie, out.ListenDrp = ext["SyncookiesSent"], ext["ListenDrops"]
 	out.Conntrack, out.ConntrMax = h.readInt("sys/net/netfilter/nf_conntrack_count"), h.readInt("sys/net/netfilter/nf_conntrack_max")
 	out.Kernel = clean(h.read("sys/kernel/osrelease"), 80)
+	out.RebootRequired, out.UpdatesPending, out.UpdatesSecurity = readUpdateState()
 	model, cpus := cpuModel(h.read("cpuinfo"))
 	out.CPUModel, out.CPUs = clean(model, 120), cpus
 	if b, err := os.ReadFile(filepath.Join(h.Etc, "os-release")); err == nil {
@@ -234,4 +235,38 @@ func (h *HostReader) readProcfs(now time.Time) secproto.Host {
 	}
 	out.Procs, out.Units = h.readProcs(now)
 	return out
+}
+
+// ParseUpdatesAvailable reads Ubuntu's /var/lib/update-notifier/updates-available: "12 updates can be applied immediately." and
+// "5 of these updates are standard security updates.". A text it does not recognise gives zeros.
+func ParseUpdatesAvailable(text string) (all, security int) {
+	for _, line := range strings.Split(text, "\n") {
+		f := strings.Fields(line)
+		if len(f) < 3 {
+			continue
+		}
+		n, err := strconv.Atoi(f[0])
+		if err != nil || n < 0 || n > 100000 {
+			continue
+		}
+		switch {
+		case strings.Contains(line, "can be applied") || strings.Contains(line, "can be installed"):
+			all = n
+		case strings.Contains(line, "security update"):
+			security = n
+		}
+	}
+	return
+}
+
+// readUpdateState says whether the system asked for a restart and how many updates wait. A machine that does not keep these files
+// says nothing, which reads as "no restart, no updates": absence is not a warning.
+func readUpdateState() (reboot bool, pending, security int) {
+	if _, err := os.Stat("/var/run/reboot-required"); err == nil {
+		reboot = true
+	}
+	if b, err := os.ReadFile("/var/lib/update-notifier/updates-available"); err == nil && len(b) < 4096 {
+		pending, security = ParseUpdatesAvailable(string(b))
+	}
+	return
 }

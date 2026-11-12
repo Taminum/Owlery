@@ -6,7 +6,7 @@ import { api } from '../lib/api'
 import { formatBytes, formatDateTime, formatRate } from '../lib/format'
 import { useLoad } from '../hooks/useLoad'
 import type { ServerAlert } from '../lib/types'
-import { Card, Segmented, Tabs } from '../components/ui'
+import { Card, Chip, Segmented, Tabs } from '../components/ui'
 import { PageHead, TableSkeleton } from '../components/Analyzer'
 import { GhostButton } from '../components/Modal'
 import { HardwareSection } from '../components/HardwareView'
@@ -134,6 +134,12 @@ function Now({ s }: { s: Server }) {
         <Meter label={t('host.cpu')} pct={h.cpu} detail={loadDetail(h)} />
         <Meter label={t('host.mem')} pct={memPct} detail={`${formatBytes(h.mem_used)} / ${formatBytes(h.mem_total)}`} />
         <Meter label={root ? `${t('host.disk')} ${root.m}` : t('host.disk')} pct={root && root.t > 0 ? (root.u * 100) / root.t : null} detail={root ? `${formatBytes(root.u)} / ${formatBytes(root.t)}` : ''} />
+        {(h.reboot_required || (h.updates_pending ?? 0) > 0) && (
+          <p className="flex flex-wrap items-center gap-2 text-xs text-muted">
+            {(h.updates_pending ?? 0) > 0 && <span>{t('host.updates', { n: h.updates_pending ?? 0 })}{(h.updates_security ?? 0) > 0 && <> · <span className="text-amber">{t('host.updatesSec', { n: h.updates_security ?? 0 })}</span></>}</span>}
+            {h.reboot_required && <Chip tone="amber">{t('host.reboot')}</Chip>}
+          </p>
+        )}
         <p className="text-xs text-muted">{t('host.net')}: ↓ {formatRate(h.rx_bps)} · ↑ {formatRate(h.tx_bps)} · {t('host.conns', { n: h.estab })}</p>
         {pts.length > 1 && (
           <div>
