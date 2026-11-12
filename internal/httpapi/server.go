@@ -271,6 +271,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/net-devices", s.session(s.listNetDevices))
 	mux.Handle("POST /api/v1/net-devices", s.session(s.createNetDevice))
 	mux.Handle("PATCH /api/v1/net-devices/{id}", s.session(s.renameNetDevice))
+	mux.Handle("GET /api/v1/lan-devices", s.session(s.listLANDevices))
+	mux.Handle("PATCH /api/v1/lan-devices/{mac}", s.session(s.setLANDevice))
 	mux.Handle("DELETE /api/v1/net-devices/{id}", s.session(s.deleteNetDevice))
 	mux.Handle("GET /api/v1/servers/{id}/docker/{name}/logs", s.session(s.getDockerLogs))
 	mux.Handle("POST /api/v1/servers/{id}/docker/{name}/restart", s.session(s.restartDockerContainer))

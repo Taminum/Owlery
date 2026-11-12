@@ -10,7 +10,7 @@ type AlertGroup struct {
 var AlertGroups = []AlertGroup{
 	{"agents", []string{AlertAgentSilent, AlertProbeDown, AlertNetDown}},
 	{"panels", []string{AlertPanelSync, AlertPanelBackup}},
-	{"security", []string{AlertSecAgent, AlertSecTLS, AlertSecPort}},
+	{"security", []string{AlertSecAgent, AlertSecTLS, AlertSecPort, AlertLANNew}},
 	{"resources", []string{AlertHostDisk, AlertHostDiskForecast, AlertHostCPU, AlertHostMem, AlertHostContainer, AlertHostContainerDown, AlertNetConnFull}},
 	{"flood", []string{AlertHostFlood}},
 	{"awg", []string{AlertAWGDown, AlertAWGToolsOld}},

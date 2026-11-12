@@ -213,6 +213,9 @@ func (s *Store) SaveNetReport(ctx context.Context, id string, r netdev.Report, n
 		if r.ResetClients {
 			v.Clients = []netdev.Client{}
 		}
+		if err := recordLANClients(ctx, tx, vid, r.Clients, now); err != nil {
+			return err
+		}
 		if len(r.Clients) > 0 {
 			seen := map[string]bool{}
 			for _, c := range v.Clients {
