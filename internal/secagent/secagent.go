@@ -78,6 +78,9 @@ type Config struct {
 	// only when that socket is there, so a machine without the helper cannot be given one.
 	AllowShell  bool
 	ShellSocket string
+	// DockerSocket is the Docker helper's socket (internal/dockerhelper). The agent offers logs and restarts of containers
+	// only when that socket is there, so a machine without the helper cannot be given them.
+	DockerSocket string
 	// AllowDesktop lets Owlery reach this machine's own RDP or VNC port through the agent, so that the port need not be
 	// open to the network at all.
 	AllowDesktop bool
@@ -256,6 +259,14 @@ func (a *agent) shellReady() bool {
 	return err == nil && st.Mode()&os.ModeSocket != 0
 }
 
+func (a *agent) dockerReady() bool {
+	if a.cfg.DockerSocket == "" || runtime.GOOS != "linux" {
+		return false
+	}
+	st, err := os.Stat(a.cfg.DockerSocket)
+	return err == nil && st.Mode()&os.ModeSocket != 0
+}
+
 // openShell starts a terminal: through the helper when there is one, else by the agent itself if it may.
 func (a *agent) openShell(req secproto.ShellOpen) {
 	switch {
@@ -309,6 +320,9 @@ func (a *agent) capabilities(ban bool) []string {
 	}
 	if a.shellReady() {
 		caps = append(caps, secproto.CapShell)
+	}
+	if a.dockerReady() {
+		caps = append(caps, secproto.CapDockerCtl)
 	}
 	if a.cfg.AllowDesktop {
 		caps = append(caps, secproto.CapDesktop)
@@ -609,6 +623,17 @@ func (a *agent) reader(ctx context.Context, c *websocket.Conn, ban bool, acks ch
 			go func() {
 				if err := write(ctx, c, wolHandle(req)); err != nil {
 					a.cfg.Log.Warn("could not report a wake-on-lan result", "id", req.ID, "err", err)
+				}
+			}()
+		case "docker_req":
+			var req secproto.DockerReq
+			if json.Unmarshal(b, &req) != nil || req.ID == "" || len(req.ID) > 64 {
+				fail(errors.New("secagent: a bad docker request"))
+				return
+			}
+			go func() {
+				if err := write(ctx, c, a.dockerHandle(ctx, req)); err != nil {
+					a.cfg.Log.Warn("could not report a docker result", "id", req.ID, "err", err)
 				}
 			}()
 		case "remote_open":

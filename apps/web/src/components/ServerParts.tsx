@@ -18,6 +18,7 @@ export interface Server extends VPS {
   alerts?: ServerAlert[]
   hardware?: Hardware | null
   docker?: DockerInfo | null
+  docker_ctl?: boolean
   external_ip?: string
   wol?: boolean
   maint_until?: string

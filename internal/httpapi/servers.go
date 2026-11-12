@@ -168,7 +168,8 @@ func (s *Server) serverCard(w http.ResponseWriter, r *http.Request, a auth.Actor
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, struct {
 		serverOut
-		Hardware json.RawMessage `json:"hardware"`
-		Docker   json.RawMessage `json:"docker"`
-	}{out[0], hw, dk})
+		Hardware  json.RawMessage `json:"hardware"`
+		Docker    json.RawMessage `json:"docker"`
+		DockerCtl bool            `json:"docker_ctl"` // logs and restarts are possible here, for this caller, now
+	}{out[0], hw, dk, s.dockerCtlOf(r, a, v)})
 }
