@@ -108,3 +108,63 @@ func TestOpenWrtRouterGetsItsOwnInstallerAndItsReportIsTaken(t *testing.T) {
 		t.Fatalf("%s", b)
 	}
 }
+
+func TestAClientThatAppearsLaterIsNewUntilTheOwnerNamesIt(t *testing.T) {
+	w := newWorld(t)
+	_, b := w.owner.do("POST", "/api/v1/net-devices", map[string]any{"name": "Дом"})
+	var made struct {
+		Token string `json:"token"`
+	}
+	_ = json.Unmarshal(b, &made)
+	send := func(body string) {
+		req, _ := http.NewRequest("POST", w.h.ts.URL+NetIngestPath, strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+made.Token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil || resp.StatusCode != 204 {
+			t.Fatalf("%v %v", err, resp)
+		}
+	}
+	type dev struct {
+		MAC       string `json:"mac"`
+		Name      string `json:"name"`
+		Source    string `json:"source"`
+		Confirmed bool   `json:"confirmed"`
+		Seen      bool   `json:"seen"`
+	}
+	list := func() map[string]dev {
+		_, b := w.owner.get("/api/v1/lan-devices")
+		var out struct {
+			Devices []dev `json:"devices"`
+		}
+		if err := json.Unmarshal(b, &out); err != nil {
+			t.Fatal(err)
+		}
+		m := map[string]dev{}
+		for _, d := range out.Devices {
+			m[d.MAC] = d
+		}
+		return m
+	}
+	if st, _ := w.viewer.get("/api/v1/lan-devices"); st != 403 {
+		t.Fatalf("a viewer: %d", st)
+	}
+	// The first list a router sends is the baseline: known.
+	send("reset_clients=1\nclient=192.168.88.20,aa:bb:cc:dd:ee:01,pc\n")
+	if d := list()["AA:BB:CC:DD:EE:01"]; !d.Confirmed || !d.Seen || d.Source != "Дом" {
+		t.Fatalf("baseline: %+v", d)
+	}
+	// A later arrival is new.
+	send("reset_clients=1\nclient=192.168.88.20,aa:bb:cc:dd:ee:01,pc\nclient=192.168.88.141,3c:22:fb:11:90:ab,\n")
+	if d := list()["3C:22:FB:11:90:AB"]; d.Confirmed || !d.Seen {
+		t.Fatalf("a new device: %+v", d)
+	}
+	if st, _ := w.owner.do("PATCH", "/api/v1/lan-devices/3c:22:fb:11:90:ab", map[string]any{"name": "Телефон"}); st != 204 {
+		t.Fatalf("name: %d", st)
+	}
+	if d := list()["3C:22:FB:11:90:AB"]; !d.Confirmed || d.Name != "Телефон" {
+		t.Fatalf("named: %+v", d)
+	}
+	if st, _ := w.owner.do("PATCH", "/api/v1/lan-devices/00:00:00:00:00:99", map[string]any{"name": "x"}); st != 404 {
+		t.Fatalf("unknown: %d", st)
+	}
+}

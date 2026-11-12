@@ -30,3 +30,21 @@ func NetConditions(devs []store.NetDevice, now time.Time) []store.Condition {
 	}
 	return out
 }
+
+// LANConditions flags devices that a router lists right now and that the owner has not yet looked at. Naming a device (or
+// confirming it) closes the alert; so does the device leaving the list.
+func LANConditions(devs []store.LANDevice) []store.Condition {
+	var out []store.Condition
+	for _, d := range devs {
+		if d.Confirmed || !d.Seen {
+			continue
+		}
+		who := d.Host
+		if who == "" {
+			who = d.IP
+		}
+		out = append(out, store.Condition{Kind: store.AlertLANNew, Subject: d.MAC, Label: "Новое устройство в сети: " + who,
+			Detail: d.IP + ", MAC " + d.MAC + ", увидел роутер «" + d.Source + "»"})
+	}
+	return out
+}

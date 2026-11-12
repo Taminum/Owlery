@@ -51,3 +51,16 @@ func TestNetConditionsFlagAFullConnectionTable(t *testing.T) {
 		t.Fatalf("%v", full)
 	}
 }
+
+func TestLANConditionsFlagOnlyNewDevicesThatAreSeenNow(t *testing.T) {
+	devs := []store.LANDevice{
+		{MAC: "A", IP: "1.1.1.1", Seen: true},
+		{MAC: "B", IP: "1.1.1.2", Seen: true, Confirmed: true},
+		{MAC: "C", IP: "1.1.1.3", Seen: false},
+		{MAC: "D", IP: "1.1.1.4", Host: "phone", Seen: true},
+	}
+	got := LANConditions(devs)
+	if len(got) != 2 || got[0].Subject != "A" || got[1].Subject != "D" || got[1].Label != "Новое устройство в сети: phone" {
+		t.Fatalf("%+v", got)
+	}
+}
