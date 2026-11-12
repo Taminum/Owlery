@@ -33,3 +33,21 @@ func TestNetConditionsFlagOnlyADeviceThatWentSilent(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 }
+
+func TestNetConditionsFlagAFullConnectionTable(t *testing.T) {
+	now := time.Date(2026, 11, 12, 12, 0, 0, 0, time.UTC)
+	at := func(m int) *time.Time { x := now.Add(-time.Duration(m) * time.Minute); return &x }
+	mk := func(id string, conn, max int64, seen *time.Time) store.NetDevice {
+		return store.NetDevice{ID: id, Name: id, LastSeen: seen, View: store.NetView{Conn: conn, ConnMax: max, ConnAt: seen}}
+	}
+	devs := []store.NetDevice{mk("ok", 700, 1000, at(1)), mk("full", 850, 1000, at(1)), mk("nomax", 900, 0, at(1)), mk("stale", 990, 1000, at(30))}
+	var full []string
+	for _, c := range NetConditions(devs, now) {
+		if c.Kind == store.AlertNetConnFull {
+			full = append(full, c.Subject)
+		}
+	}
+	if len(full) != 1 || full[0] != "full" {
+		t.Fatalf("%v", full)
+	}
+}

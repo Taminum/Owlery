@@ -11,7 +11,7 @@ var AlertGroups = []AlertGroup{
 	{"agents", []string{AlertAgentSilent, AlertProbeDown, AlertNetDown}},
 	{"panels", []string{AlertPanelSync, AlertPanelBackup}},
 	{"security", []string{AlertSecAgent, AlertSecTLS, AlertSecPort}},
-	{"resources", []string{AlertHostDisk, AlertHostDiskForecast, AlertHostCPU, AlertHostMem, AlertHostContainer, AlertHostContainerDown}},
+	{"resources", []string{AlertHostDisk, AlertHostDiskForecast, AlertHostCPU, AlertHostMem, AlertHostContainer, AlertHostContainerDown, AlertNetConnFull}},
 	{"flood", []string{AlertHostFlood}},
 	{"awg", []string{AlertAWGDown, AlertAWGToolsOld}},
 	{"dns", []string{AlertDNSFailed, AlertDNSChange}},
