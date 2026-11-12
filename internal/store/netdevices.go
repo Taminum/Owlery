@@ -15,16 +15,21 @@ import (
 
 // NetView is what is kept of a device's latest readings.
 type NetView struct {
-	Board     string          `json:"board"`
-	Version   string          `json:"version"`
-	UptimeSec int64           `json:"uptime"`
-	CPU       float64         `json:"cpu"`
-	MemFree   int64           `json:"mem_free"`
-	MemTotal  int64           `json:"mem_total"`
-	Temp      *float64        `json:"temp,omitempty"`
-	StatsAt   *time.Time      `json:"stats_at,omitempty"`
-	Ifaces    []netdev.Iface  `json:"ifaces"`
-	Clients   []netdev.Client `json:"clients"`
+	Board     string             `json:"board"`
+	Version   string             `json:"version"`
+	UptimeSec int64              `json:"uptime"`
+	CPU       float64            `json:"cpu"`
+	MemFree   int64              `json:"mem_free"`
+	MemTotal  int64              `json:"mem_total"`
+	Temp      *float64           `json:"temp,omitempty"`
+	StatsAt   *time.Time         `json:"stats_at,omitempty"`
+	Ifaces    []netdev.Iface     `json:"ifaces"`
+	Clients   []netdev.Client    `json:"clients"`
+	Conn      int64              `json:"conn,omitempty"`
+	ConnMax   int64              `json:"conn_max,omitempty"`
+	ConnAt    *time.Time         `json:"conn_at,omitempty"`
+	Top       []netdev.TopSource `json:"top"`
+	Nat       []netdev.NatRule   `json:"nat"`
 }
 
 type NetDevice struct {
@@ -40,13 +45,19 @@ type NetDevice struct {
 const netOnlineWithin = 5 * time.Minute
 
 func decodeView(raw []byte) NetView {
-	v := NetView{Ifaces: []netdev.Iface{}, Clients: []netdev.Client{}}
+	v := NetView{Ifaces: []netdev.Iface{}, Clients: []netdev.Client{}, Top: []netdev.TopSource{}, Nat: []netdev.NatRule{}}
 	_ = json.Unmarshal(raw, &v)
 	if v.Ifaces == nil {
 		v.Ifaces = []netdev.Iface{}
 	}
 	if v.Clients == nil {
 		v.Clients = []netdev.Client{}
+	}
+	if v.Top == nil {
+		v.Top = []netdev.TopSource{}
+	}
+	if v.Nat == nil {
+		v.Nat = []netdev.NatRule{}
 	}
 	return v
 }
@@ -180,6 +191,24 @@ func (s *Store) SaveNetReport(ctx context.Context, id string, r netdev.Report, n
 				v.Ifaces = append(v.Ifaces, f)
 			}
 			counters = next
+		}
+		if r.HasConn {
+			at := now
+			v.Conn, v.ConnAt, v.Top = r.Conn, &at, r.Top
+			if r.ConnMax > 0 {
+				v.ConnMax = r.ConnMax
+			}
+			if v.Top == nil {
+				v.Top = []netdev.TopSource{}
+			}
+		}
+		if r.ResetNat {
+			v.Nat = []netdev.NatRule{}
+		}
+		for _, n := range r.Nat {
+			if len(v.Nat) < netdev.MaxNat {
+				v.Nat = append(v.Nat, n)
+			}
 		}
 		if r.ResetClients {
 			v.Clients = []netdev.Client{}
