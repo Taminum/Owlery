@@ -192,6 +192,7 @@ func Run(ctx context.Context, st *store.Store, every time.Duration, log *slog.Lo
 			log.Info("alerts", "opened", o, "closed", c)
 		}
 		_ = st.PurgeResolvedAlerts(ctx, now.AddDate(0, 0, -90))
+		_ = st.RollupUptime(ctx, now) // before the minute samples older than a week go
 		_ = st.PurgeHostSamples(ctx, now.AddDate(0, 0, -7))
 		select {
 		case <-ctx.Done():

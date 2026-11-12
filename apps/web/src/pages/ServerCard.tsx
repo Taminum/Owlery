@@ -6,6 +6,7 @@ import { api } from '../lib/api'
 import { formatBytes, formatDateTime, formatRate } from '../lib/format'
 import { useLoad } from '../hooks/useLoad'
 import type { ServerAlert } from '../lib/types'
+import { Availability } from '../components/Availability'
 import { Card, Chip, Segmented, Tabs } from '../components/ui'
 import { PageHead, TableSkeleton } from '../components/Analyzer'
 import { GhostButton } from '../components/Modal'
@@ -140,6 +141,7 @@ function Now({ s }: { s: Server }) {
             {h.reboot_required && <Chip tone="amber">{t('host.reboot')}</Chip>}
           </p>
         )}
+        <Availability hostId={h.id} />
         <p className="text-xs text-muted">{t('host.net')}: ↓ {formatRate(h.rx_bps)} · ↑ {formatRate(h.tx_bps)} · {t('host.conns', { n: h.estab })}</p>
         {pts.length > 1 && (
           <div>

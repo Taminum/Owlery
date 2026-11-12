@@ -55,3 +55,14 @@ func (s *Server) onboarding(w http.ResponseWriter, r *http.Request, a auth.Actor
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, c)
 }
+
+// hostAvailability is the last thirty days of one machine: per day, how many minutes its agent reported.
+func (s *Server) hostAvailability(w http.ResponseWriter, r *http.Request, a auth.Actor, _ store.Session) {
+	days, err := s.Store.Availability(r.Context(), a.Scope(), r.PathValue("id"), time.Now().UTC())
+	if err != nil {
+		s.writeErr(w, r, http.StatusNotFound, "not_found", "server not found")
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]any{"days": days})
+}
