@@ -61,6 +61,17 @@ describe('Роутеры', () => {
     expect(screen.getByText(/Клиентов нет/)).toBeInTheDocument()
   })
 
+  it('folds ports without a cable away until asked', async () => {
+    const base = device()
+    const ifaces = [...base.view.ifaces, { name: 'ether5', rx: 0, tx: 0, up: false, rx_bps: 0, tx_bps: 0 }]
+    mockApi({ me: owner, handler: (r) => (r.path === '/api/v1/net-devices' ? { status: 200, body: { devices: [device({ view: { ...base.view, ifaces } })] } } : undefined) })
+    renderPage()
+    expect(await screen.findByText('ether1')).toBeInTheDocument()
+    expect(screen.queryByText('ether5')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Ещё 1 без кабеля/ }))
+    expect(screen.getByText('ether5')).toBeInTheDocument()
+  })
+
   it('renames a router', async () => {
     let sent = ''
     mockApi({

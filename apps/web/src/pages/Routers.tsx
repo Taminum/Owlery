@@ -65,6 +65,11 @@ function DeviceCard({ d, tz, onRename, onRemove }: { d: Device; tz: string; onRe
   const v = d.view
   const memPct = v.mem_total > 0 ? Math.round(((v.mem_total - v.mem_free) * 100) / v.mem_total) : null
   const [now] = useState(() => Date.now())
+  const [showDown, setShowDown] = useState(false)
+  const upPorts = v.ifaces.filter((f) => f.up)
+  const downCount = v.ifaces.length - upPorts.length
+  // Ports without a cable fold away; if nothing is plugged in, show them all rather than an empty table.
+  const ports = showDown || upPorts.length === 0 ? v.ifaces : upPorts
   const sub = [v.board, v.version && `RouterOS ${v.version}`].filter(Boolean).join(', ')
   return (
     <Card title={d.name} note={sub} right={<div className="flex gap-2"><GhostButton size="s" onClick={onRename}>{t('rt.rename')}</GhostButton><GhostButton size="s" onClick={onRemove}>{t('rt.remove')}</GhostButton></div>}>
@@ -86,13 +91,18 @@ function DeviceCard({ d, tz, onRename, onRemove }: { d: Device; tz: string; onRe
         {v.ifaces.length > 0 && (
           <div>
             <h3 className="mb-1.5 text-[13px] font-medium">{t('rt.ports')}</h3>
-            <DataTable caption={t('rt.ports')} rows={v.ifaces} rowKey={(f) => f.name} pageSize={12} columns={[
+            <DataTable caption={t('rt.ports')} rows={ports} rowKey={(f) => f.name} pageSize={12} columns={[
               { key: 'name', title: t('rt.col.port'), sort: (f) => f.name, cell: (f) => <span className="font-medium">{f.name}</span> },
               { key: 'state', title: t('rt.col.state'), cell: (f) => <Chip tone={f.up ? 'green' : undefined}>{f.up ? t('rt.portUp') : t('rt.portDown')}</Chip> },
               { key: 'speed', title: t('rt.col.speed'), sort: (f) => f.rx_bps + f.tx_bps, descFirst: true, className: 'tnum whitespace-nowrap', cell: (f) => `↓ ${formatRate(f.rx_bps)} · ↑ ${formatRate(f.tx_bps)}` },
               { key: 'rx', title: t('rt.col.rx'), sort: (f) => f.rx, descFirst: true, align: 'right', className: 'tnum', cell: (f) => formatBytes(f.rx) },
               { key: 'tx', title: t('rt.col.tx'), sort: (f) => f.tx, descFirst: true, align: 'right', className: 'tnum', cell: (f) => formatBytes(f.tx) },
             ]} />
+            {upPorts.length > 0 && downCount > 0 && (
+              <button type="button" className="mt-2 text-[13px] text-muted underline-offset-2 hover:underline" onClick={() => setShowDown((x) => !x)}>
+                {showDown ? t('rt.hideDown') : t('rt.showDown', { n: downCount })}
+              </button>
+            )}
           </div>
         )}
         <div>
