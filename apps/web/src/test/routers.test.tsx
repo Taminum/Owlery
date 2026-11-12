@@ -119,3 +119,27 @@ describe('Роутеры', () => {
     expect(screen.getByText(/System → Scripts → Add/)).toBeInTheDocument()
   })
 })
+
+describe('Роутеры: OpenWrt', () => {
+  it('asks for the kind and shows the ssh steps without a MikroTik scheduler command', async () => {
+    const made = { token: 'd9.secretsecretsecretsecret', script: 'cat > /usr/bin/owlery-report.sh', device: { name: 'RouteRich', kind: 'openwrt' } }
+    let sent = ''
+    mockApi({
+      me: owner,
+      handler: (r) => {
+        if (r.path === '/api/v1/net-devices' && r.method === 'POST') { sent = JSON.stringify(r.body); return { status: 201, body: made } }
+        if (r.path === '/api/v1/net-devices') return { status: 200, body: { devices: [] } }
+        return undefined
+      },
+    })
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: /Добавить роутер/ }))
+    fireEvent.change(screen.getByLabelText('Тип роутера'), { target: { value: 'openwrt' } })
+    fireEvent.change(screen.getByLabelText('Название'), { target: { value: 'RouteRich' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Создать' }))
+    expect(await screen.findByText(/по SSH/)).toBeInTheDocument()
+    expect(sent).toBe('{"name":"RouteRich","kind":"openwrt"}')
+    expect(screen.queryByText(/System → Scripts/)).toBeNull()
+    expect(screen.queryByText(/system scheduler add/)).toBeNull()
+  })
+})

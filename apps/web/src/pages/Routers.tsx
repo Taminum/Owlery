@@ -16,7 +16,7 @@ interface TopSrc { ip: string; n: number }
 interface NatRule { chain: string; action: string; packets: number; bytes: number; dst_port?: string; to_addr?: string; to_ports?: string; comment?: string }
 interface Client { ip: string; mac: string; host?: string }
 interface Device {
-  id: string; name: string; online: boolean; last_seen: string | null
+  id: string; name: string; kind?: string; online: boolean; last_seen: string | null
   view: { board: string; version: string; uptime: number; cpu: number; mem_free: number; mem_total: number; temp?: number; stats_at?: string; ifaces: Iface[]; clients: Client[]; conn?: number; conn_max?: number; top?: TopSrc[]; nat?: NatRule[] }
 }
 
@@ -74,7 +74,7 @@ function DeviceCard({ d, tz, onRename, onRemove }: { d: Device; tz: string; onRe
   // Ports without a cable fold away; if nothing is plugged in, show them all rather than an empty table.
   const ports = showDown || upPorts.length === 0 ? v.ifaces : upPorts
   const names = new Map(v.clients.filter((c) => c.host).map((c) => [c.ip, c.host as string]))
-  const sub = [v.board, v.version && `RouterOS ${v.version}`].filter(Boolean).join(', ')
+  const sub = [v.board, v.version && (d.kind === 'openwrt' ? v.version : `RouterOS ${v.version}`)].filter(Boolean).join(', ')
   return (
     <Card title={d.name} note={sub} right={<div className="flex gap-2"><GhostButton size="s" onClick={onRename}>{t('rt.rename')}</GhostButton><GhostButton size="s" onClick={onRemove}>{t('rt.remove')}</GhostButton></div>}>
       <div className="space-y-4">
@@ -126,8 +126,8 @@ function DeviceCard({ d, tz, onRename, onRemove }: { d: Device; tz: string; onRe
             <DataTable caption={t('rt.nat')} rows={v.nat ?? []} rowKey={(x) => `${x.chain}|${x.action}|${x.dst_port ?? ''}|${x.to_addr ?? ''}|${x.comment ?? ''}`} pageSize={12} columns={[
               { key: 'rule', title: t('rt.col.rule'), cell: (x) => <span className="font-medium">{x.chain} · {x.action}</span> },
               { key: 'to', title: t('rt.col.to'), className: 'tnum', cell: (x) => (x.dst_port || x.to_addr || x.to_ports ? `${x.dst_port ? `:${x.dst_port} → ` : ''}${x.to_addr ?? ''}${x.to_ports ? `:${x.to_ports}` : ''}` : '—') },
-              { key: 'pk', title: t('rt.col.hits'), align: 'right', className: 'tnum', sort: (x) => x.packets, descFirst: true, cell: (x) => x.packets },
-              { key: 'by', title: t('rt.col.bytes'), align: 'right', className: 'tnum', sort: (x) => x.bytes, descFirst: true, cell: (x) => formatBytes(x.bytes) },
+              { key: 'pk', title: t('rt.col.hits'), align: 'right', className: 'tnum', sort: (x) => x.packets, descFirst: true, cell: (x) => (x.packets < 0 ? '—' : x.packets) },
+              { key: 'by', title: t('rt.col.bytes'), align: 'right', className: 'tnum', sort: (x) => x.bytes, descFirst: true, cell: (x) => (x.bytes < 0 ? '—' : formatBytes(x.bytes)) },
               { key: 'cm', title: t('rt.col.note'), cell: (x) => x.comment || '—' },
             ]} />
           </div>
@@ -147,10 +147,11 @@ function DeviceCard({ d, tz, onRename, onRemove }: { d: Device; tz: string; onRe
   )
 }
 
-interface Made { token: string; script: string; device: { name: string } }
+interface Made { token: string; script: string; device: { name: string; kind?: string } }
 
 function NewDialog({ onClose, onMade }: { onClose: () => void; onMade: () => void }) {
   const [name, setName] = useState('')
+  const [kind, setKind] = useState('mikrotik')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [made, setMade] = useState<Made | null>(null)
@@ -159,7 +160,7 @@ function NewDialog({ onClose, onMade }: { onClose: () => void; onMade: () => voi
     setBusy(true)
     setError('')
     try {
-      setMade(await api.post<Made>('/api/v1/net-devices', { name: name.trim() }))
+      setMade(await api.post<Made>('/api/v1/net-devices', { name: name.trim(), kind }))
       onMade()
     } catch (e) {
       setError(why(e))
@@ -174,13 +175,17 @@ function NewDialog({ onClose, onMade }: { onClose: () => void; onMade: () => voi
       <Modal title={t('rt.created', { name: made.device.name })} onClose={onClose} wide>
         <div className="space-y-3 text-[13px]">
           <p className="text-muted">{t('rt.tokenOnce')}</p>
-          <p>{t('rt.step1')}</p>
+          <p>{t(made.device.kind === 'openwrt' ? 'rt.owStep1' : 'rt.step1')}</p>
           <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-all rounded-control bg-canvas p-3 font-mono text-xs leading-5">{made.script}</pre>
           <GhostButton size="m" onClick={() => copy('script', made.script)}>{copied === 'script' ? t('rt.copied') : t('rt.copy')}</GhostButton>
-          <p>{t('rt.step2')}</p>
-          <pre className="whitespace-pre-wrap break-all rounded-control bg-canvas p-3 font-mono text-xs leading-5">{cmd}</pre>
-          <GhostButton size="m" onClick={() => copy('cmd', cmd)}>{copied === 'cmd' ? t('rt.copied') : t('rt.copy')}</GhostButton>
-          <p className="text-muted">{t('rt.step3')}</p>
+          {made.device.kind !== 'openwrt' && (
+            <>
+              <p>{t('rt.step2')}</p>
+              <pre className="whitespace-pre-wrap break-all rounded-control bg-canvas p-3 font-mono text-xs leading-5">{cmd}</pre>
+              <GhostButton size="m" onClick={() => copy('cmd', cmd)}>{copied === 'cmd' ? t('rt.copied') : t('rt.copy')}</GhostButton>
+            </>
+          )}
+          <p className="text-muted">{t(made.device.kind === 'openwrt' ? 'rt.owStep2' : 'rt.step3')}</p>
           <div className="pt-1"><PrimaryButton size="m" onClick={onClose}>{t('rt.done')}</PrimaryButton></div>
         </div>
       </Modal>
@@ -188,6 +193,11 @@ function NewDialog({ onClose, onMade }: { onClose: () => void; onMade: () => voi
   }
   return (
     <Modal title={t('rt.newTitle')} onClose={onClose} busy={busy}>
+      <label htmlFor="rt-kind" className="mb-1.5 block text-[13px] font-medium">{t('rt.kind')}</label>
+      <select id="rt-kind" className={`${inputCls} mb-3`} value={kind} onChange={(e) => setKind(e.target.value)}>
+        <option value="mikrotik">MikroTik (RouterOS)</option>
+        <option value="openwrt">OpenWrt</option>
+      </select>
       <label htmlFor="rt-name" className="mb-1.5 block text-[13px] font-medium">{t('rt.name')}</label>
       <input id="rt-name" data-autofocus className={inputCls} value={name} maxLength={60} placeholder={t('rt.namePh')} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && name.trim() && void create()} />
       {error && <p role="alert" className="mt-2 text-xs text-red">{error}</p>}
