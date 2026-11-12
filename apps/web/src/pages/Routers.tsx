@@ -16,7 +16,7 @@ interface TopSrc { ip: string; n: number }
 interface NatRule { chain: string; action: string; packets: number; bytes: number; dst_port?: string; to_addr?: string; to_ports?: string; comment?: string }
 interface Client { ip: string; mac: string; host?: string }
 interface Device {
-  id: string; name: string; kind?: string; online: boolean; last_seen: string | null
+  id: string; name: string; kind?: string; parent_id?: string | null; online: boolean; last_seen: string | null
   view: { board: string; version: string; uptime: number; cpu: number; mem_free: number; mem_total: number; temp?: number; stats_at?: string; ifaces: Iface[]; clients: Client[]; conn?: number; conn_max?: number; top?: TopSrc[]; nat?: NatRule[] }
 }
 
@@ -64,7 +64,7 @@ function RenameDialog({ d, onClose, onDone }: { d: Device; onClose: () => void; 
   )
 }
 
-function DeviceCard({ d, tz, onRename, onRemove }: { d: Device; tz: string; onRename: () => void; onRemove: () => void }) {
+function DeviceCard({ d, tz, others, onParent, onRename, onRemove }: { d: Device; tz: string; others: Device[]; onParent: (parent: string) => void; onRename: () => void; onRemove: () => void }) {
   const v = d.view
   const memPct = v.mem_total > 0 ? Math.round(((v.mem_total - v.mem_free) * 100) / v.mem_total) : null
   const [now] = useState(() => Date.now())
@@ -79,6 +79,13 @@ function DeviceCard({ d, tz, onRename, onRemove }: { d: Device; tz: string; onRe
     <Card title={d.name} note={sub} right={<div className="flex gap-2"><GhostButton size="s" onClick={onRename}>{t('rt.rename')}</GhostButton><GhostButton size="s" onClick={onRemove}>{t('rt.remove')}</GhostButton></div>}>
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2 text-[13px]">
+          <label className="flex items-center gap-1.5 text-muted">
+            {t('rt.parent')}
+            <select className={`${inputCls} !h-7 !w-auto !py-0`} value={d.parent_id ?? ''} onChange={(e) => onParent(e.target.value)} aria-label={t('rt.parent')}>
+              <option value="">{t('rt.parentNone')}</option>
+              {others.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+            </select>
+          </label>
           {d.last_seen === null ? <Chip tone="amber">{t('rt.never')}</Chip>
             : d.online ? <Chip tone="green">{t('rt.online')}</Chip>
             : <Chip tone="red">{t('rt.offline')}</Chip>}
@@ -216,6 +223,16 @@ export default function Routers() {
   const [removing, setRemoving] = useState<Device | null>(null)
   const [renaming, setRenaming] = useState<Device | null>(null)
   const [busy, setBusy] = useState(false)
+  const [parentError, setParentError] = useState('')
+  const setParent = async (id: string, parent: string) => {
+    setParentError('')
+    try {
+      await api.patch(`/api/v1/net-devices/${id}`, { parent_id: parent })
+    } catch {
+      setParentError(t('rt.parentErr'))
+    }
+    reload()
+  }
   const remove = async () => {
     if (!removing) return
     setBusy(true)
@@ -231,9 +248,10 @@ export default function Routers() {
     <div className="space-y-5">
       <PageHead title={t('rt.title')} subtitle={t('rt.subtitle')} right={<PrimaryButton size="m" onClick={() => setAdding(true)}><Plus size={14} aria-hidden className="mr-1 inline" />{t('rt.add')}</PrimaryButton>} />
       {error && <p role="alert" className="text-[13px] text-red">{error}</p>}
+      {parentError && <p role="alert" className="text-[13px] text-red">{parentError}</p>}
       {!data && !error && <Skeleton className="h-40" />}
       {data && data.devices.length === 0 && <p className="text-[13px] text-muted">{t('rt.empty')}</p>}
-      {data?.devices.map((d) => <DeviceCard key={d.id} d={d} tz={filters.tz} onRename={() => setRenaming(d)} onRemove={() => setRemoving(d)} />)}
+      {data?.devices.map((d) => <DeviceCard key={d.id} d={d} tz={filters.tz} others={data.devices.filter((o) => o.id !== d.id)} onParent={(p) => void setParent(d.id, p)} onRename={() => setRenaming(d)} onRemove={() => setRemoving(d)} />)}
       {renaming && <RenameDialog d={renaming} onClose={() => setRenaming(null)} onDone={reload} />}
       {adding && <NewDialog onClose={() => setAdding(false)} onMade={reload} />}
       {removing && (

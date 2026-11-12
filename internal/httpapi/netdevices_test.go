@@ -168,3 +168,49 @@ func TestAClientThatAppearsLaterIsNewUntilTheOwnerNamesIt(t *testing.T) {
 		t.Fatalf("unknown: %d", st)
 	}
 }
+
+func TestARouterCanStandBehindAnotherButNotInALoop(t *testing.T) {
+	w := newWorld(t)
+	mk := func(name string) string {
+		_, b := w.owner.do("POST", "/api/v1/net-devices", map[string]any{"name": name})
+		var m struct {
+			Device struct {
+				ID string `json:"id"`
+			} `json:"device"`
+		}
+		_ = json.Unmarshal(b, &m)
+		return m.Device.ID
+	}
+	a, b := mk("Дом"), mk("RouteRich")
+	set := func(id, parent string) int {
+		st, _ := w.owner.do("PATCH", "/api/v1/net-devices/"+id, map[string]any{"parent_id": parent})
+		return st
+	}
+	if set(b, a) != 204 {
+		t.Fatal("b behind a")
+	}
+	if set(a, b) != 409 || set(a, a) != 409 {
+		t.Fatal("a loop must be refused")
+	}
+	if set(b, "00000000-0000-0000-0000-000000000000") != 409 && set(b, "00000000-0000-0000-0000-000000000000") != 404 {
+		t.Fatal("an unknown parent must be refused")
+	}
+	_, body := w.owner.get("/api/v1/net-devices")
+	var out struct {
+		Devices []struct {
+			ID       string  `json:"id"`
+			ParentID *string `json:"parent_id"`
+		} `json:"devices"`
+	}
+	_ = json.Unmarshal(body, &out)
+	got := map[string]*string{}
+	for _, d := range out.Devices {
+		got[d.ID] = d.ParentID
+	}
+	if got[b] == nil || *got[b] != a || got[a] != nil {
+		t.Fatalf("%v", got)
+	}
+	if set(b, "") != 204 {
+		t.Fatal("clear")
+	}
+}

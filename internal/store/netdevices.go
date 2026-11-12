@@ -38,7 +38,8 @@ type NetDevice struct {
 	Kind      string     `json:"kind"`
 	CreatedAt time.Time  `json:"created_at"`
 	LastSeen  *time.Time `json:"last_seen"`
-	Online    bool       `json:"online"` // heard from in the last five minutes
+	ParentID  *string    `json:"parent_id"` // the router this one stands behind; nil for the router at the edge of a network
+	Online    bool       `json:"online"`    // heard from in the last five minutes
 	View      NetView    `json:"view"`
 }
 
@@ -79,7 +80,7 @@ func (s *Store) CreateNetDevice(ctx context.Context, name, kind string, tokenHas
 }
 
 func (s *Store) ListNetDevices(ctx context.Context, now time.Time) ([]NetDevice, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id, name, kind, created_at, last_seen, last FROM net_devices WHERE archived_at IS NULL ORDER BY lower(name)`)
+	rows, err := s.pool.Query(ctx, `SELECT id, name, kind, created_at, last_seen, last, parent_id FROM net_devices WHERE archived_at IS NULL ORDER BY lower(name)`)
 	if err != nil {
 		return nil, err
 	}
@@ -89,10 +90,15 @@ func (s *Store) ListNetDevices(ctx context.Context, now time.Time) ([]NetDevice,
 		var d NetDevice
 		var id uuid.UUID
 		var raw []byte
-		if err := rows.Scan(&id, &d.Name, &d.Kind, &d.CreatedAt, &d.LastSeen, &raw); err != nil {
+		var parent *uuid.UUID
+		if err := rows.Scan(&id, &d.Name, &d.Kind, &d.CreatedAt, &d.LastSeen, &raw, &parent); err != nil {
 			return nil, err
 		}
 		d.ID, d.View = id.String(), decodeView(raw)
+		if parent != nil {
+			p := parent.String()
+			d.ParentID = &p
+		}
 		d.Online = d.LastSeen != nil && now.Sub(*d.LastSeen) < netOnlineWithin
 		out = append(out, d)
 	}
@@ -114,6 +120,43 @@ func (s *Store) RenameNetDevice(ctx context.Context, id, name string) error {
 	if errors.As(err, &pe) && pe.Code == "23505" {
 		return ErrConflict
 	}
+	if err == nil && tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return err
+}
+
+// SetNetParent says which router a device stands behind ("" for none). A device cannot stand behind itself or behind one of its own
+// descendants.
+func (s *Store) SetNetParent(ctx context.Context, id, parent string) error {
+	vid, err := ParseID(id)
+	if err != nil {
+		return ErrNotFound
+	}
+	if parent == "" {
+		tag, err := s.pool.Exec(ctx, `UPDATE net_devices SET parent_id=NULL WHERE id=$1 AND archived_at IS NULL`, vid)
+		if err == nil && tag.RowsAffected() == 0 {
+			return ErrNotFound
+		}
+		return err
+	}
+	pid, err := ParseID(parent)
+	if err != nil {
+		return ErrNotFound
+	}
+	var ok bool
+	// The parent must be a live device whose own chain of parents does not pass through this one.
+	err = s.pool.QueryRow(ctx, `WITH RECURSIVE up AS (
+    SELECT id, parent_id, 1 AS depth FROM net_devices WHERE id=$2 AND archived_at IS NULL
+    UNION ALL SELECT n.id, n.parent_id, up.depth+1 FROM net_devices n JOIN up ON n.id = up.parent_id WHERE up.depth < 20)
+SELECT EXISTS (SELECT 1 FROM up WHERE id=$2) AND NOT EXISTS (SELECT 1 FROM up WHERE id=$1)`, vid, pid).Scan(&ok)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrConflict
+	}
+	tag, err := s.pool.Exec(ctx, `UPDATE net_devices SET parent_id=$2 WHERE id=$1 AND archived_at IS NULL`, vid, pid)
 	if err == nil && tag.RowsAffected() == 0 {
 		return ErrNotFound
 	}
