@@ -81,6 +81,9 @@ type Config struct {
 	// DockerSocket is the Docker helper's socket (internal/dockerhelper). The agent offers logs and restarts of containers
 	// only when that socket is there, so a machine without the helper cannot be given them.
 	DockerSocket string
+	// LinuxSocket is the services-and-files helper's socket (internal/linuxhelper). The agent offers the list of services, their
+	// journals and files only when that socket is there.
+	LinuxSocket string
 	// AllowDesktop lets Owlery reach this machine's own RDP or VNC port through the agent, so that the port need not be
 	// open to the network at all.
 	AllowDesktop bool
@@ -277,6 +280,15 @@ func (a *agent) dockerReady() bool {
 	return err == nil && st.Mode()&os.ModeSocket != 0
 }
 
+// linuxReady says whether the services-and-files helper is there to answer.
+func (a *agent) linuxReady() bool {
+	if a.cfg.LinuxSocket == "" || runtime.GOOS != "linux" {
+		return false
+	}
+	st, err := os.Stat(a.cfg.LinuxSocket)
+	return err == nil && st.Mode()&os.ModeSocket != 0
+}
+
 // openShell starts a terminal: through the helper when there is one, else by the agent itself if it may.
 func (a *agent) openShell(req secproto.ShellOpen) {
 	switch {
@@ -333,6 +345,9 @@ func (a *agent) capabilities(ban bool) []string {
 	}
 	if a.dockerReady() {
 		caps = append(caps, secproto.CapDockerCtl)
+	}
+	if a.linuxReady() {
+		caps = append(caps, secproto.CapLinuxCtl)
 	}
 	if a.cfg.AllowDesktop {
 		caps = append(caps, secproto.CapDesktop)
@@ -649,6 +664,17 @@ func (a *agent) reader(ctx context.Context, c *websocket.Conn, ban bool, acks ch
 			go func() {
 				if err := write(ctx, c, a.dockerHandle(ctx, req)); err != nil {
 					a.cfg.Log.Warn("could not report a docker result", "id", req.ID, "err", err)
+				}
+			}()
+		case "linux_req":
+			var req secproto.LinuxReq
+			if json.Unmarshal(b, &req) != nil || req.ID == "" || len(req.ID) > 64 {
+				fail(errors.New("secagent: a bad services or files request"))
+				return
+			}
+			go func() {
+				if err := write(ctx, c, a.linuxHandle(ctx, req)); err != nil {
+					a.cfg.Log.Warn("could not report a services or files result", "id", req.ID, "err", err)
 				}
 			}()
 		case "remote_open":

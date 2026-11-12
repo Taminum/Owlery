@@ -26,6 +26,7 @@ type Hub struct {
 	shells  map[string]*shellWait
 	wols    map[string]*wolWait
 	dockers map[string]*dockerWait
+	linuxes map[string]*linuxWait
 }
 
 type probeWait struct {
@@ -39,7 +40,7 @@ type link struct {
 }
 
 func New() *Hub {
-	return &Hub{conns: map[string]*link{}, probes: map[string]*probeWait{}, admins: map[string]*adminWait{}, updates: map[string]*updateWait{}, wols: map[string]*wolWait{}, dockers: map[string]*dockerWait{}}
+	return &Hub{conns: map[string]*link{}, probes: map[string]*probeWait{}, admins: map[string]*adminWait{}, updates: map[string]*updateWait{}, wols: map[string]*wolWait{}, dockers: map[string]*dockerWait{}, linuxes: map[string]*linuxWait{}}
 }
 
 // Register makes an agent's connection available. The returned function removes it, and only it: a newer
@@ -370,6 +371,52 @@ func (h *Hub) Docker(ctx context.Context, agentID string, req secproto.DockerReq
 		return r, nil
 	case <-ctx.Done():
 		return secproto.DockerResult{}, ErrNoAnswer
+	}
+}
+
+type linuxWait struct {
+	agent string
+	ch    chan secproto.LinuxResult
+}
+
+// Linux sends one request about services or files to an agent and waits for its answer (or ctx). The ID is set here. Only the
+// agent the request was sent to can answer it.
+func (h *Hub) Linux(ctx context.Context, agentID string, req secproto.LinuxReq) (secproto.LinuxResult, error) {
+	req.Type, req.ID = "linux_req", uuid.NewString()
+	w := &linuxWait{agent: agentID, ch: make(chan secproto.LinuxResult, 1)}
+	h.mu.Lock()
+	h.linuxes[req.ID] = w
+	h.mu.Unlock()
+	defer func() {
+		h.mu.Lock()
+		delete(h.linuxes, req.ID)
+		h.mu.Unlock()
+	}()
+	if err := h.Send(ctx, agentID, req); err != nil {
+		return secproto.LinuxResult{}, err
+	}
+	select {
+	case r := <-w.ch:
+		return r, nil
+	case <-ctx.Done():
+		return secproto.LinuxResult{}, ErrNoAnswer
+	}
+}
+
+// DeliverLinux hands an agent's answer to whoever is waiting for it; one nobody asked for, or from a different agent than the one
+// asked, is dropped.
+func (h *Hub) DeliverLinux(agentID string, r secproto.LinuxResult) bool {
+	h.mu.Lock()
+	w := h.linuxes[r.ID]
+	h.mu.Unlock()
+	if w == nil || w.agent != agentID {
+		return false
+	}
+	select {
+	case w.ch <- r:
+		return true
+	default:
+		return false
 	}
 }
 

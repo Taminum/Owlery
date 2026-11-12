@@ -25,6 +25,7 @@ import { AlertRules } from '../components/AlertRules'
 import { Maintenance, MaintenanceBanner } from '../components/Maintenance'
 import { WakeOnLan } from '../components/WakeOnLan'
 import { DockerView } from '../components/DockerView'
+import { LinuxView } from '../components/LinuxView'
 import { NetworkView } from '../components/NetworkView'
 
 type Tab = 'overview' | 'resources' | 'terminal' | 'desktop' | 'screen' | 'manage' | 'services' | 'security' | 'protect' | 'docker' | 'alerts' | 'network' | 'history'
@@ -226,7 +227,7 @@ export default function ServerCard() {
       {tab === 'terminal' && s.can_edit && <TerminalView serverId={s.id} />}
       {tab === 'desktop' && s.can_edit && <DesktopView serverId={s.id} />}
       {tab === 'screen' && s.can_edit && <ScreenView serverId={s.id} canLaunch={!!s.agent?.can_shell && !!s.agent?.can_admin} />}
-      {tab === 'manage' && s.can_edit && <ManageView serverId={s.id} />}
+      {tab === 'manage' && s.can_edit && (isWindows ? <ManageView serverId={s.id} /> : <LinuxView serverId={s.id} enabled={!!s.agent?.can_linux} />)}
       {tab === 'services' && s.can_edit && <ServicesView serverId={s.id} serverName={s.name} />}
 
       {editing && <InventoryDialog s={s} onClose={() => setEditing(false)} onDone={() => { setEditing(false); q.reload() }} />}

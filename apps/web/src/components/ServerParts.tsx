@@ -23,7 +23,7 @@ export interface Server extends VPS {
   wol?: boolean
   maint_until?: string
   maint_note?: string
-  agent?: { version: string; online: boolean; can_update: boolean; can_shell?: boolean; can_admin?: boolean } | null
+  agent?: { version: string; online: boolean; can_update: boolean; can_shell?: boolean; can_admin?: boolean; can_linux?: boolean } | null
 }
 
 export const ROLES: ServerRole[] = ['entry', 'exit', 'panel', 'service', 'workstation', 'home', 'hypervisor', 'router']

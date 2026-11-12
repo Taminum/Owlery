@@ -582,6 +582,80 @@ type DockerResult struct {
 	Running   bool   `json:"running,omitempty"`   // for restart: it was running again when checked
 }
 
+// --- Linux services and files ------------------------------------------------------------------------------
+//
+// Like Docker: the agent itself reads and changes nothing here. A machine that wants services and files in the panel runs a
+// narrow helper (see internal/linuxhelper) and starts the agent with -linux-socket; only then does the agent announce
+// CapLinuxCtl. The helper lists every systemd service, but starts, stops and restarts only the ones the machine's owner named
+// when installing it, and reads files only under the folders named there. A request names a unit or a path, never a command.
+
+const CapLinuxCtl = "linux_ctl"
+
+const (
+	LinuxList    = "list"    // every service with its state
+	LinuxStart   = "start"   // a service from the machine's own list
+	LinuxStop    = "stop"    // the same
+	LinuxRestart = "restart" // the same
+	LinuxJournal = "journal" // the last lines of one service's journal
+	LinuxLs      = "ls"      // the entries of a folder (an empty path: the folders that may be looked at)
+	LinuxCat     = "cat"     // the end of a text file
+)
+
+// LinuxWrites are the operations that change the machine; they are written to the audit log before they are asked for. Reading a
+// journal or a file is written there too, since either can hold anything.
+var LinuxWrites = map[string]bool{LinuxStart: true, LinuxStop: true, LinuxRestart: true}
+
+var LinuxReads = map[string]bool{LinuxList: true, LinuxJournal: true, LinuxLs: true, LinuxCat: true}
+
+const (
+	MaxLinuxUnits   = 600
+	MaxLinuxEntries = 500
+	MaxLinuxText    = 256 << 10
+	MaxLinuxTail    = 2000
+)
+
+type LinuxReq struct {
+	Type string `json:"type"` // "linux_req"
+	ID   string `json:"id"`
+	Op   string `json:"op"`
+	Name string `json:"name,omitempty"` // a unit, "nginx.service"
+	Path string `json:"path,omitempty"`
+	Tail int    `json:"tail,omitempty"` // lines, for a journal or a file
+}
+
+// LinuxUnit is one service. Manage says whether this machine lets the panel start, stop and restart it.
+type LinuxUnit struct {
+	Name    string `json:"name"`
+	Desc    string `json:"desc,omitempty"`
+	Load    string `json:"load"`
+	Active  string `json:"active"`
+	Sub     string `json:"sub"`
+	Enabled string `json:"enabled,omitempty"` // enabled | disabled | static | masked ...
+	Manage  bool   `json:"manage"`
+}
+
+type LinuxEntry struct {
+	Name string `json:"name"`
+	Dir  bool   `json:"dir,omitempty"`
+	Link bool   `json:"link,omitempty"`
+	Size int64  `json:"size"`
+	Mod  int64  `json:"mod"` // unix seconds
+}
+
+type LinuxResult struct {
+	Type      string       `json:"type"` // "linux_result"
+	ID        string       `json:"id"`
+	OK        bool         `json:"ok"`
+	Code      string       `json:"code,omitempty"`
+	Units     []LinuxUnit  `json:"units,omitempty"`
+	Dir       string       `json:"dir,omitempty"`     // for ls: the folder as it was resolved
+	Dirs      []string     `json:"dirs,omitempty"`    // for ls with no path: the folders that may be looked at
+	Entries   []LinuxEntry `json:"entries,omitempty"` // for ls
+	Text      string       `json:"text,omitempty"`    // for journal and cat
+	Truncated bool         `json:"truncated,omitempty"`
+	Active    string       `json:"active,omitempty"` // for start, stop and restart: the state found afterwards
+}
+
 // --- Windows security (the "winsec" category) --------------------------------------------------------
 //
 // What the Windows event log says about sign-ins from other machines, and what Windows Defender says about itself and

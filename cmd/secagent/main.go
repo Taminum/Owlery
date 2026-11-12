@@ -24,6 +24,7 @@ import (
 
 	"github.com/Taminum/Owlery/internal/dockerhelper"
 	"github.com/Taminum/Owlery/internal/f2bhelper"
+	"github.com/Taminum/Owlery/internal/linuxhelper"
 	"github.com/Taminum/Owlery/internal/secagent"
 	"github.com/Taminum/Owlery/internal/seccollect"
 	"github.com/Taminum/Owlery/internal/secshell"
@@ -39,6 +40,10 @@ func main() {
 	}
 	if len(os.Args) > 1 && os.Args[1] == "docker-helper" {
 		runDockerHelper(os.Args[2:])
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "linux-helper" {
+		runLinuxHelper(os.Args[2:])
 		return
 	}
 	if len(os.Args) > 1 && os.Args[1] == "apply-update" {
@@ -70,6 +75,7 @@ func main() {
 		allowWeb  = flag.Bool("allow-web", false, "let Owlery open web services bound to 127.0.0.1 here (admin panels) through the agent")
 		allowDesk = flag.Bool("allow-desktop", false, "let Owlery reach this machine's own RDP or VNC port (127.0.0.1:3389 or :5900) through the agent")
 		dockerSck = flag.String("docker-socket", "", "Unix socket of the Docker helper; logs and restarts of containers are offered only when it is there")
+		linuxSck  = flag.String("linux-socket", "", "Unix socket of the services-and-files helper; the list of services, their journals and files are offered only when it is there")
 		allowSh   = flag.Bool("allow-shell", false, "let Owlery open a terminal here with the agent's own rights (Windows; on Linux install the shell helper instead)")
 		shellSock = flag.String("shell-socket", defaultShellSocket(), "Unix socket of the terminal helper; a terminal is offered only when it is there")
 		allowScr  = flag.Bool("allow-screen", false, "let Owlery show this machine's screen to an administrator, with a notice on it for the person at the machine (Windows; needs owlery-remote installed)")
@@ -104,7 +110,7 @@ func main() {
 		*noF2B, *noSock, *noFW = true, true, true
 	}
 	cfg := secagent.Config{ServerURL: *server, TokenFile: *tokenFile, CAFile: *caFile, AllowInsecure: *insecure,
-		Interval: *interval, Version: version, Log: log, HelperSocket: *helper, StateDir: *stateDir, NoFail2ban: *noF2B, NoSockets: *noSock, NoFirewall: *noFW, NoHost: *noHost, ContainersFile: *contFile, Probe: *probe, AllowShell: *allowSh, ShellSocket: *shellSock, DockerSocket: *dockerSck, AllowDesktop: *allowDesk, AllowWeb: *allowWeb, AllowScreen: *allowScr, AllowAdmin: *allowAdm, AllowBlock: *allowBlk, RemoteSecretFile: *remoteSec, AllowUpdate: *allowUpd, UpdateDir: defaultUpdateDir(*updateDir, *stateDir)}
+		Interval: *interval, Version: version, Log: log, HelperSocket: *helper, StateDir: *stateDir, NoFail2ban: *noF2B, NoSockets: *noSock, NoFirewall: *noFW, NoHost: *noHost, ContainersFile: *contFile, Probe: *probe, AllowShell: *allowSh, ShellSocket: *shellSock, DockerSocket: *dockerSck, LinuxSocket: *linuxSck, AllowDesktop: *allowDesk, AllowWeb: *allowWeb, AllowScreen: *allowScr, AllowAdmin: *allowAdm, AllowBlock: *allowBlk, RemoteSecretFile: *remoteSec, AllowUpdate: *allowUpd, UpdateDir: defaultUpdateDir(*updateDir, *stateDir)}
 	run := func(ctx context.Context) error { return secagent.Run(ctx, cfg) }
 	if handled, err := runAsService(run, log); handled {
 		if err != nil {
@@ -171,6 +177,42 @@ func runDockerHelper(args []string) {
 	}
 	if err := s.Serve(ctx, l); err != nil {
 		fmt.Fprintln(os.Stderr, "secagent docker-helper:", err)
+		os.Exit(1)
+	}
+}
+
+// runLinuxHelper serves the services-and-files helper: the only process that starts services and reads files on behalf of the
+// agent, and only the ones its owner named.
+func runLinuxHelper(args []string) {
+	fs := flag.NewFlagSet("linux-helper", flag.ExitOnError)
+	socket := fs.String("socket", "", "Unix socket to listen on (its directory should be a systemd RuntimeDirectory)")
+	units := fs.String("units", "", "comma-separated services that may be started, stopped and restarted from the panel (the rest can only be looked at)")
+	dirs := fs.String("dirs", "/var/log", "comma-separated folders whose files may be looked at (read only)")
+	_ = fs.Parse(args)
+	if *socket == "" {
+		fmt.Fprintln(os.Stderr, "secagent linux-helper: -socket is required")
+		os.Exit(2)
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	l, err := linuxhelper.Listen(*socket, 0o660)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "secagent linux-helper:", err)
+		os.Exit(1)
+	}
+	s := &linuxhelper.Server{Runner: seccollect.ExecRunner{Timeout: 50 * time.Second}, Systemctl: "systemctl", Journalctl: "journalctl"}
+	for _, u := range strings.Split(*units, ",") {
+		if u = strings.TrimSpace(u); u != "" {
+			s.Units = append(s.Units, u)
+		}
+	}
+	for _, d := range strings.Split(*dirs, ",") {
+		if d = strings.TrimSpace(d); d != "" {
+			s.Dirs = append(s.Dirs, d)
+		}
+	}
+	if err := s.Serve(ctx, l); err != nil {
+		fmt.Fprintln(os.Stderr, "secagent linux-helper:", err)
 		os.Exit(1)
 	}
 }
