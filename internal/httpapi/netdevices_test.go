@@ -73,3 +73,38 @@ func TestRouterReportsThroughItsTokenAndTheOwnerSeesPortsClientsAndSpeeds(t *tes
 		t.Errorf("a removed device must not report: %d", c)
 	}
 }
+
+func TestOpenWrtRouterGetsItsOwnInstallerAndItsReportIsTaken(t *testing.T) {
+	w := newWorld(t)
+	if st, _ := w.owner.do("POST", "/api/v1/net-devices", map[string]any{"name": "Кривой", "kind": "cisco"}); st != 422 {
+		t.Fatalf("an unknown kind: %d", st)
+	}
+	st, b := w.owner.do("POST", "/api/v1/net-devices", map[string]any{"name": "RouteRich", "kind": "openwrt"})
+	if st != 201 {
+		t.Fatalf("%d %s", st, b)
+	}
+	var made struct {
+		Token  string `json:"token"`
+		Script string `json:"script"`
+		Device struct {
+			ID   string `json:"id"`
+			Kind string `json:"kind"`
+		} `json:"device"`
+	}
+	if err := json.Unmarshal(b, &made); err != nil || made.Device.Kind != "openwrt" {
+		t.Fatalf("%v %s", err, b)
+	}
+	if !strings.Contains(made.Script, "owlery-report.sh") || !strings.Contains(made.Script, `TOKEN="`+made.Token+`"`) || strings.Contains(made.Script, "@TOKEN@") || strings.Contains(made.Script, "@HOST@") {
+		t.Fatalf("the installer: %s", made.Script)
+	}
+	req, _ := http.NewRequest("POST", w.h.ts.URL+NetIngestPath, strings.NewReader("board=RouteRich\nversion=OpenWrt 23.05.3\nuptime=3d04:05:06\ncpu=9\nmem_total=268435456\nmem_free=100000000\nif=eth0,100,200,true\nconn=40\nconn_max=16384\nreset_nat=1\nnat=dstnat,dst-nat,-,-,8080,192.168.1.20,80,web\nreset_clients=1\nclient=192.168.1.20,aa:bb:cc:dd:ee:01,pc\n"))
+	req.Header.Set("Authorization", "Bearer "+made.Token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil || resp.StatusCode != 204 {
+		t.Fatalf("%v %v", err, resp)
+	}
+	_, b = w.owner.get("/api/v1/net-devices")
+	if !strings.Contains(string(b), `"kind":"openwrt"`) || !strings.Contains(string(b), `"packets":-1`) || !strings.Contains(string(b), `"conn":40`) {
+		t.Fatalf("%s", b)
+	}
+}

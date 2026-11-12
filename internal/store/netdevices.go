@@ -62,14 +62,14 @@ func decodeView(raw []byte) NetView {
 	return v
 }
 
-func (s *Store) CreateNetDevice(ctx context.Context, name string, tokenHash []byte) (NetDevice, error) {
+func (s *Store) CreateNetDevice(ctx context.Context, name, kind string, tokenHash []byte) (NetDevice, error) {
 	name = cleanText(name, 60)
 	if name == "" {
 		return NetDevice{}, errors.New("store: empty name")
 	}
 	var d NetDevice
 	var id uuid.UUID
-	err := s.pool.QueryRow(ctx, `INSERT INTO net_devices (name, token_hash) VALUES ($1, $2) RETURNING id, name, kind, created_at`, name, tokenHash).Scan(&id, &d.Name, &d.Kind, &d.CreatedAt)
+	err := s.pool.QueryRow(ctx, `INSERT INTO net_devices (name, kind, token_hash) VALUES ($1, $2, $3) RETURNING id, name, kind, created_at`, name, kind, tokenHash).Scan(&id, &d.Name, &d.Kind, &d.CreatedAt)
 	var pe *pgconn.PgError
 	if errors.As(err, &pe) && pe.Code == "23505" {
 		return NetDevice{}, ErrConflict

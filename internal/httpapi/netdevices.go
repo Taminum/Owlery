@@ -96,6 +96,104 @@ func buildRouterScript(host, token string) string {
 	return strings.NewReplacer("@HOST@", host, "@PATH@", NetIngestPath, "@TOKEN@", token).Replace(routerScript)
 }
 
+// openwrtInstall is what the owner pastes into an SSH session on an OpenWrt router: it writes the reporting script, adds it to cron
+// and runs it once. The script only reads /proc, /sys, uci and the DHCP leases, and posts the same lines a MikroTik does.
+const openwrtInstall = `cat > /usr/bin/owlery-report.sh <<'OWL_EOF'
+#!/bin/sh
+URL="https://@HOST@@PATH@"
+TOKEN="@TOKEN@"
+f=/tmp/owlery-report.$$
+post() {
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsS -m 20 -X POST -H "Authorization: Bearer $TOKEN" --data-binary @"$1" "$URL" >/dev/null
+  else
+    wget -q -O /dev/null --header="Authorization: Bearer $TOKEN" --post-file="$1" "$URL"
+  fi
+}
+cpu_line() { awk '/^cpu /{print $2+$3+$4+$5+$6+$7+$8, $5}' /proc/stat; }
+{
+  echo "board=$(tr -d '\r\n' < /tmp/sysinfo/model 2>/dev/null)"
+  . /etc/openwrt_release 2>/dev/null
+  echo "version=OpenWrt $DISTRIB_RELEASE"
+  up=$(cut -d. -f1 /proc/uptime)
+  printf 'uptime=%dd%02d:%02d:%02d\n' $((up/86400)) $((up%86400/3600)) $((up%3600/60)) $((up%60))
+  set -- $(cpu_line); t1=$1; i1=$2
+  sleep 1
+  set -- $(cpu_line); dt=$(($1-t1)); di=$(($2-i1))
+  if [ "$dt" -gt 0 ]; then echo "cpu=$(( (dt-di)*100/dt ))"; else echo "cpu=0"; fi
+  set -- $(awk '/^MemTotal:/{t=$2} /^MemAvailable:/{a=$2} /^MemFree:/{f=$2} END{if(a=="")a=f; print t, a}' /proc/meminfo)
+  echo "mem_total=$(($1*1024))"
+  echo "mem_free=$(($2*1024))"
+  for z in /sys/class/thermal/thermal_zone*/temp; do
+    if [ -r "$z" ]; then v=$(cat "$z" 2>/dev/null); echo "temp=$((v/1000))"; break; fi
+  done
+  tail -n +3 /proc/net/dev | while read -r l; do
+    n=$(echo "${l%%:*}")
+    set -- ${l#*:}
+    case "$n" in ifb*|gre*|ip6*|sit*|erspan*|teql*|dummy*|bonding*) continue;; esac
+    c=false
+    if [ "$n" = lo ] || [ "$(cat /sys/class/net/$n/carrier 2>/dev/null)" = 1 ]; then c=true; fi
+    echo "if=$n,$1,$9,$c"
+  done
+  cc=$(cat /proc/sys/net/netfilter/nf_conntrack_count 2>/dev/null)
+  if [ -n "$cc" ]; then
+    echo "conn=$cc"
+    echo "conn_max=$(cat /proc/sys/net/netfilter/nf_conntrack_max 2>/dev/null)"
+    if [ "$cc" -le 5000 ] && [ -r /proc/net/nf_conntrack ]; then
+      awk '{for(i=1;i<=NF;i++) if ($i ~ /^src=/) {print substr($i,5); break}}' /proc/net/nf_conntrack | sort | uniq -c | sort -rn | head -8 | while read -r n ip; do echo "top=$ip,$n"; done
+    fi
+  fi
+  echo "reset_nat=1"
+  g() { uci -q get "firewall.@redirect[$i].$1" | tr -d '\r\n,'; }
+  i=0
+  while uci -q get "firewall.@redirect[$i]" >/dev/null 2>&1; do
+    if [ "$(uci -q get "firewall.@redirect[$i].enabled")" != 0 ]; then
+      act=dst-nat
+      [ "$(uci -q get "firewall.@redirect[$i].target")" = SNAT ] && act=src-nat
+      echo "nat=dstnat,$act,-,-,$(g src_dport),$(g dest_ip),$(g dest_port),$(g name)"
+    fi
+    i=$((i+1))
+  done
+  j=0
+  while uci -q get "firewall.@zone[$j]" >/dev/null 2>&1; do
+    if [ "$(uci -q get "firewall.@zone[$j].masq")" = 1 ]; then
+      echo "nat=srcnat,masquerade,-,-,,,,zone $(uci -q get "firewall.@zone[$j].name" | tr -d '\r\n,')"
+    fi
+    j=$((j+1))
+  done
+  echo "reset_clients=1"
+  if [ -r /tmp/dhcp.leases ]; then
+    while read -r exp mac ip host rest; do
+      [ "$host" = "*" ] && host=""
+      echo "client=$ip,$mac,$(echo "$host" | tr -d '\r\n,')"
+    done < /tmp/dhcp.leases
+  fi
+} > "$f"
+post "$f"; rc=$?
+rm -f "$f"
+[ "$rc" = 0 ] || logger -t owlery "report was not sent (curl or wget with https is needed)"
+exit $rc
+OWL_EOF
+chmod +x /usr/bin/owlery-report.sh
+touch /etc/crontabs/root
+grep -v owlery-report /etc/crontabs/root > /tmp/owlery-cron
+echo '* * * * * /usr/bin/owlery-report.sh' >> /tmp/owlery-cron
+cp /tmp/owlery-cron /etc/crontabs/root && rm -f /tmp/owlery-cron
+/etc/init.d/cron enable; /etc/init.d/cron restart
+/usr/bin/owlery-report.sh && echo "owlery: sent" || echo "owlery: FAILED"
+`
+
+// deviceKinds are the kinds of network device that can be added.
+var deviceKinds = map[string]bool{"mikrotik": true, "openwrt": true}
+
+// buildDeviceScript is what the page shows the owner once, with the token worked in.
+func buildDeviceScript(kind, host, token string) string {
+	if kind == "openwrt" {
+		return strings.NewReplacer("@HOST@", host, "@PATH@", NetIngestPath, "@TOKEN@", token).Replace(openwrtInstall)
+	}
+	return buildRouterScript(host, token)
+}
+
 // netIngest takes one piece of a device's report. The token is "<device id>.<secret>"; whatever is wrong with it, the answer is the same.
 func (s *Server) netIngest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -160,6 +258,7 @@ func (s *Server) createNetDevice(w http.ResponseWriter, r *http.Request, a auth.
 	}
 	var in struct {
 		Name string `json:"name"`
+		Kind string `json:"kind"`
 	}
 	if !s.decode(w, r, &in) {
 		return
@@ -168,12 +267,19 @@ func (s *Server) createNetDevice(w http.ResponseWriter, r *http.Request, a auth.
 		s.writeErr(w, r, http.StatusUnprocessableEntity, "invalid_name", "a name of up to 60 characters is required")
 		return
 	}
+	if in.Kind == "" {
+		in.Kind = "mikrotik"
+	}
+	if !deviceKinds[in.Kind] {
+		s.writeErr(w, r, http.StatusUnprocessableEntity, "invalid_kind", "unknown kind of device")
+		return
+	}
 	secret, err := auth.NewToken()
 	if err != nil {
 		s.writeErr(w, r, http.StatusInternalServerError, "internal", "internal error")
 		return
 	}
-	d, err := s.Store.CreateNetDevice(r.Context(), in.Name, store.HashAgentSecret(secret))
+	d, err := s.Store.CreateNetDevice(r.Context(), in.Name, in.Kind, store.HashAgentSecret(secret))
 	switch {
 	case errors.Is(err, store.ErrConflict):
 		s.writeErr(w, r, http.StatusConflict, "name_taken", "a device with this name already exists")
@@ -182,10 +288,10 @@ func (s *Server) createNetDevice(w http.ResponseWriter, r *http.Request, a auth.
 		s.writeErr(w, r, http.StatusInternalServerError, "internal", "internal error")
 		return
 	}
-	s.audit(r, a, "", "netdevice.create", "netdevice", d.ID, map[string]any{"name": d.Name})
+	s.audit(r, a, "", "netdevice.create", "netdevice", d.ID, map[string]any{"name": d.Name, "kind": d.Kind})
 	token := d.ID + "." + secret
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusCreated, map[string]any{"device": d, "token": token, "script": buildRouterScript(r.Host, token)})
+	writeJSON(w, http.StatusCreated, map[string]any{"device": d, "token": token, "script": buildDeviceScript(d.Kind, r.Host, token)})
 }
 
 func (s *Server) renameNetDevice(w http.ResponseWriter, r *http.Request, a auth.Actor, _ store.Session) {

@@ -130,6 +130,14 @@ func clean(s string, n int) string {
 	return s
 }
 
+// hits reads a rule counter; "-" means the device cannot count (OpenWrt) and is kept as -1.
+func hits(s string) (int64, bool) {
+	if strings.TrimSpace(s) == "-" {
+		return -1, true
+	}
+	return num(s, 1<<62)
+}
+
 func num(s string, max int64) (int64, bool) {
 	v, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64)
 	return v, err == nil && v >= 0 && v <= max
@@ -197,8 +205,8 @@ func Parse(body string) (Report, error) {
 			if len(f) < 4 || len(r.Nat) >= MaxNat {
 				continue
 			}
-			pk, ok1 := num(f[2], 1<<62)
-			by, ok2 := num(f[3], 1<<62)
+			pk, ok1 := hits(f[2])
+			by, ok2 := hits(f[3])
 			chain := clean(f[0], 20)
 			if chain == "" || !ok1 || !ok2 {
 				continue
