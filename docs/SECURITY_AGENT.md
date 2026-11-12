@@ -275,3 +275,15 @@ install dialog). Without it the agent never offers the capability and ignores th
 - **Making a release.** The release workflow signs `SHA256SUMS` and refuses to publish without the secret. The key was made
   with `go run ./cmd/owlsign keygen -out <file>`; keep a copy of the private key in a password manager, because without it
   every agent would need one more update by hand.
+
+## Docker: logs and restart from the panel (optional)
+
+The agent has no access to Docker. A machine that wants the **Логи** and **Перезапустить** buttons on its Docker tab runs a
+second narrow helper, `deploy/secagent/remnascope-secagent-docker.service` (`secagent docker-helper`), and starts the agent with
+`-docker-socket /run/remnascope-sec/docker.sock`. The helper offers two operations only: the last lines of one container's log
+and a restart of one container. The name is matched against a fixed pattern and against the containers that exist, nothing
+reaches a shell, and `-no-restart a,b` lists containers that may be read but never restarted.
+
+Know what this is: the helper's user is in the `docker` group, which is as strong as root on that machine. Install it only where
+that is accepted. Every log reading and every restart is written to the audit log with the person, the machine and the
+container; the restart is recorded before it is asked for. Only an administrator of the machine sees the buttons.

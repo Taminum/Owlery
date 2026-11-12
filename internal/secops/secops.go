@@ -25,6 +25,7 @@ type Hub struct {
 	updates map[string]*updateWait
 	shells  map[string]*shellWait
 	wols    map[string]*wolWait
+	dockers map[string]*dockerWait
 }
 
 type probeWait struct {
@@ -38,7 +39,7 @@ type link struct {
 }
 
 func New() *Hub {
-	return &Hub{conns: map[string]*link{}, probes: map[string]*probeWait{}, admins: map[string]*adminWait{}, updates: map[string]*updateWait{}, wols: map[string]*wolWait{}}
+	return &Hub{conns: map[string]*link{}, probes: map[string]*probeWait{}, admins: map[string]*adminWait{}, updates: map[string]*updateWait{}, wols: map[string]*wolWait{}, dockers: map[string]*dockerWait{}}
 }
 
 // Register makes an agent's connection available. The returned function removes it, and only it: a newer
@@ -331,6 +332,52 @@ func (h *Hub) Wol(ctx context.Context, agentID string, req secproto.WolReq) (sec
 func (h *Hub) DeliverWol(agentID string, r secproto.WolResult) bool {
 	h.mu.Lock()
 	w := h.wols[r.ID]
+	h.mu.Unlock()
+	if w == nil || w.agent != agentID {
+		return false
+	}
+	select {
+	case w.ch <- r:
+		return true
+	default:
+		return false
+	}
+}
+
+type dockerWait struct {
+	agent string
+	ch    chan secproto.DockerResult
+}
+
+// Docker sends one log or restart request to an agent and waits for its answer (or ctx). The ID is set here. Only the agent
+// the request was sent to can answer it.
+func (h *Hub) Docker(ctx context.Context, agentID string, req secproto.DockerReq) (secproto.DockerResult, error) {
+	req.Type, req.ID = "docker_req", uuid.NewString()
+	w := &dockerWait{agent: agentID, ch: make(chan secproto.DockerResult, 1)}
+	h.mu.Lock()
+	h.dockers[req.ID] = w
+	h.mu.Unlock()
+	defer func() {
+		h.mu.Lock()
+		delete(h.dockers, req.ID)
+		h.mu.Unlock()
+	}()
+	if err := h.Send(ctx, agentID, req); err != nil {
+		return secproto.DockerResult{}, err
+	}
+	select {
+	case r := <-w.ch:
+		return r, nil
+	case <-ctx.Done():
+		return secproto.DockerResult{}, ErrNoAnswer
+	}
+}
+
+// DeliverDocker hands an agent's answer to whoever is waiting for it; one nobody asked for, or from a different agent than the
+// one asked, is dropped.
+func (h *Hub) DeliverDocker(agentID string, r secproto.DockerResult) bool {
+	h.mu.Lock()
+	w := h.dockers[r.ID]
 	h.mu.Unlock()
 	if w == nil || w.agent != agentID {
 		return false

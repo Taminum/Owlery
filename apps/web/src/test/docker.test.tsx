@@ -39,3 +39,32 @@ describe('Docker машины', () => {
     expect(screen.getByText(/ещё не рассказал о контейнерах/)).toBeInTheDocument()
   })
 })
+
+describe('Docker: логи и перезапуск', () => {
+  it('offers the buttons only where the machine allows them', () => {
+    const { rerender } = render(<DockerView info={{ containers: list }} serverId="s1" />)
+    expect(screen.queryByRole('button', { name: 'Логи: nginx' })).toBeNull()
+    rerender(<DockerView info={{ containers: list }} serverId="s1" canCtl />)
+    expect(screen.getByRole('button', { name: 'Логи: nginx' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Перезапустить: nginx' })).toBeInTheDocument()
+  })
+
+  it('asks before a restart and shows the log in a window', async () => {
+    const calls: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push(`${init?.method ?? 'GET'} ${url}`)
+      const body = url.includes('/logs') ? { log: 'boom line', truncated: false } : { ok: true, running: true }
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }))
+    render(<DockerView info={{ containers: list }} serverId="s1" canCtl />)
+    fireEvent.click(screen.getByRole('button', { name: 'Логи: nginx' }))
+    expect(await screen.findByText('boom line')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Закрыть' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Перезапустить: nginx' }))
+    expect(calls.some((c) => c.includes('/restart'))).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Перезапустить' }))
+    expect(await screen.findByText(/nginx перезапущен и работает/)).toBeInTheDocument()
+    expect(calls).toContain('POST /api/v1/servers/s1/docker/nginx/restart')
+    vi.unstubAllGlobals()
+  })
+})

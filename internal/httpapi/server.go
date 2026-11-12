@@ -266,6 +266,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("PUT /api/v1/servers/{id}/alert-rules", s.session(s.putAlertRules))
 	mux.Handle("GET /api/v1/servers/{id}/wol", s.session(s.getWol))
 	mux.Handle("PUT /api/v1/servers/{id}/wol", s.session(s.putWol))
+	mux.Handle("GET /api/v1/servers/{id}/docker/{name}/logs", s.session(s.getDockerLogs))
+	mux.Handle("POST /api/v1/servers/{id}/docker/{name}/restart", s.session(s.restartDockerContainer))
 	mux.Handle("POST /api/v1/servers/{id}/wake", s.session(s.wakeMachine))
 	mux.Handle("GET /api/v1/servers/{id}/maintenance", s.session(s.getMaintenance))
 	mux.Handle("PUT /api/v1/servers/{id}/maintenance", s.session(s.putMaintenance))

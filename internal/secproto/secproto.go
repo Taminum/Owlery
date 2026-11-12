@@ -531,6 +531,43 @@ type WolResult struct {
 	Sent  int      `json:"sent,omitempty"` // for send: how many broadcasts went out
 }
 
+// --- Docker logs and restart -------------------------------------------------------------------------------
+//
+// The agent itself has no access to Docker. A machine that wants logs and restarts in the panel runs a narrow helper
+// (see internal/dockerhelper) and starts the agent with -docker-socket; only then does the agent announce CapDockerCtl.
+// A request is delivered over the live connection or not at all, and names a container, never a command.
+
+const CapDockerCtl = "docker_ctl"
+
+const (
+	DockerLogs    = "logs"
+	DockerRestart = "restart"
+)
+
+const (
+	MaxDockerTail = 1000 // the most log lines one request may ask for
+	MaxDockerLog  = 256 << 10
+)
+
+type DockerReq struct {
+	Type      string `json:"type"` // "docker_req"
+	ID        string `json:"id"`
+	Op        string `json:"op"`   // logs | restart
+	Name      string `json:"name"` // the container's name
+	Tail      int    `json:"tail,omitempty"`
+	Container string `json:"container,omitempty"` // the container's ID, for the audit record only
+}
+
+type DockerResult struct {
+	Type      string `json:"type"` // "docker_result"
+	ID        string `json:"id"`
+	OK        bool   `json:"ok"`
+	Code      string `json:"code,omitempty"`
+	Log       string `json:"log,omitempty"`       // for logs
+	Truncated bool   `json:"truncated,omitempty"` // for logs: the beginning was cut to fit
+	Running   bool   `json:"running,omitempty"`   // for restart: it was running again when checked
+}
+
 // --- Windows security (the "winsec" category) --------------------------------------------------------
 //
 // What the Windows event log says about sign-ins from other machines, and what Windows Defender says about itself and

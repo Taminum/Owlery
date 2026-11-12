@@ -195,7 +195,7 @@ export default function ServerCard() {
         </div>
       )}
       {tab === 'resources' && (s.host?.has_data ? <HostDetail host={s.host} /> : <p className="text-[13px] text-muted">{t('srv.noData')}</p>)}
-      {tab === 'docker' && <DockerView info={s.docker} />}
+      {tab === 'docker' && <DockerView info={s.docker} serverId={s.id} canCtl={!!s.docker_ctl} />}
       {tab === 'security' && (
         <div className="space-y-4">
           <AgentBlock vpsId={s.id} canEdit={s.can_edit} hostOS={s.os || s.host?.os} />

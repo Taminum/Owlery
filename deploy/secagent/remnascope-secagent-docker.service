@@ -1,0 +1,52 @@
+# Owlery Docker helper. The only process that touches Docker's socket on behalf of the security agent. It offers two
+# operations over a Unix socket (the last lines of one container's log, a restart of one container), checks the name
+# against a fixed pattern and against the containers that exist, and runs the docker client with a fixed argument list
+# and no shell. Access to Docker's socket is as strong as root: install this only on a machine where that is accepted,
+# and start the agent with -docker-socket /run/remnascope-sec/docker.sock to use it.
+#
+# Setup (once):
+#   useradd --system --no-create-home --shell /usr/sbin/nologin remnascope-docker
+#   usermod -aG docker remnascope-docker
+#   cp remnascope-secagent-docker.service /etc/systemd/system/ && systemctl daemon-reload
+#   systemctl enable --now remnascope-secagent-docker
+# Add -no-restart name1,name2 to ExecStart for containers that may be read but never restarted from the panel.
+[Unit]
+Description=Owlery Docker helper
+After=docker.service
+Wants=docker.service
+Before=remnascope-secagent.service
+
+[Service]
+# Its own user, in the docker group. The primary group is the agent's, so the socket it creates is reachable by the agent
+# and by nobody else.
+User=remnascope-docker
+Group=remnascope-sec
+SupplementaryGroups=docker
+RuntimeDirectory=remnascope-sec
+RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
+Environment=HOME=/nonexistent DOCKER_CONFIG=/nonexistent
+ExecStart=/usr/local/bin/remnascope-secagent docker-helper -socket /run/remnascope-sec/docker.sock
+Restart=always
+RestartSec=3
+
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+UMask=0007
+MemoryMax=128M
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target
