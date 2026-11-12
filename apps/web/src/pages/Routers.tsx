@@ -12,10 +12,12 @@ import { PageHead } from '../components/Analyzer'
 import { durationText } from '../components/ServerParts'
 
 interface Iface { name: string; rx: number; tx: number; up: boolean; rx_bps: number; tx_bps: number }
+interface TopSrc { ip: string; n: number }
+interface NatRule { chain: string; action: string; packets: number; bytes: number; dst_port?: string; to_addr?: string; to_ports?: string; comment?: string }
 interface Client { ip: string; mac: string; host?: string }
 interface Device {
   id: string; name: string; online: boolean; last_seen: string | null
-  view: { board: string; version: string; uptime: number; cpu: number; mem_free: number; mem_total: number; temp?: number; stats_at?: string; ifaces: Iface[]; clients: Client[] }
+  view: { board: string; version: string; uptime: number; cpu: number; mem_free: number; mem_total: number; temp?: number; stats_at?: string; ifaces: Iface[]; clients: Client[]; conn?: number; conn_max?: number; top?: TopSrc[]; nat?: NatRule[] }
 }
 
 function Tile({ label, value, sub }: { label: string; value: string; sub?: string }) {
@@ -71,6 +73,7 @@ function DeviceCard({ d, tz, onRename, onRemove }: { d: Device; tz: string; onRe
   const downCount = v.ifaces.length - upPorts.length
   // Ports without a cable fold away; if nothing is plugged in, show them all rather than an empty table.
   const ports = showDown || upPorts.length === 0 ? v.ifaces : upPorts
+  const names = new Map(v.clients.filter((c) => c.host).map((c) => [c.ip, c.host as string]))
   const sub = [v.board, v.version && `RouterOS ${v.version}`].filter(Boolean).join(', ')
   return (
     <Card title={d.name} note={sub} right={<div className="flex gap-2"><GhostButton size="s" onClick={onRename}>{t('rt.rename')}</GhostButton><GhostButton size="s" onClick={onRemove}>{t('rt.remove')}</GhostButton></div>}>
@@ -86,6 +89,7 @@ function DeviceCard({ d, tz, onRename, onRemove }: { d: Device; tz: string; onRe
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
             <Tile label={t('rt.cpu')} value={`${Math.round(v.cpu)}%`} />
             <Tile label={t('rt.mem')} value={memPct === null ? '—' : `${memPct}%`} sub={v.mem_total > 0 ? t('rt.memOf', { free: formatBytes(v.mem_free), total: formatBytes(v.mem_total) }) : undefined} />
+            {v.conn !== undefined && <Tile label={t('rt.conn')} value={String(v.conn)} sub={v.conn_max ? t('rt.connOf', { max: v.conn_max }) : undefined} />}
             {v.temp !== undefined && <Tile label={t('rt.temp')} value={`${Math.round(v.temp)} °C`} />}
           </div>
         )}
@@ -104,6 +108,28 @@ function DeviceCard({ d, tz, onRename, onRemove }: { d: Device; tz: string; onRe
                 {showDown ? t('rt.hideDown') : t('rt.showDown', { n: downCount })}
               </button>
             )}
+          </div>
+        )}
+        {(v.top?.length ?? 0) > 0 && (
+          <div>
+            <h3 className="mb-1.5 text-[13px] font-medium">{t('rt.top')}</h3>
+            <DataTable caption={t('rt.top')} rows={v.top ?? []} rowKey={(x) => x.ip} pageSize={10} columns={[
+              { key: 'ip', title: t('rt.col.ip'), className: 'tnum', sort: (x) => x.ip, cell: (x) => <span>{x.ip}{names.get(x.ip) ? <span className="ml-2 text-muted">{names.get(x.ip)}</span> : null}</span> },
+              { key: 'n', title: t('rt.col.conns'), align: 'right', className: 'tnum', sort: (x) => x.n, descFirst: true, cell: (x) => x.n },
+            ]} />
+            <p className="mt-1.5 text-xs text-muted">{t('rt.topNote')}</p>
+          </div>
+        )}
+        {(v.nat?.length ?? 0) > 0 && (
+          <div>
+            <h3 className="mb-1.5 text-[13px] font-medium">{t('rt.nat')}</h3>
+            <DataTable caption={t('rt.nat')} rows={v.nat ?? []} rowKey={(x) => `${x.chain}|${x.action}|${x.dst_port ?? ''}|${x.to_addr ?? ''}|${x.comment ?? ''}`} pageSize={12} columns={[
+              { key: 'rule', title: t('rt.col.rule'), cell: (x) => <span className="font-medium">{x.chain} · {x.action}</span> },
+              { key: 'to', title: t('rt.col.to'), className: 'tnum', cell: (x) => (x.dst_port || x.to_addr || x.to_ports ? `${x.dst_port ? `:${x.dst_port} → ` : ''}${x.to_addr ?? ''}${x.to_ports ? `:${x.to_ports}` : ''}` : '—') },
+              { key: 'pk', title: t('rt.col.hits'), align: 'right', className: 'tnum', sort: (x) => x.packets, descFirst: true, cell: (x) => x.packets },
+              { key: 'by', title: t('rt.col.bytes'), align: 'right', className: 'tnum', sort: (x) => x.bytes, descFirst: true, cell: (x) => formatBytes(x.bytes) },
+              { key: 'cm', title: t('rt.col.note'), cell: (x) => x.comment || '—' },
+            ]} />
           </div>
         )}
         <div>

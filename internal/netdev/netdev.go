@@ -15,6 +15,8 @@ const (
 	MaxBody    = 64 << 10
 	MaxIfaces  = 48
 	MaxClients = 512
+	MaxTop     = 10
+	MaxNat     = 40
 )
 
 type Iface struct {
@@ -32,6 +34,24 @@ type Client struct {
 	Host string `json:"host,omitempty"`
 }
 
+// TopSource is a client address and how many tracked connections it holds.
+type TopSource struct {
+	IP string `json:"ip"`
+	N  int64  `json:"n"`
+}
+
+// NatRule is a source or destination NAT rule with its hit counters.
+type NatRule struct {
+	Chain   string `json:"chain"`
+	Action  string `json:"action"`
+	Packets int64  `json:"packets"`
+	Bytes   int64  `json:"bytes"`
+	DstPort string `json:"dst_port,omitempty"`
+	ToAddr  string `json:"to_addr,omitempty"`
+	ToPorts string `json:"to_ports,omitempty"`
+	Comment string `json:"comment,omitempty"`
+}
+
 // Report is one piece or the whole of what a device said. A piece without "cpu" carries no statistics (only clients, perhaps).
 type Report struct {
 	HasStats     bool
@@ -45,6 +65,12 @@ type Report struct {
 	Ifaces       []Iface
 	Clients      []Client
 	ResetClients bool // the first piece of a client list: forget the old list
+	HasConn      bool // the piece carries the connection count (and perhaps the top sources)
+	Conn         int64
+	ConnMax      int64
+	Top          []TopSource
+	ResetNat     bool // the first piece of the NAT rules: forget the old ones
+	Nat          []NatRule
 }
 
 var uptimeRe = regexp.MustCompile(`^(?:(\d+)w)?(?:(\d+)d)?(\d+):(\d+):(\d+)$`)
@@ -115,6 +141,53 @@ func Parse(body string) (Report, error) {
 			if f, err := strconv.ParseFloat(strings.TrimSpace(v), 64); err == nil && f > -60 && f < 200 {
 				r.Temp, used = &f, used+1
 			}
+		case "conn":
+			if c, ok := num(v, 1<<40); ok {
+				r.Conn, r.HasConn, used = c, true, used+1
+			}
+		case "conn_max":
+			if c, ok := num(v, 1<<40); ok {
+				r.ConnMax, used = c, used+1
+			}
+		case "top":
+			f := strings.Split(v, ",")
+			if len(f) < 2 || len(r.Top) >= MaxTop {
+				continue
+			}
+			ip := net.ParseIP(strings.TrimSpace(f[0]))
+			n, ok := num(f[1], 1<<40)
+			if ip == nil || !ok {
+				continue
+			}
+			r.Top, used = append(r.Top, TopSource{IP: ip.String(), N: n}), used+1
+		case "reset_nat":
+			r.ResetNat, used = true, used+1
+		case "nat":
+			// chain,action,packets,bytes,dst-port,to-addresses,to-ports,comment (the comment may hold commas)
+			f := strings.SplitN(v, ",", 8)
+			if len(f) < 4 || len(r.Nat) >= MaxNat {
+				continue
+			}
+			pk, ok1 := num(f[2], 1<<62)
+			by, ok2 := num(f[3], 1<<62)
+			chain := clean(f[0], 20)
+			if chain == "" || !ok1 || !ok2 {
+				continue
+			}
+			n := NatRule{Chain: chain, Action: clean(f[1], 30), Packets: pk, Bytes: by}
+			if len(f) > 4 {
+				n.DstPort = clean(f[4], 40)
+			}
+			if len(f) > 5 {
+				n.ToAddr = clean(f[5], 60)
+			}
+			if len(f) > 6 {
+				n.ToPorts = clean(f[6], 40)
+			}
+			if len(f) > 7 {
+				n.Comment = clean(f[7], 80)
+			}
+			r.Nat, used = append(r.Nat, n), used+1
 		case "reset_clients":
 			r.ResetClients, used = true, used+1
 		case "if":

@@ -33,6 +33,49 @@ const routerScript = `:local url "https://@HOST@@PATH@"
 :if ([:len $t] > 0) do={ :set b ($b . "temp=" . $t . $nl) }
 :foreach i in=[/interface find] do={ :set b ($b . "if=" . [/interface get $i name] . "," . [/interface get $i rx-byte] . "," . [/interface get $i tx-byte] . "," . [/interface get $i running] . $nl) }
 /tool fetch url=$url http-method=post http-header-field=$hdr http-data=$b keep-result=no
+:do {
+  :local cnt [:len [/ip firewall connection find]]
+  :set b ("conn=" . $cnt . $nl)
+  :do { :set b ($b . "conn_max=" . [/ip firewall connection tracking get max-entries] . $nl) } on-error={}
+  :if ($cnt <= 5000) do={
+    :local src [:toarray ""]
+    :foreach c in=[/ip firewall connection find] do={
+      :local a [/ip firewall connection get $c src-address]
+      :local p [:find $a ":"]
+      :local ip $a
+      :if ([:typeof $p] = "num") do={ :set ip [:pick $a 0 $p] }
+      :local cur ($src->$ip)
+      :if ([:typeof $cur] != "num") do={ :set cur 0 }
+      :set ($src->$ip) ($cur + 1)
+    }
+    :for r from=1 to=8 do={
+      :local bk ""
+      :local bv 0
+      :foreach kk,vv in=$src do={ :if ($vv > $bv) do={ :set bk $kk; :set bv $vv } }
+      :if ($bv > 0) do={ :set b ($b . "top=" . $bk . "," . $bv . $nl); :set ($src->$bk) 0 }
+    }
+  }
+  /tool fetch url=$url http-method=post http-header-field=$hdr http-data=$b keep-result=no
+} on-error={}
+:do {
+  :set b ("reset_nat=1" . $nl)
+  :local k 0
+  :foreach r in=[/ip firewall nat find where disabled=no] do={
+    :if ($k < 20) do={
+      :local dp ""
+      :local ta ""
+      :local tp ""
+      :local cm ""
+      :do { :set dp [/ip firewall nat get $r dst-port] } on-error={}
+      :do { :set ta [/ip firewall nat get $r to-addresses] } on-error={}
+      :do { :set tp [/ip firewall nat get $r to-ports] } on-error={}
+      :do { :set cm [/ip firewall nat get $r comment] } on-error={}
+      :set b ($b . "nat=" . [/ip firewall nat get $r chain] . "," . [/ip firewall nat get $r action] . "," . [/ip firewall nat get $r packets] . "," . [/ip firewall nat get $r bytes] . "," . $dp . "," . $ta . "," . $tp . "," . $cm . $nl)
+    }
+    :set k ($k + 1)
+  }
+  /tool fetch url=$url http-method=post http-header-field=$hdr http-data=$b keep-result=no
+} on-error={}
 :set b ("reset_clients=1" . $nl)
 :local n 0
 :foreach l in=[/ip dhcp-server lease find where status=bound] do={

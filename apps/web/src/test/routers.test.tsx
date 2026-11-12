@@ -61,6 +61,18 @@ describe('Роутеры', () => {
     expect(screen.getByText(/Клиентов нет/)).toBeInTheDocument()
   })
 
+  it('shows connections and NAT rules', async () => {
+    const base = device()
+    const view = { ...base.view, conn: 812, conn_max: 16384, top: [{ ip: '192.168.88.20', n: 300 }], nat: [{ chain: 'dstnat', action: 'dst-nat', packets: 5, bytes: 300, dst_port: '8080', to_addr: '192.168.88.20', to_ports: '80', comment: 'web' }] }
+    mockApi({ me: owner, handler: (r) => (r.path === '/api/v1/net-devices' ? { status: 200, body: { devices: [device({ view })] } } : undefined) })
+    renderPage()
+    expect(await screen.findByText('812')).toBeInTheDocument()
+    expect(screen.getByText('из 16384 возможных')).toBeInTheDocument()
+    expect(screen.getByText('300')).toBeInTheDocument()
+    expect(screen.getByText('dstnat · dst-nat')).toBeInTheDocument()
+    expect(screen.getByText(':8080 → 192.168.88.20:80')).toBeInTheDocument()
+  })
+
   it('folds ports without a cable away until asked', async () => {
     const base = device()
     const ifaces = [...base.view.ifaces, { name: 'ether5', rx: 0, tx: 0, up: false, rx_bps: 0, tx_bps: 0 }]
