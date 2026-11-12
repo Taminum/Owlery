@@ -61,6 +61,23 @@ describe('Роутеры', () => {
     expect(screen.getByText(/Клиентов нет/)).toBeInTheDocument()
   })
 
+  it('renames a router', async () => {
+    let sent = ''
+    mockApi({
+      me: owner,
+      handler: (r) => {
+        if (r.path === '/api/v1/net-devices/d1' && r.method === 'PATCH') { sent = JSON.stringify(r.body); return { status: 204, body: null } }
+        if (r.path === '/api/v1/net-devices') return { status: 200, body: { devices: [device({ name: 'Дои' })] } }
+        return undefined
+      },
+    })
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Переименовать' }))
+    fireEvent.change(screen.getByLabelText('Название'), { target: { value: 'Дом' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }))
+    await vi.waitFor(() => expect(sent).toBe('{"name":"Дом"}'))
+  })
+
   it('creates a router and shows the script with its token once', async () => {
     const made = { token: 'd9.secretsecretsecretsecret', script: ':local hdr "Authorization: Bearer d9.secretsecretsecretsecret"', device: { name: 'Новый' } }
     mockApi({

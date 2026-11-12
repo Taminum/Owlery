@@ -143,6 +143,36 @@ func (s *Server) createNetDevice(w http.ResponseWriter, r *http.Request, a auth.
 	writeJSON(w, http.StatusCreated, map[string]any{"device": d, "token": token, "script": buildRouterScript(r.Host, token)})
 }
 
+func (s *Server) renameNetDevice(w http.ResponseWriter, r *http.Request, a auth.Actor, _ store.Session) {
+	if !s.ownerOnly(w, r, a) {
+		return
+	}
+	var in struct {
+		Name string `json:"name"`
+	}
+	if !s.decode(w, r, &in) {
+		return
+	}
+	if strings.TrimSpace(in.Name) == "" || len(in.Name) > 60 {
+		s.writeErr(w, r, http.StatusUnprocessableEntity, "invalid_name", "a name of up to 60 characters is required")
+		return
+	}
+	err := s.Store.RenameNetDevice(r.Context(), r.PathValue("id"), in.Name)
+	switch {
+	case errors.Is(err, store.ErrConflict):
+		s.writeErr(w, r, http.StatusConflict, "name_taken", "a device with this name already exists")
+		return
+	case errors.Is(err, store.ErrNotFound):
+		s.writeErr(w, r, http.StatusNotFound, "not_found", "no such device")
+		return
+	case err != nil:
+		s.writeErr(w, r, http.StatusInternalServerError, "internal", "internal error")
+		return
+	}
+	s.audit(r, a, "", "netdevice.rename", "netdevice", r.PathValue("id"), map[string]any{"name": strings.TrimSpace(in.Name)})
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *Server) deleteNetDevice(w http.ResponseWriter, r *http.Request, a auth.Actor, _ store.Session) {
 	if !s.ownerOnly(w, r, a) {
 		return
