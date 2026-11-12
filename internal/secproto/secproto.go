@@ -279,6 +279,11 @@ type Host struct {
 	CPUModel string `json:"cpu_model,omitempty"`
 	CPUs     int    `json:"cpus,omitempty"`
 	MemTotal int64  `json:"mem_total,omitempty"`
+	// What the system itself says about its updates (Debian and Ubuntu): a restart is waiting for, and how many updates are
+	// waiting to be installed, of them how many are for security. Read from two files, nothing is run.
+	RebootRequired  bool `json:"reboot,omitempty"`
+	UpdatesPending  int  `json:"upd,omitempty"`
+	UpdatesSecurity int  `json:"upd_sec,omitempty"`
 	// What it does now. CPUPct is -1 until the agent has two readings to compare.
 	CPUPct    float64 `json:"cpu"`
 	Load1     float64 `json:"l1"`

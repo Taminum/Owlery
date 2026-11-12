@@ -95,7 +95,11 @@ func (s *Store) SaveHost(ctx context.Context, vpsID string, h secproto.Host, now
 		Units     []secproto.HostUnit `json:"units"`
 		Estab     int                 `json:"estab"`
 		SynRecv   int                 `json:"syn"`
-	}{now, h.CPUPct, h.Load1, h.Load5, h.Load15, h.MemUsed, h.SwapUsed, h.UptimeSec, nz(h.NetRX), nz(h.NetTX), h.Disks, procs, units, h.Estab, h.SynRecv})
+		Reboot    bool                `json:"reboot,omitempty"`
+		Upd       int                 `json:"upd,omitempty"`
+		UpdSec    int                 `json:"upd_sec,omitempty"`
+	}{now, h.CPUPct, h.Load1, h.Load5, h.Load15, h.MemUsed, h.SwapUsed, h.UptimeSec, nz(h.NetRX), nz(h.NetTX), h.Disks, procs, units, h.Estab, h.SynRecv,
+		h.RebootRequired, max(0, min(h.UpdatesPending, 100000)), max(0, min(h.UpdatesSecurity, 100000))})
 	if err != nil {
 		return err
 	}
@@ -162,11 +166,15 @@ type HostRow struct {
 	Units     []secproto.HostUnit `json:"units"`
 	Estab     int                 `json:"estab"`
 	SynRecv   int                 `json:"syn_recv"`
-	RXBps     float64             `json:"rx_bps"`
-	TXBps     float64             `json:"tx_bps"`
-	RXPps     float64             `json:"rx_pps"`
-	CPUSpark  []*float64          `json:"cpu_spark"` // the last hour, a point a minute
-	MemSpark  []float64           `json:"mem_spark"` // percent
+	// What the system says about its updates; a restart is waiting, how many updates wait and how many of them are security ones.
+	RebootRequired  bool       `json:"reboot_required"`
+	UpdatesPending  int        `json:"updates_pending"`
+	UpdatesSecurity int        `json:"updates_security"`
+	RXBps           float64    `json:"rx_bps"`
+	TXBps           float64    `json:"tx_bps"`
+	RXPps           float64    `json:"rx_pps"`
+	CPUSpark        []*float64 `json:"cpu_spark"` // the last hour, a point a minute
+	MemSpark        []float64  `json:"mem_spark"` // percent
 }
 
 // Hosts lists the servers the scope can see with their latest reading. A server whose agent has never reported
@@ -212,6 +220,9 @@ func (s *Store) Hosts(ctx context.Context, sc Scope, now time.Time) ([]HostRow, 
 				Units    []secproto.HostUnit `json:"units"`
 				Estab    int                 `json:"estab"`
 				Syn      int                 `json:"syn"`
+				Reboot   bool                `json:"reboot"`
+				Upd      int                 `json:"upd"`
+				UpdSec   int                 `json:"upd_sec"`
 			}
 			if json.Unmarshal(last, &l) == nil {
 				if l.CPU >= 0 {
@@ -229,6 +240,7 @@ func (s *Store) Hosts(ctx context.Context, sc Scope, now time.Time) ([]HostRow, 
 					h.Units = l.Units
 				}
 				h.Estab, h.SynRecv = l.Estab, l.Syn
+				h.RebootRequired, h.UpdatesPending, h.UpdatesSecurity = l.Reboot, l.Upd, l.UpdSec
 			}
 		}
 		out = append(out, h)
