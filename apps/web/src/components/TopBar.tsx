@@ -23,7 +23,7 @@ interface Props {
 // What a page reads decides what its bar holds. Pages that read none of the filters (panel, nodes, period, refresh) get
 // a bar without them; pages whose content depends on the panel but not on a period get the panel alone, so a period
 // that changes nothing is not offered (AmneziaWG has its own, of another kind).
-const NO_FILTERS = ['/servers', '/hosts', '/security', '/billing', '/intel', '/start', '/channels', '/panels', '/settings']
+const NO_FILTERS = ['/servers', '/hosts', '/security', '/billing', '/intel', '/start', '/channels', '/routers', '/panels', '/settings']
 const PANEL_ONLY = ['/alerts', '/awg']
 const under = (list: string[], pathname: string) => list.some((p) => pathname === p || pathname.startsWith(p + '/'))
 export function filterMode(pathname: string): 'full' | 'panel' | 'none' {

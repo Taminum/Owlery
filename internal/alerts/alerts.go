@@ -19,7 +19,7 @@ const (
 	PanelFailures = 3
 )
 
-var Kinds = []string{store.AlertAgentSilent, store.AlertPanelSync, store.AlertProbeDown, store.AlertSecAgent, store.AlertSecTLS, store.AlertSecPort, store.AlertDNSFailed, store.AlertDNSChange, store.AlertUserExpiry, store.AlertUserTraffic, store.AlertBillDue, store.AlertAWGDown, store.AlertAWGToolsOld, store.AlertHostDisk, store.AlertHostDiskForecast, store.AlertHostCPU, store.AlertHostMem, store.AlertHostFlood, store.AlertHostContainer, store.AlertHostContainerDown, store.AlertPanelBackup}
+var Kinds = []string{store.AlertAgentSilent, store.AlertPanelSync, store.AlertProbeDown, store.AlertSecAgent, store.AlertSecTLS, store.AlertSecPort, store.AlertDNSFailed, store.AlertDNSChange, store.AlertUserExpiry, store.AlertUserTraffic, store.AlertBillDue, store.AlertAWGDown, store.AlertAWGToolsOld, store.AlertHostDisk, store.AlertHostDiskForecast, store.AlertHostCPU, store.AlertHostMem, store.AlertHostFlood, store.AlertHostContainer, store.AlertHostContainerDown, store.AlertPanelBackup, store.AlertNetDown}
 
 // ProbeFailures is how many probes in a row must fail before a channel counts as down: one lost
 // packet is not an outage.
@@ -148,6 +148,11 @@ func Evaluate(ctx context.Context, st *store.Store, now time.Time) (opened, clos
 		return 0, 0, err
 	}
 	conds = append(conds, BackupConditions(last, lastOK, now)...)
+	netDevs, err := st.ListNetDevices(ctx, now)
+	if err != nil {
+		return 0, 0, err
+	}
+	conds = append(conds, NetConditions(netDevs, now)...)
 	// What somebody put off is not reported while the time lasts, so nothing is sent and nothing shows as open; when it
 	// ends and the cause is still there the alert opens again.
 	snoozed, err := st.ActiveSnoozes(ctx, now)
