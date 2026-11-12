@@ -168,7 +168,7 @@ func closeWith(c *websocket.Conn, code int, reason string) {
 	_ = c.Close(websocket.StatusCode(code), reason)
 }
 
-var knownCaps = map[string]bool{"fail2ban_read": true, "socket_read": true, "firewall_read": true, secproto.CapWinsec: true, secproto.CapHardware: true, secproto.CapBlock: true, secproto.CapBlockCfg: true, secproto.CapBlockShare: true, secproto.CapFail2banBan: true, secproto.CapProbe: true, secproto.CapWol: true, secproto.CapDockerCtl: true, secproto.CapShell: true, secproto.CapDesktop: true, secproto.CapAdmin: true, secproto.CapWeb: true, secproto.CapRemote: true, secproto.CapSelfUpdate: true}
+var knownCaps = map[string]bool{"fail2ban_read": true, "socket_read": true, "firewall_read": true, secproto.CapWinsec: true, secproto.CapHardware: true, secproto.CapBlock: true, secproto.CapBlockCfg: true, secproto.CapBlockShare: true, secproto.CapFail2banBan: true, secproto.CapProbe: true, secproto.CapWol: true, secproto.CapDockerCtl: true, secproto.CapLinuxCtl: true, secproto.CapShell: true, secproto.CapDesktop: true, secproto.CapAdmin: true, secproto.CapWeb: true, secproto.CapRemote: true, secproto.CapSelfUpdate: true}
 
 func (s *Server) session(ctx context.Context, c *websocket.Conn, agent store.SecAgent, addr string) {
 	hctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -298,6 +298,11 @@ func (s *Server) session(ctx context.Context, c *websocket.Conn, agent store.Sec
 			var r secproto.DockerResult
 			if len(data) <= secproto.MaxDockerLog+(16<<10) && json.Unmarshal(data, &r) == nil && len(r.ID) <= 64 && s.Ops != nil {
 				s.Ops.DeliverDocker(agent.ID, r)
+			}
+		case "linux_result":
+			var r secproto.LinuxResult
+			if len(data) <= secproto.MaxMessageBytes && json.Unmarshal(data, &r) == nil && len(r.ID) <= 64 && s.Ops != nil {
+				s.Ops.DeliverLinux(agent.ID, r)
 			}
 		case "probe_result":
 			var r secproto.ProbeResult

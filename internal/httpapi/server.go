@@ -276,6 +276,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("DELETE /api/v1/net-devices/{id}", s.session(s.deleteNetDevice))
 	mux.Handle("GET /api/v1/servers/{id}/docker/{name}/logs", s.session(s.getDockerLogs))
 	mux.Handle("POST /api/v1/servers/{id}/docker/{name}/restart", s.session(s.restartDockerContainer))
+	mux.Handle("POST /api/v1/servers/{id}/linux", s.session(s.linuxCtl))
 	mux.Handle("POST /api/v1/servers/{id}/wake", s.session(s.wakeMachine))
 	mux.Handle("GET /api/v1/servers/{id}/maintenance", s.session(s.getMaintenance))
 	mux.Handle("PUT /api/v1/servers/{id}/maintenance", s.session(s.putMaintenance))

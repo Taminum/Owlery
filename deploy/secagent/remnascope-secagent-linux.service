@@ -1,0 +1,52 @@
+# Owlery services-and-files helper. The only process that starts services and reads files on behalf of the security agent.
+# Over a Unix socket it offers: the list of systemd services, the end of one service's journal, start/stop/restart of the services
+# YOU name below, and read-only looks at the folders you name. Nothing reaches a shell; every service name is matched against a
+# fixed pattern and against the units that exist; a path is resolved through symbolic links before it is compared with the folders,
+# and files that usually hold secrets (private keys, tokens, shadow files, .env) are neither listed nor read.
+#
+# It runs as root, because starting a service takes that. The settings below take away everything else: it cannot write to the
+# disk, cannot use the network and keeps only the right to read files it could not otherwise open. Install it only where that is
+# accepted, and start the agent with -linux-socket /run/remnascope-sec/linux.sock to use it.
+#
+# Setup (once):
+#   cp remnascope-secagent-linux.service /etc/systemd/system/
+#   edit ExecStart: -units  = services the panel may start, stop and restart (the rest stay read only; the agent's own is never allowed)
+#                   -dirs   = folders whose files may be read (default /var/log; add /etc if you want configs, never "/")
+#   systemctl daemon-reload && systemctl enable --now remnascope-secagent-linux
+[Unit]
+Description=Owlery services-and-files helper
+Before=remnascope-secagent.service
+
+[Service]
+User=root
+# The primary group is the agent's, so the socket it creates is reachable by the agent and by nobody else.
+Group=remnascope-sec
+RuntimeDirectory=remnascope-sec
+RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
+ExecStart=/usr/local/bin/remnascope-secagent linux-helper -socket /run/remnascope-sec/linux.sock -units nginx,fail2ban -dirs /var/log
+Restart=always
+RestartSec=3
+
+NoNewPrivileges=yes
+# Reading any file, but not changing one; the rest of root's powers are gone. Talking to systemd needs none of them.
+CapabilityBoundingSet=CAP_DAC_READ_SEARCH
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+UMask=0007
+MemoryMax=128M
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target

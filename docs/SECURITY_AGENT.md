@@ -287,3 +287,25 @@ reaches a shell, and `-no-restart a,b` lists containers that may be read but nev
 Know what this is: the helper's user is in the `docker` group, which is as strong as root on that machine. Install it only where
 that is accepted. Every log reading and every restart is written to the audit log with the person, the machine and the
 container; the restart is recorded before it is asked for. Only an administrator of the machine sees the buttons.
+
+## Linux services and files: the «Управление» tab (optional)
+
+On a Linux machine the **Управление** tab shows the machine's systemd services and lets an administrator read files. As with Docker,
+the agent itself can do neither: the machine runs a third narrow helper, `deploy/secagent/remnascope-secagent-linux.service`
+(`secagent linux-helper`), and the agent is started with `-linux-socket /run/remnascope-sec/linux.sock`.
+
+- **Services.** The whole list is visible, with state, start at boot and the end of each journal (`journalctl -u`). **Start, stop and
+  restart** work only for the services named in the helper's `-units` on that machine; every other service is shown as «только
+  чтение». The list lives on the machine, not in the panel, so a panel that is taken over still cannot touch a service the owner did
+  not name. The agent's own unit can never be controlled from here, because that would cut the connection the request comes on.
+- **Files.** Read only, and only under the folders named in `-dirs` (default `/var/log`). A path is resolved through symbolic links
+  first, so a link cannot lead out of those folders. Files that usually hold secrets (private keys, certificates, tokens, `.env`,
+  shadow files, folders such as `private`, `letsencrypt`, `wireguard`) are neither listed nor read, whatever folder they are in. A
+  file is shown as text up to 256 KB (the end of it when it is bigger); there is no download and nothing can be written.
+- **What it costs.** The helper runs as root (starting a service takes that) with the rest of root's rights taken away by its unit:
+  it can read files it could not otherwise open, cannot write to the disk and cannot use the network. Add to `-dirs` only folders
+  you are willing to have read from the panel.
+- **Audit.** Every start, stop and restart, every journal read and every file read is written to the audit log (person, machine,
+  service or path) before the machine is asked; plain lists of services and folders are not.
+- The agent announces the `linux_ctl` capability only when the helper's socket exists; a machine without it keeps showing the old
+  note on the tab.
