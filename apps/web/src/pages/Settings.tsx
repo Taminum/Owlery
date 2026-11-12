@@ -11,13 +11,14 @@ import { errorText } from '../lib/errors'
 import { formatDateTime } from '../lib/format'
 import type { AccountRow, AuditRow, Membership, Role, RulesResponse } from '../lib/types'
 import { Card, Chip, Tabs } from '../components/ui'
+import PanelHealth from '../components/PanelHealth'
 import AutoClassify from './AutoClassify'
 import { Field, GhostButton, Modal, PrimaryButton, inputCls } from '../components/Modal'
 import { NotifyTab } from '../components/NotifyTab'
 import { ModulesTab } from '../components/ModulesTab'
 import { AppearanceTab } from '../ember/AppearanceTab'
 
-type Tab = 'profile' | 'accounts' | 'modules' | 'rules' | 'autoclassify' | 'notify' | 'appearance' | 'audit'
+type Tab = 'profile' | 'accounts' | 'modules' | 'rules' | 'autoclassify' | 'notify' | 'appearance' | 'audit' | 'health'
 
 export default function Settings() {
   const { state } = useAuth()
@@ -35,6 +36,7 @@ export default function Settings() {
     { id: 'notify', label: 'settings.tab.notify', show: owner },
     { id: 'appearance', label: 'settings.tab.appearance', show: true },
     { id: 'audit', label: 'settings.tab.audit', show: true },
+    { id: 'health', label: 'settings.tab.health', show: owner },
   ]
   return (
     <div className="space-y-5">
@@ -49,6 +51,7 @@ export default function Settings() {
         {tab === 'notify' && owner && <NotifyTab />}
         {tab === 'appearance' && <AppearanceTab />}
         {tab === 'audit' && <Audit />}
+        {tab === 'health' && owner && <PanelHealth />}
       </div>
     </div>
   )
