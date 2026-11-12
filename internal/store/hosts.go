@@ -110,6 +110,17 @@ func (s *Store) SaveHost(ctx context.Context, vpsID string, h secproto.Host, now
 		vid, now, cleanText(h.OS, 80), cleanText(h.Kernel, 80), cleanText(h.Arch, 20), cleanText(h.CPUModel, 120), h.CPUs, h.MemTotal, h.SwapTotal, last); err != nil {
 		return err
 	}
+	return s.saveSample(ctx, vid, h, now)
+}
+
+// saveSample writes the one-minute sample of a reading; a minute that already has one keeps it.
+func (s *Store) saveSample(ctx context.Context, vid uuid.UUID, h secproto.Host, now time.Time) error {
+	nz := func(v int64) int64 {
+		if v < 0 {
+			return 0
+		}
+		return v
+	}
 	var cpu any
 	if h.CPUPct >= 0 && h.CPUPct <= 100 && !math.IsNaN(h.CPUPct) {
 		cpu = float32(h.CPUPct)
@@ -124,12 +135,33 @@ func (s *Store) SaveHost(ctx context.Context, vpsID string, h secproto.Host, now
 		}
 		du, dt = nz(d.Used), nz(d.Total)
 	}
-	_, err = s.pool.Exec(ctx, `INSERT INTO host_samples (vps_id, at, cpu, load1, mem_used, mem_total, disk_used, disk_total, net_rx, net_tx,
+	_, err := s.pool.Exec(ctx, `INSERT INTO host_samples (vps_id, at, cpu, load1, mem_used, mem_total, disk_used, disk_total, net_rx, net_tx,
 			rx_pkts, tx_pkts, estab, syn_recv, cookies, listen_drops)
 		VALUES ($1, date_trunc('minute', $2::timestamptz), $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) ON CONFLICT DO NOTHING`,
 		vid, now, cpu, float32(h.Load1), h.MemUsed, h.MemTotal, du, dt, nz(h.NetRX), nz(h.NetTX),
 		nz(h.NetRXPkts), nz(h.NetTXPkts), int32(max(0, min(h.Estab, 1<<30))), int32(max(0, min(h.SynRecv, 1<<30))), nz(h.Syncookie), nz(h.ListenDrp))
 	return err
+}
+
+// SaveHostBacklog keeps readings the agent took while it could not reach the server. They become minute samples only: the
+// machine's current description is never replaced by an old reading. Readings from the future or from before the samples'
+// retention are dropped.
+func (s *Store) SaveHostBacklog(ctx context.Context, vpsID string, items []secproto.Host, now time.Time) (int, error) {
+	vid, err := ParseID(vpsID)
+	if err != nil {
+		return 0, ErrNotFound
+	}
+	saved := 0
+	for _, h := range items {
+		if h.At.After(now.Add(time.Minute)) || h.At.Before(now.AddDate(0, 0, -7)) {
+			continue
+		}
+		if err := s.saveSample(ctx, vid, h, h.At.UTC()); err != nil {
+			return saved, err
+		}
+		saved++
+	}
+	return saved, nil
 }
 
 // PurgeHostSamples drops samples older than the cut-off.

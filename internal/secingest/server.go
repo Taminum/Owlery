@@ -265,6 +265,14 @@ func (s *Server) session(ctx context.Context, c *websocket.Conn, agent store.Sec
 					s.log().Error("saving host reading", "agent", agent.ID)
 				}
 			}
+		case "host_backlog":
+			// Readings taken while the agent could not reach us: kept as minute samples, never as the machine's current state.
+			var b secproto.HostBacklog
+			if len(data) <= secproto.MaxMessageBytes && json.Unmarshal(data, &b) == nil && len(b.Items) <= secproto.MaxBacklogItems {
+				if _, err := s.Store.SaveHostBacklog(ctx, agent.VPSID, b.Items, time.Now().UTC()); err != nil {
+					s.log().Error("saving host backlog", "agent", agent.ID)
+				}
+			}
 		case "pulse":
 			// The quick reading: kept in memory for the server card, never stored, and a bad one is dropped.
 			var p secproto.Pulse
