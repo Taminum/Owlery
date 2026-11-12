@@ -18,11 +18,12 @@ interface Device {
   view: { board: string; version: string; uptime: number; cpu: number; mem_free: number; mem_total: number; temp?: number; stats_at?: string; ifaces: Iface[]; clients: Client[] }
 }
 
-function Tile({ label, value }: { label: string; value: string }) {
+function Tile({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="rounded-control border border-line bg-elevated px-3 py-2.5">
       <div className="text-xs text-muted">{label}</div>
       <div className="tnum mt-0.5 text-[22px] font-medium">{value}</div>
+      {sub && <div className="tnum text-xs text-muted">{sub}</div>}
     </div>
   )
 }
@@ -84,7 +85,7 @@ function DeviceCard({ d, tz, onRename, onRemove }: { d: Device; tz: string; onRe
         {v.stats_at && (
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
             <Tile label={t('rt.cpu')} value={`${Math.round(v.cpu)}%`} />
-            <Tile label={t('rt.mem')} value={memPct === null ? '—' : `${memPct}%`} />
+            <Tile label={t('rt.mem')} value={memPct === null ? '—' : `${memPct}%`} sub={v.mem_total > 0 ? t('rt.memOf', { free: formatBytes(v.mem_free), total: formatBytes(v.mem_total) }) : undefined} />
             {v.temp !== undefined && <Tile label={t('rt.temp')} value={`${Math.round(v.temp)} °C`} />}
           </div>
         )}

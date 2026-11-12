@@ -11,6 +11,7 @@ export const routersText = {
   'rt.up': 'работает {d}',
   'rt.cpu': 'Процессор',
   'rt.mem': 'Память',
+  'rt.memOf': 'свободно {free} из {total}',
   'rt.temp': 'Температура',
   'rt.ports': 'Порты',
   'rt.clients': 'Клиенты в сети',
