@@ -27,6 +27,8 @@ export const routersText = {
   'rt.portUp': 'подключён',
   'rt.portDown': 'нет кабеля',
   'rt.remove': 'Удалить',
+  'rt.showDown': 'Ещё {n} без кабеля: показать',
+  'rt.hideDown': 'Скрыть порты без кабеля',
   'rt.rename': 'Переименовать',
   'rt.renameTitle': 'Новое название',
   'rt.save': 'Сохранить',
