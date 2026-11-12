@@ -28,7 +28,9 @@ const routerScript = `:local url "https://@HOST@@PATH@"
 :set b ($b . "cpu=" . [/system resource get cpu-load] . $nl)
 :set b ($b . "mem_free=" . [/system resource get free-memory] . $nl)
 :set b ($b . "mem_total=" . [/system resource get total-memory] . $nl)
-:do { :set b ($b . "temp=" . [/system health get temperature] . $nl) } on-error={}
+:local t ""
+:do { :local f [:parse "/system health get temperature"]; :set t [$f] } on-error={ :do { :local f2 [:parse "/system health get [find name=temperature] value"]; :set t [$f2] } on-error={} }
+:if ([:len $t] > 0) do={ :set b ($b . "temp=" . $t . $nl) }
 :foreach i in=[/interface find] do={ :set b ($b . "if=" . [/interface get $i name] . "," . [/interface get $i rx-byte] . "," . [/interface get $i tx-byte] . "," . [/interface get $i running] . $nl) }
 /tool fetch url=$url http-method=post http-header-field=$hdr http-data=$b keep-result=no
 :set b ("reset_clients=1" . $nl)
