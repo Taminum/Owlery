@@ -23,6 +23,7 @@ const (
 	// Users of a panel. They belong to the panel of the user.
 	AlertUserExpiry  = "user_expiry"  // an active user's subscription ends within days
 	AlertUserTraffic = "user_traffic" // an active user has used most of the traffic limit
+	AlertSubLeak     = "sub_leak"     // a subscription was asked for from so many different addresses that it has likely been passed on
 
 	// DNS Map. These belong to no panel: they are the owner's.
 	AlertDNSFailed = "dns_check_failed" // the last run could not settle even the apex's basic records

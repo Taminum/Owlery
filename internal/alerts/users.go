@@ -52,3 +52,29 @@ func UserConditions(states []store.UserLimitState, now time.Time) []store.Condit
 	}
 	return out
 }
+
+const (
+	// SubLeakWindow is how far back the addresses a subscription was asked for from are counted.
+	SubLeakWindow = 7 * 24 * time.Hour
+	// SubLeakIPs is the number of different addresses within the window at which the alert opens. The page already
+	// marks a subscription for a look at half of this.
+	SubLeakIPs = 10
+)
+
+// SubLeakConditions raises one alert for each subscription that was asked for from many different addresses. The
+// alert closes by itself when the addresses within the window fall below the limit.
+func SubLeakConditions(leaks []store.SubLeak) []store.Condition {
+	var out []store.Condition
+	for _, l := range leaks {
+		if l.IPs < SubLeakIPs {
+			continue
+		}
+		who := l.Name
+		if who == "" {
+			who = "id " + l.RemoteUser
+		}
+		out = append(out, store.Condition{PanelID: l.PanelID, Kind: store.AlertSubLeak, Subject: l.RemoteUser, Label: "Подписка " + who,
+			Detail: fmt.Sprintf("взята с %d разных IP за неделю: возможно, ею поделились", l.IPs)})
+	}
+	return out
+}
