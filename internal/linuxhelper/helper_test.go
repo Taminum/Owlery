@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -144,7 +145,7 @@ func TestFilesStayInsideTheAllowedFoldersAndSecretsAreHidden(t *testing.T) {
 	put(t, filepath.Join(other, "notes.txt"), "not allowed")
 	put(t, filepath.Join(logs, "bin.dat"), "ab\x00cd")
 	put(t, filepath.Join(logs, "color.log"), "\x1b[31mred\x1b[0m ok\r\n")
-	s := &Server{Dirs: []string{logs, filepath.Join(root, "missing"), "relative/dir", "/"}}
+	s := &Server{Dirs: []string{logs, filepath.Join(root, "missing"), "relative/dir"}}
 
 	if rs := s.Handle(context.Background(), Request{Op: secproto.LinuxLs}); !rs.OK || len(rs.Dirs) != 1 {
 		t.Fatalf("only the usable folders are offered: %+v", rs)
@@ -222,5 +223,26 @@ func TestBigFilesGiveTheirEnd(t *testing.T) {
 	rs := s.Handle(context.Background(), Request{Op: secproto.LinuxCat, Path: filepath.Join(root, "big.log")})
 	if !rs.OK || !rs.Truncated || !strings.HasSuffix(rs.Text, "last line\n") || strings.Contains(rs.Text, "first line") || len(rs.Text) > secproto.MaxLinuxText {
 		t.Fatalf("%v %v %d", rs.OK, rs.Truncated, len(rs.Text))
+	}
+}
+
+func TestRootCanBeAllowedButKernelViewsAndSecretsStayClosed(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("paths of this test are Linux paths")
+	}
+	s := &Server{Dirs: []string{"/"}}
+	if rs := s.Handle(context.Background(), Request{Op: secproto.LinuxLs}); !rs.OK || len(rs.Dirs) != 1 || rs.Dirs[0] != "/" {
+		t.Fatalf("an owner who wrote / gets it: %+v", rs)
+	}
+	for _, p := range []string{"/proc/1/environ", "/proc", "/sys/kernel", "/dev/null", "/var/lib/docker/volumes", "/etc/shadow", "/root/.ssh/id_rsa", "/root/.bash_history", "/etc/letsencrypt/live/x/privkey.pem"} {
+		if !s.pathAllowed(p) {
+			continue
+		}
+		t.Errorf("%s must stay closed", p)
+	}
+	for _, p := range []string{"/etc/hosts", "/var/log/syslog", "/home/user/notes.txt", "/"} {
+		if !s.pathAllowed(p) {
+			t.Errorf("%s should be open", p)
+		}
 	}
 }

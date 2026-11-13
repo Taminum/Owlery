@@ -270,7 +270,7 @@ var denyDirs = map[string]bool{
 var denyFiles = map[string]bool{
 	"shadow": true, "shadow-": true, "gshadow": true, "gshadow-": true, ".env": true, ".netrc": true, ".git-credentials": true,
 	".htpasswd": true, "htpasswd": true, "id_rsa": true, "id_dsa": true, "id_ecdsa": true, "id_ed25519": true, "secagent.token": true,
-	"token": true, "credentials": true,
+	"token": true, "credentials": true, ".bash_history": true, ".mysql_history": true, ".psql_history": true, ".python_history": true,
 }
 
 var denySuffix = []string{".key", ".pem", ".p12", ".pfx", ".token", ".secret", ".secrets", ".keytab", "_key", ".env"}
@@ -294,12 +294,17 @@ func secretName(name string, last bool) bool {
 
 // pathAllowed says whether the resolved path is inside one of the allowed folders and has no secret-looking name in it.
 func (s *Server) pathAllowed(real string) bool {
+	for _, h := range hardDeny {
+		if real == h || strings.HasPrefix(real, h+"/") {
+			return false
+		}
+	}
 	for _, d := range s.Dirs {
 		root := cleanDir(d)
 		if root == "" {
 			continue
 		}
-		if real != root && !strings.HasPrefix(real, root+"/") {
+		if real != root && !strings.HasPrefix(real, strings.TrimSuffix(root, "/")+"/") {
 			continue
 		}
 		parts := strings.Split(strings.TrimPrefix(real, "/"), "/")
@@ -313,14 +318,19 @@ func (s *Server) pathAllowed(real string) bool {
 	return false
 }
 
-// cleanDir gives an allowed folder as it really is on disk, or "" if it is not usable (missing, or the whole disk).
+// hardDeny are places that are never read, even when "/" is among the allowed folders: kernel views that show every process's
+// environment and memory, devices, and the container engine's own data.
+var hardDeny = []string{"/proc", "/sys", "/dev", "/var/lib/docker", "/var/lib/containerd"}
+
+// cleanDir gives an allowed folder as it really is on disk, or "" if it is not usable (missing). "/" is usable only when the owner
+// wrote it down; the hard denials and the secret names still apply under it.
 func cleanDir(d string) string {
 	d = strings.TrimSpace(d)
 	if !filepath.IsAbs(d) {
 		return ""
 	}
 	real, err := filepath.EvalSymlinks(filepath.Clean(d))
-	if err != nil || real == "/" || real == "" {
+	if err != nil || real == "" {
 		return ""
 	}
 	return filepath.ToSlash(real)
