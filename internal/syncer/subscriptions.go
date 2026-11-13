@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	historyPage     = 1000
-	historyMaxPages = 12 // a first look reaches back 12 000 requests, later ones stop at the first page with nothing new
+	historyPage     = 200
+	historyMaxPages = 60 // a first look reaches back 12 000 requests, later ones stop at the first page with nothing new
 )
 
 // RunSubscriptions copies the subscription request history of every panel into the store every interval. A panel
