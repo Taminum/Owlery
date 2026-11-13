@@ -10,6 +10,7 @@ import { api } from '../lib/api'
 import { useLoad } from '../hooks/useLoad'
 import { formatBytes } from '../lib/format'
 import { Drawer } from '../components/Drawer'
+import { AwgClients } from '../components/AwgClients'
 import { CoverageLine, MiniTimeline, NoDataPanel, PageHead, ShareBar, TableSkeleton } from '../components/Analyzer'
 
 function CountList({ title, rows }: { title: string; rows: NamedCount[] }) {
@@ -120,6 +121,7 @@ export default function Users() {
     <div className="space-y-4">
       <PageHead title={t('an.users.title')} subtitle={t('an.users.subtitle')} />
       <Subscriptions tz={tz} />
+      <AwgClients range={filters.range} tz={tz} />
       {data && <CoverageLine meta={data.meta} tz={tz} />}
       {error && <p role="alert" className="text-[13px] text-red">{error}</p>}
       {!data && !error && <TableSkeleton />}
