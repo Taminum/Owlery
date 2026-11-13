@@ -199,6 +199,11 @@ export interface CategoryRowA { category: string; classified: boolean; sites: nu
 export interface SitesResponse { meta: AMeta; rows: SiteRowA[]; categories: CategoryRowA[]; groups: number; total_connections: number; limit: number; offset: number }
 export interface SiteWhoA { kind: 'user' | 'device' | 'raw' | 'awg'; label: string; note?: string; panel_name: string; subject: string; connections: number; visits: number; bytes: number | null; first_seen: string; last_seen: string }
 export interface SiteHostA { host: string; connections: number; share: number; users: number; bytes: number | null; router_connections: number; last_seen: string }
+export interface TimelineRow {
+  site: string; service?: string; host: string; hosts: number; start: string; end: string; connections: number; bytes: number | null
+  src: 'node' | 'router' | 'awg'; node?: string; kind: 'user' | 'device' | 'raw' | 'awg'; label: string; note?: string; panel_name: string; subject?: string
+}
+export interface TimelineResponse { meta: AMeta; rows: TimelineRow[]; more: boolean; totals: { visits: number; connections: number; sites: number; last: string | null } }
 export interface SiteDetailResponse {
   meta: AMeta; site: string; service?: string; category: string; classified: boolean; origin?: string
   auto?: { model: string; reason: string; score: number; classified_at: string | null }

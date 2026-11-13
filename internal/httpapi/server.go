@@ -256,6 +256,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/analytics/users/detail", s.session(s.analyticsUserDetail))
 	mux.Handle("GET /api/v1/analytics/nodes", s.session(s.analyticsNodes))
 	mux.Handle("GET /api/v1/analytics/sites", s.session(s.analyticsSites))
+	mux.Handle("GET /api/v1/analytics/timeline", s.session(s.analyticsTimeline))
 	mux.Handle("GET /api/v1/analytics/sites/detail", s.session(s.analyticsSiteDetail))
 	mux.Handle("GET /api/v1/analytics/subjects", s.session(s.analyticsSubjects))
 	mux.Handle("GET /api/v1/analytics/activity", s.session(s.analyticsActivity))
