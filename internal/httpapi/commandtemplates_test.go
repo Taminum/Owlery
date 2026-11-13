@@ -34,8 +34,8 @@ func TestCommandTemplatesAreSharedPerSystemAndChangedOnlyByTheOwner(t *testing.T
 		return out.Templates
 	}
 	lin := list("?os=linux")
-	if len(lin) < 10 || len(list("?os=windows")) != 0 {
-		t.Fatalf("the Linux set is there from the start and Windows is empty: %d", len(lin))
+	if len(lin) < 10 || len(list("?os=windows")) < 5 {
+		t.Fatalf("the Linux set is there from the start and Windows has its own: %d", len(lin))
 	}
 	if st, _ := w.viewer.do("POST", "/api/v1/command-templates", map[string]any{"os": "linux", "name": "x", "command": "ls"}); st != 403 {
 		t.Errorf("a viewer must not add: %d", st)
@@ -57,9 +57,14 @@ func TestCommandTemplatesAreSharedPerSystemAndChangedOnlyByTheOwner(t *testing.T
 	if st, _ := w.owner.do("POST", "/api/v1/command-templates", map[string]any{"os": "windows", "name": "Службы 1С", "command": "x"}); st != 409 {
 		t.Errorf("the same name twice: %d", st)
 	}
-	win := list("?os=windows")
-	if len(win) < 1 || strings.Contains(win[0].Command, "\r") || !strings.Contains(win[0].Command, "\n") {
-		t.Fatalf("a command keeps its lines and loses carriage returns: %+v", win)
+	cmd := ""
+	for _, c := range list("?os=windows") {
+		if c.ID == made.ID {
+			cmd = c.Command
+		}
+	}
+	if cmd == "" || strings.Contains(cmd, "\r") || !strings.Contains(cmd, "\n") {
+		t.Fatalf("a command keeps its lines and loses carriage returns: %q", cmd)
 	}
 	if st, _ := w.viewer.do("PATCH", "/api/v1/command-templates/"+made.ID, map[string]any{"name": "n", "command": "c"}); st != 403 {
 		t.Errorf("a viewer must not change: %d", st)
