@@ -29,6 +29,7 @@ import Placeholder from './pages/Placeholder'
 import Routers from './pages/Routers'
 import LanDevices from './pages/LanDevices'
 import NetworkMap from './pages/NetworkMap'
+import MonthReport from './pages/MonthReport'
 import Settings from './pages/Settings'
 
 createRoot(document.getElementById('root')!).render(
@@ -63,6 +64,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="routers" element={<Routers />} />
             <Route path="lan" element={<LanDevices />} />
             <Route path="map" element={<NetworkMap />} />
+            <Route path="report" element={<MonthReport />} />
             <Route path="settings" element={<Settings />} />
             <Route path="*" element={<Placeholder />} />
           </Route>
