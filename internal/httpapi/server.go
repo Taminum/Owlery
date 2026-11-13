@@ -277,6 +277,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/servers/{id}/docker/{name}/logs", s.session(s.getDockerLogs))
 	mux.Handle("POST /api/v1/servers/{id}/docker/{name}/restart", s.session(s.restartDockerContainer))
 	mux.Handle("POST /api/v1/servers/{id}/linux", s.session(s.linuxCtl))
+	mux.Handle("GET /api/v1/reports/month", s.session(s.monthReport))
+	mux.Handle("POST /api/v1/reports/month/send", s.session(s.sendMonthReport))
 	mux.Handle("GET /api/v1/command-templates", s.session(s.listCommandTemplates))
 	mux.Handle("POST /api/v1/command-templates", s.session(s.createCommandTemplate))
 	mux.Handle("PATCH /api/v1/command-templates/{id}", s.session(s.updateCommandTemplate))

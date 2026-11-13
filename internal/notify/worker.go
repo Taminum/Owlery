@@ -115,6 +115,7 @@ func (w *Worker) Round(ctx context.Context) {
 	}
 	w.alerts(ctx, chans)
 	w.digests(ctx, chans)
+	w.reports(ctx, chans)
 }
 
 func alertLine(n store.PendingAlertNotice) string {
