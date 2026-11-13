@@ -88,7 +88,7 @@ func (s *Syncer) subscriptionsPanel(ctx context.Context, p store.Panel) string {
 	}
 	if err := copyHistory(ctx, rd, add); err != nil {
 		if ctx.Err() == nil {
-			s.Log.Warn("subscription history", "panel", p.ID, "code", remnawave.ErrorCode(err))
+			s.Log.Warn("subscription history", "panel", p.ID, "code", remnawave.ErrorCode(err), "detail", err.Error())
 		}
 		return remnawave.ErrorCode(err)
 	}
