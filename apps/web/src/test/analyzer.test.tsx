@@ -217,7 +217,7 @@ describe('sites page', () => {
 })
 
 describe('sites and domains: one page', () => {
-  it('has six tabs, and shows the filters only where they apply', async () => {
+  it('has seven tabs, and shows the filters only where they apply', async () => {
     mockApi({
       me: owner,
       handler: (r) => {
@@ -229,7 +229,7 @@ describe('sites and domains: one page', () => {
     })
     renderPage('/sites')
     await screen.findByRole('tab', { name: 'Сайты', selected: true })
-    expect(screen.getAllByRole('tab').map((x) => x.textContent)).toEqual(['Сайты', 'Категории', 'Службы', 'Адреса', 'Когда', 'Страны'])
+    expect(screen.getAllByRole('tab').map((x) => x.textContent)).toEqual(['Сайты', 'Лента', 'Категории', 'Службы', 'Адреса', 'Когда', 'Страны'])
     expect(screen.getByRole('group', { name: 'Зона сайта' })).toBeInTheDocument() // the zone belongs to the list of sites
     expect(screen.getByRole('button', { name: /Только новые/ })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('tab', { name: 'Службы' }))

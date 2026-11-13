@@ -18,6 +18,7 @@ import { Drawer } from '../components/Drawer'
 import { SubjectSelect } from '../components/SubjectSelect'
 import { Heatmap } from '../components/Heatmap'
 import { CountriesCard } from '../components/Countries'
+import { Timeline } from '../components/Timeline'
 import { Field, GhostButton, Modal, PrimaryButton, inputCls } from '../components/Modal'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
@@ -37,7 +38,7 @@ function useDebounced<T>(value: T, ms: number): T {
 
 const bytesText = (b: number | null) => (b == null ? '—' : formatBytes(b))
 
-function Detail({ site, subject }: { site: string; subject: string }) {
+function Detail({ site, subject, onTimeline }: { site: string; subject: string; onTimeline: () => void }) {
   const look = useLook()
   const { filters } = useApp()
   const tz = filters.tz
@@ -53,6 +54,7 @@ function Detail({ site, subject }: { site: string; subject: string }) {
         {data.service && <Chip tone="cyan">{data.service}</Chip>}
         <span className="text-[13px] text-muted">{data.category}</span>
         {data.auto && <span className="basis-full text-xs text-muted">{t('origin.detail', { model: data.auto.model, pct: Math.round(data.auto.score * 100), when: data.auto.classified_at ? new Date(data.auto.classified_at).toLocaleDateString('ru-RU') : '—' })}{data.auto.reason ? ` · ${data.auto.reason}` : ''}</span>}
+        <button type="button" onClick={onTimeline} className="text-[13px] text-cyan underline-offset-2 hover:underline">{t('tl.openTab')}</button>
         <span className="tnum text-[13px] text-muted">{t('sites.visitsN', { n: formatInt(data.visits) })} · {t('sites.connN', { n: formatInt(data.connections) })} · {t('sites.whoN', { n: data.users })}</span>
       </div>
       <div className="h-[150px]" role="img" aria-label={t('an.users.timeline')}>
@@ -175,9 +177,9 @@ function RuleDialog({ site, onClose, onDone }: { site: string; onClose: () => vo
   )
 }
 
-type View = 'sites' | 'categories' | 'services' | 'addresses' | 'activity' | 'countries'
-const VIEWS: View[] = ['sites', 'categories', 'services', 'addresses', 'activity', 'countries']
-const TAB_LABEL: Record<View, MsgKey> = { sites: 'sites.tab.sites', categories: 'sites.tab.categories', services: 'sites.tab.services', addresses: 'sites.tab.addresses', activity: 'sites.tab.activity', countries: 'sites.tab.countries' }
+type View = 'sites' | 'timeline' | 'categories' | 'services' | 'addresses' | 'activity' | 'countries'
+const VIEWS: View[] = ['sites', 'timeline', 'categories', 'services', 'addresses', 'activity', 'countries']
+const TAB_LABEL: Record<View, MsgKey> = { sites: 'sites.tab.sites', timeline: 'sites.tab.timeline', categories: 'sites.tab.categories', services: 'sites.tab.services', addresses: 'sites.tab.addresses', activity: 'sites.tab.activity', countries: 'sites.tab.countries' }
 
 export default function Sites() {
   const nav = useNavigate()
@@ -191,7 +193,7 @@ export default function Sites() {
   const [addr, setAddr] = useState<'host' | 'ip' | 'networks'>('host')
   const [newOnly, setNewOnly] = useState(false)
   const [ruleFor, setRuleFor] = useState<string | null>(null)
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(params.get('q') ?? '')
   const [subject, setSubject] = useState('')
   const [category, setCategory] = useState('')
   const [zone, setZone] = useState<'' | 'ru' | 'other'>('')
@@ -247,6 +249,7 @@ export default function Sites() {
       {listView && error && <p role="alert" className="text-[13px] text-red">{error}</p>}
       {listView && !data && !error && <TableSkeleton />}
       {listView && data?.meta.state === 'no_data' && <NoDataPanel meta={data.meta} />}
+      {view === 'timeline' && <Timeline q={q} subject={subject} />}
       {view === 'activity' && <ActivityView subject={subject} />}
       {view === 'services' && <DestinationsView key={`service|${subject}|${q}`} group="service" subject={subject} q={q} />}
       {view === 'addresses' && (
@@ -338,7 +341,7 @@ export default function Sites() {
         </Card>
       )}
       {ruleFor && <RuleDialog site={ruleFor} onClose={() => setRuleFor(null)} onDone={() => { setRuleFor(null); reload() }} />}
-      {sel && view === 'sites' && <Drawer title={sel} onClose={() => setSel(null)}><Detail site={sel} subject={subject} /></Drawer>}
+      {sel && view === 'sites' && <Drawer title={sel} onClose={() => setSel(null)}><Detail site={sel} subject={subject} onTimeline={() => { setSearch(sel); setSel(null); setParams({ view: 'timeline', q: sel }, { replace: true }) }} /></Drawer>}
     </div>
   )
 }
