@@ -298,9 +298,10 @@ the agent itself can do neither: the machine runs a third narrow helper, `deploy
   restart** work only for the services named in the helper's `-units` on that machine; every other service is shown as «только
   чтение». The list lives on the machine, not in the panel, so a panel that is taken over still cannot touch a service the owner did
   not name. The agent's own unit can never be controlled from here, because that would cut the connection the request comes on.
-- **Files.** Read only, and only under the folders named in `-dirs` (default `/var/log`). A path is resolved through symbolic links
+- **Files.** Read only, and only under the folders named in `-dirs` (default `/var/log`; `-dirs /` opens the whole disk). A path is resolved through symbolic links
   first, so a link cannot lead out of those folders. Files that usually hold secrets (private keys, certificates, tokens, `.env`,
-  shadow files, folders such as `private`, `letsencrypt`, `wireguard`) are neither listed nor read, whatever folder they are in. A
+  shadow files, folders such as `private`, `letsencrypt`, `wireguard`) are neither listed nor read, whatever folder they are in. Even
+  with `/`, `/proc`, `/sys`, `/dev` and the container engine's data folders stay closed. A
   file is shown as text up to 256 KB (the end of it when it is bigger); there is no download and nothing can be written.
 - **What it costs.** The helper runs as root (starting a service takes that) with the rest of root's rights taken away by its unit:
   it can read files it could not otherwise open, cannot write to the disk and cannot use the network. Add to `-dirs` only folders
