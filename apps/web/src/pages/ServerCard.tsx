@@ -224,7 +224,7 @@ export default function ServerCard() {
           <Card title={t('srv.history.title')}><AlertList items={s.alerts ?? []} empty={t('srv.history.empty')} /></Card>
         </div>
       )}
-      {tab === 'terminal' && s.can_edit && <TerminalView serverId={s.id} />}
+      {tab === 'terminal' && s.can_edit && <TerminalView serverId={s.id} os={isWindows ? 'windows' : 'linux'} />}
       {tab === 'desktop' && s.can_edit && <DesktopView serverId={s.id} />}
       {tab === 'screen' && s.can_edit && <ScreenView serverId={s.id} canLaunch={!!s.agent?.can_shell && !!s.agent?.can_admin} />}
       {tab === 'manage' && s.can_edit && (isWindows ? <ManageView serverId={s.id} /> : <LinuxView serverId={s.id} enabled={!!s.agent?.can_linux} />)}

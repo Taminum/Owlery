@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { t, type MsgKey } from '../i18n'
 import { Card } from './ui'
+import { CommandTemplates } from './CommandTemplates'
 import { GhostButton, PrimaryButton } from './Modal'
 
 type State = 'idle' | 'connecting' | 'open' | 'closed'
@@ -9,11 +10,13 @@ type State = 'idle' | 'connecting' | 'open' | 'closed'
 const REASON: Record<number, MsgKey> = { 4001: 'term.noAgent', 4002: 'term.notAllowed', 4003: 'term.noAnswer', 1008: 'term.forbidden' }
 
 /** A terminal on the machine, through its agent. It opens on request, never by itself, and each session is recorded. */
-export function TerminalView({ serverId }: { serverId: string }) {
+export function TerminalView({ serverId, os = 'linux' }: { serverId: string; os?: 'linux' | 'windows' }) {
   const box = useRef<HTMLDivElement>(null)
   const [state, setState] = useState<State>('idle')
   const [reason, setReason] = useState<MsgKey | ''>('')
   const [session, setSession] = useState(0)
+  // What puts text into the open terminal; empty while there is none.
+  const sender = useRef<((text: string) => boolean) | null>(null)
 
   useEffect(() => {
     if (session === 0 || !box.current) return
@@ -32,6 +35,7 @@ export function TerminalView({ serverId }: { serverId: string }) {
       ws.binaryType = 'arraybuffer'
       const enc = new TextEncoder()
       ws.onopen = () => { setState('open'); term.focus() }
+      sender.current = (text) => { if (ws.readyState !== WebSocket.OPEN) return false; ws.send(enc.encode(text)); term.focus(); return true }
       ws.onmessage = (e) => { if (e.data instanceof ArrayBuffer) term.write(new Uint8Array(e.data)) }
       ws.onclose = (e) => {
         if (disposed) return
@@ -43,11 +47,12 @@ export function TerminalView({ serverId }: { serverId: string }) {
       const resized = term.onResize(({ cols, rows }) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'resize', cols, rows })) })
       const ro = new ResizeObserver(() => { try { fit.fit() } catch { /* not laid out yet */ } })
       ro.observe(box.current)
-      cleanup = () => { ro.disconnect(); input.dispose(); resized.dispose(); ws.close(); term.dispose() }
+      cleanup = () => { sender.current = null; ro.disconnect(); input.dispose(); resized.dispose(); ws.close(); term.dispose() }
     })()
     return () => { disposed = true; cleanup() }
   }, [session, serverId])
 
+  const send = (text: string, run: boolean) => sender.current?.(run ? `${text}` : text) ?? false
   const start = () => { setReason(''); setState('connecting'); setSession((n) => n + 1) }
   return (
     <Card title={t('term.title')} note={t('term.note')}
@@ -60,7 +65,10 @@ export function TerminalView({ serverId }: { serverId: string }) {
           <PrimaryButton onClick={start}>{t('term.reopen')}</PrimaryButton>
         </div>
       )}
-      {session > 0 && <div ref={box} className="h-[60vh] min-h-[320px] overflow-hidden rounded-control border border-line bg-[#0b0f14] p-2" />}
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_260px]">
+        <div>{session > 0 && <div ref={box} className="h-[60vh] min-h-[320px] overflow-hidden rounded-control border border-line bg-[#0b0f14] p-2" />}</div>
+        <CommandTemplates os={os} send={send} />
+      </div>
     </Card>
   )
 }
