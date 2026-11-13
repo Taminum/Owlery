@@ -1,19 +1,20 @@
 import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { FileText, BarChart3, Bell, HardDrive, Router, MonitorSmartphone, Network, Compass, Wallet, Rocket, Gauge, Laptop, Shield, Telescope, LayoutDashboard, History, Radio, Server, Settings, Users, Waypoints, X, LogOut, UserRound, ChevronsLeft, ChevronsRight, type LucideIcon } from 'lucide-react'
+import { Search, FileText, BarChart3, Bell, HardDrive, Router, MonitorSmartphone, Network, Compass, Wallet, Rocket, Gauge, Laptop, Shield, Telescope, LayoutDashboard, History, Radio, Server, Settings, Users, Waypoints, X, LogOut, UserRound, ChevronsLeft, ChevronsRight, type LucideIcon } from 'lucide-react'
 import { t, type MsgKey } from '../i18n'
 import { api } from '../lib/api'
 import { useLoad } from '../hooks/useLoad'
 import type { AlertsResponse } from '../lib/types'
 import { useAuth } from '../lib/auth'
 import { useModulesOff, type ModuleId } from '../lib/modules'
+import { OPEN_PALETTE } from '../lib/palette'
 
 interface Item { to: string; key: MsgKey; icon: LucideIcon; disabled?: boolean; module?: ModuleId; owner?: boolean }
 interface Section { key: MsgKey; items: Item[] }
 
 // The menu by sections. An item of a module that is off is not shown, and a section left empty disappears with it.
 // Addresses never change, so old links and bookmarks keep working.
-const SECTIONS: Section[] = [
+export const SECTIONS: Section[] = [
   { key: 'nav.section.summary', items: [
     { to: '/', key: 'nav.home', icon: LayoutDashboard },
     { to: '/vpn', key: 'nav.vpn', icon: BarChart3, module: 'remnawave' },
@@ -142,6 +143,12 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           })}
         </nav>
         <div className={`space-y-0.5 border-t border-line p-3 ${collapsed ? 'lg:px-2' : ''}`}>
+          <button type="button" onClick={() => window.dispatchEvent(new Event(OPEN_PALETTE))} aria-label={t('pal.open')} title={collapsed ? `${t('pal.open')} (Ctrl+K)` : undefined}
+            className={`flex h-9 w-full items-center gap-3 rounded-control px-3 text-[13px] text-muted hover:bg-surface hover:text-fg ${collapsed ? 'lg:justify-center lg:px-0' : ''}`}>
+            <Search size={18} aria-hidden />
+            <span className={`flex-1 text-left ${collapsed ? 'lg:hidden' : ''}`}>{t('pal.openHint')}</span>
+            <kbd className={`rounded border border-line px-1 text-[10px] ${collapsed ? 'lg:hidden' : ''}`}>Ctrl K</kbd>
+          </button>
           <AccountRow compact={collapsed} />
           <NavItem item={{ to: '/settings', key: 'nav.settings', icon: Settings }} onNavigate={onClose} compact={collapsed} />
           <button type="button" onClick={() => fold(!collapsed)} aria-pressed={collapsed} title={collapsed ? t('nav.expand') : t('nav.collapse')} aria-label={collapsed ? t('nav.expand') : t('nav.collapse')}
