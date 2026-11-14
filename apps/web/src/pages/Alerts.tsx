@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useState } from 'react'
-import { AlertTriangle, CheckCircle2, FileWarning, CalendarClock, Share2, Gauge, Wallet, ShieldOff, ShieldQuestion, HardDrive, MemoryStick, Siren, Network, Radar, ServerOff, ShieldAlert, Waypoints, Container } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, FileWarning, CalendarClock, Share2, Magnet, Gauge, Wallet, ShieldOff, ShieldQuestion, HardDrive, MemoryStick, Siren, Network, Radar, ServerOff, ShieldAlert, Waypoints, Container } from 'lucide-react'
 import { t, type MsgKey } from '../i18n'
 import { api } from '../lib/api'
 import { useApp } from '../lib/context'
@@ -18,7 +18,7 @@ type AlertRow = AlertsResponse['alerts'][number]
 import { Card, Chip, Segmented } from '../components/ui'
 import { PageHead, TableSkeleton } from '../components/Analyzer'
 
-const ICON = { agent_silent: ServerOff, panel_sync: Waypoints, sec_agent_silent: ShieldAlert, sec_tls: FileWarning, sec_port: Network, dns_check_failed: Radar, dns_change: Radar, user_expiry: CalendarClock, user_traffic: Gauge, sub_leak: Share2, bill_due: Wallet, awg_down: ShieldOff, awg_tools_old: ShieldQuestion, host_disk: HardDrive, host_disk_forecast: HardDrive, host_cpu: Gauge, host_mem: MemoryStick, host_flood: Siren, host_container: Container, host_container_down: Container } as const
+const ICON = { agent_silent: ServerOff, panel_sync: Waypoints, sec_agent_silent: ShieldAlert, sec_tls: FileWarning, sec_port: Network, dns_check_failed: Radar, dns_change: Radar, user_expiry: CalendarClock, user_traffic: Gauge, sub_leak: Share2, torrent: Magnet, bill_due: Wallet, awg_down: ShieldOff, awg_tools_old: ShieldQuestion, host_disk: HardDrive, host_disk_forecast: HardDrive, host_cpu: Gauge, host_mem: MemoryStick, host_flood: Siren, host_container: Container, host_container_down: Container } as const
 
 // What can be put off: the resource and security alerts of machines, which are the owner's. The others (a panel that
 // does not answer, a server that went silent) say something is down, and are not put off.

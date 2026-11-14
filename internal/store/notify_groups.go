@@ -15,7 +15,7 @@ var AlertGroups = []AlertGroup{
 	{"flood", []string{AlertHostFlood}},
 	{"awg", []string{AlertAWGDown, AlertAWGToolsOld}},
 	{"dns", []string{AlertDNSFailed, AlertDNSChange}},
-	{"users", []string{AlertUserExpiry, AlertUserTraffic, AlertSubLeak}},
+	{"users", []string{AlertUserExpiry, AlertUserTraffic, AlertSubLeak, AlertTorrent}},
 	{"billing", []string{AlertBillDue}},
 }
 

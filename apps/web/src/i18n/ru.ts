@@ -19,6 +19,7 @@ import { reportText } from './ru.report'
 import { paletteText } from './ru.palette'
 import { timelineText } from './ru.timeline'
 import { subLeaksText } from './ru.subleaks'
+import { protectionText } from './ru.protection'
 import { serversText } from './ru.servers'
 // All UI text lives here so a second locale can be added without touching components.
 const base = {
@@ -159,6 +160,6 @@ const base = {
   'a11y.statusLag': 'отстаёт',
 } as const
 
-export const ru = { ...base, ...m1, ...intel, ...intel2, ...awgText, ...securityText, ...dnsText, ...digestText, ...kawaiiText, ...billingText, ...hostsText, ...notifyTuneText, ...startText, ...serversText, ...routersText, ...lanText, ...mapText, ...linuxText, ...templatesText, ...reportText, ...paletteText, ...timelineText, ...subLeaksText } as const
+export const ru = { ...base, ...m1, ...intel, ...intel2, ...awgText, ...securityText, ...dnsText, ...digestText, ...kawaiiText, ...billingText, ...hostsText, ...notifyTuneText, ...startText, ...serversText, ...routersText, ...lanText, ...mapText, ...linuxText, ...templatesText, ...reportText, ...paletteText, ...timelineText, ...subLeaksText, ...protectionText } as const
 
 export type MsgKey = keyof typeof ru

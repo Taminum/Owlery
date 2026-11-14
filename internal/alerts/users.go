@@ -2,6 +2,7 @@ package alerts
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Taminum/Owlery/internal/store"
@@ -60,6 +61,31 @@ const (
 	// marks a subscription for a look at half of this.
 	SubLeakIPs = 10
 )
+
+const (
+	// TorrentWindow is how far back the reports of the torrent blocker are counted for the alert.
+	TorrentWindow = 24 * time.Hour
+	// TorrentReports is the number of reports within the window at which the alert opens: one report can be a mistake.
+	TorrentReports = 3
+)
+
+// TorrentConditions raises one alert for each subscription the torrent blocker caught again and again. It closes by
+// itself when the reports within the window fall below the limit.
+func TorrentConditions(list []store.Torrent) []store.Condition {
+	var out []store.Condition
+	for _, t := range list {
+		who := t.Name
+		if who == "" {
+			who = "id " + t.RemoteUser
+		}
+		detail := fmt.Sprintf("торрент-блокер сработал %d раз за сутки", t.Reports)
+		if len(t.Nodes) > 0 {
+			detail += " (" + strings.Join(t.Nodes, ", ") + ")"
+		}
+		out = append(out, store.Condition{PanelID: t.PanelID, Kind: store.AlertTorrent, Subject: t.RemoteUser, Label: "Подписка " + who, Detail: detail})
+	}
+	return out
+}
 
 // SubLeakConditions raises one alert for each subscription that was asked for from many different addresses. The
 // alert closes by itself when the addresses within the window fall below the limit.
