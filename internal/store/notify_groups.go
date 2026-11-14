@@ -11,12 +11,14 @@ var AlertGroups = []AlertGroup{
 	{"agents", []string{AlertAgentSilent, AlertProbeDown, AlertNetDown}},
 	{"panels", []string{AlertPanelSync, AlertPanelBackup}},
 	{"security", []string{AlertSecAgent, AlertSecTLS, AlertSecPort, AlertLANNew}},
-	{"resources", []string{AlertHostDisk, AlertHostDiskForecast, AlertHostCPU, AlertHostMem, AlertHostContainer, AlertHostContainerDown, AlertNetConnFull, AlertPVEGuest, AlertPVEDisk, AlertPVEBackup, AlertPVETailscale}},
+	{"resources", []string{AlertHostDisk, AlertHostDiskForecast, AlertHostCPU, AlertHostMem, AlertHostContainer, AlertHostContainerDown, AlertNetConnFull}},
 	{"flood", []string{AlertHostFlood}},
 	{"awg", []string{AlertAWGDown, AlertAWGToolsOld}},
 	{"dns", []string{AlertDNSFailed, AlertDNSChange}},
 	{"users", []string{AlertUserExpiry, AlertUserTraffic, AlertSubLeak, AlertTorrent}},
 	{"billing", []string{AlertBillDue}},
+	// Proxmox at home. Off by default in every channel (see migration 0066): the page shows these alerts either way.
+	{"home", []string{AlertPVEGuest, AlertPVEDisk, AlertPVEBackup, AlertPVETailscale}},
 }
 
 // AlertGroupOf names the group of an alert kind, "" for a kind nobody listed (it is then always announced).
