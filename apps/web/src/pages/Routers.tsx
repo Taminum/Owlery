@@ -13,7 +13,7 @@ import { durationText } from '../components/ServerParts'
 
 interface Iface { name: string; rx: number; tx: number; up: boolean; rx_bps: number; tx_bps: number }
 interface TopSrc { ip: string; n: number }
-interface NatRule { chain: string; action: string; packets: number; bytes: number; dst_port?: string; to_addr?: string; to_ports?: string; comment?: string }
+interface NatRule { chain: string; action: string; packets: number; bytes: number; dst_port?: string; to_addr?: string; to_ports?: string; comment?: string; ref?: string }
 interface Client { ip: string; mac: string; host?: string }
 interface Device {
   id: string; name: string; kind?: string; url?: string; new_forwards?: NatRule[]; pull_error?: string; parent_id?: string | null; online: boolean; last_seen: string | null
@@ -31,7 +31,7 @@ function Tile({ label, value, sub }: { label: string; value: string; sub?: strin
 }
 
 function why(e: unknown): string {
-  if (e instanceof ApiError && ['name_taken', 'invalid_name', 'invalid_url', 'invalid_credentials', 'router_auth', 'router_unreachable', 'router_unexpected'].includes(e.code)) return t(`rt.err.${e.code}` as MsgKey)
+  if (e instanceof ApiError && ['name_taken', 'invalid_name', 'invalid_url', 'invalid_credentials', 'router_auth', 'router_unreachable', 'router_unexpected', 'forbidden', 'rejected', 'unknown_host', 'port_taken', 'missing', 'invalid_forward'].includes(e.code)) return t(`rt.err.${e.code}` as MsgKey)
   return t('rt.err.other')
 }
 
@@ -94,8 +94,104 @@ function PasswordDialog({ d, onClose, onDone }: { d: Device; onClose: () => void
   )
 }
 
-function DeviceCard({ d, tz, others, onParent, onRename, onRemove, onPassword, onConfirmFw }: { d: Device; tz: string; others: Device[]; onParent: (parent: string) => void; onRename: () => void; onRemove: () => void; onPassword: () => void; onConfirmFw: () => void }) {
+function ForwardDialog({ d, onClose, onDone }: { d: Device; onClose: () => void; onDone: () => void }) {
+  const [protocol, setProtocol] = useState('tcp')
+  const [port, setPort] = useState('')
+  const [toAddr, setToAddr] = useState(d.view.clients[0]?.ip ?? '')
+  const [toPort, setToPort] = useState('')
+  const [comment, setComment] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const num = (s: string) => (/^\d{1,5}$/.test(s.trim()) ? Number(s) : 0)
+  const valid = num(port) >= 1 && num(port) <= 65535 && toAddr !== '' && (toPort.trim() === '' || (num(toPort) >= 1 && num(toPort) <= 65535))
+  const save = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      await api.post(`/api/v1/net-devices/${d.id}/forwards`, { protocol, port: num(port), to_addr: toAddr, to_port: toPort.trim() === '' ? 0 : num(toPort), comment: comment.trim() })
+      onDone()
+      onClose()
+    } catch (e) {
+      setError(why(e))
+      setBusy(false)
+    }
+  }
+  return (
+    <Modal title={t('rt.fwTitle', { name: d.name })} onClose={onClose} busy={busy}>
+      <div className="space-y-3">
+        <div className="flex gap-3">
+          <div>
+            <label htmlFor="fw-proto" className="mb-1.5 block text-[13px] font-medium">{t('rt.fwProto')}</label>
+            <select id="fw-proto" className={inputCls} value={protocol} onChange={(e) => setProtocol(e.target.value)}>
+              <option value="tcp">TCP</option>
+              <option value="udp">UDP</option>
+            </select>
+          </div>
+          <div className="flex-1">
+            <label htmlFor="fw-port" className="mb-1.5 block text-[13px] font-medium">{t('rt.fwPort')}</label>
+            <input id="fw-port" inputMode="numeric" className={inputCls} value={port} maxLength={5} data-autofocus onChange={(e) => setPort(e.target.value)} />
+          </div>
+        </div>
+        <div>
+          <label htmlFor="fw-to" className="mb-1.5 block text-[13px] font-medium">{t('rt.fwTo')}</label>
+          <select id="fw-to" className={inputCls} value={toAddr} onChange={(e) => setToAddr(e.target.value)}>
+            {d.view.clients.map((c) => <option key={c.mac} value={c.ip}>{c.ip}{c.host ? ` · ${c.host}` : ''}</option>)}
+          </select>
+        </div>
+        <div>
+          <label htmlFor="fw-toport" className="mb-1.5 block text-[13px] font-medium">{t('rt.fwToPort')}</label>
+          <input id="fw-toport" inputMode="numeric" className={inputCls} value={toPort} maxLength={5} placeholder={port} onChange={(e) => setToPort(e.target.value)} />
+        </div>
+        <div>
+          <label htmlFor="fw-note" className="mb-1.5 block text-[13px] font-medium">{t('rt.fwNote')}</label>
+          <input id="fw-note" className={inputCls} value={comment} maxLength={80} onChange={(e) => setComment(e.target.value)} />
+        </div>
+        <p className="text-xs text-muted">{t('rt.fwHint')}</p>
+      </div>
+      {busy && <p className="mt-2 text-xs text-muted">{t('rt.fwBusy')}</p>}
+      {error && <p role="alert" className="mt-2 text-xs text-red">{error}</p>}
+      <div className="mt-4 flex gap-2">
+        <PrimaryButton size="m" onClick={save} disabled={busy || !valid}>{t('rt.fwOpen')}</PrimaryButton>
+        <GhostButton size="m" onClick={onClose} disabled={busy}>{t('common.cancel')}</GhostButton>
+      </div>
+    </Modal>
+  )
+}
+
+function DeleteForwardDialog({ d, rule, onClose, onDone }: { d: Device; rule: NatRule; onClose: () => void; onDone: () => void }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const go = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      await api.del(`/api/v1/net-devices/${d.id}/forwards/${rule.ref}`)
+      onDone()
+      onClose()
+    } catch (e) {
+      setError(why(e))
+      setBusy(false)
+    }
+  }
+  const what = `${rule.action}: ${rule.dst_port ? `:${rule.dst_port} → ` : ''}${rule.to_addr ?? ''}${rule.to_ports ? `:${rule.to_ports}` : ''}${rule.comment ? ` (${rule.comment})` : ''}`
+  return (
+    <Modal title={t('rt.fwDelTitle')} onClose={onClose} busy={busy}>
+      <p className="text-[13px]">{what}</p>
+      <p className="mt-2 text-[13px] text-muted">{t('rt.fwDelNote')}</p>
+      {busy && <p className="mt-2 text-xs text-muted">{t('rt.fwBusy')}</p>}
+      {error && <p role="alert" className="mt-2 text-xs text-red">{error}</p>}
+      <div className="mt-4 flex gap-2">
+        <DangerButton size="m" onClick={go} disabled={busy}>{t('rt.fwDel')}</DangerButton>
+        <GhostButton size="m" onClick={onClose} disabled={busy}>{t('common.cancel')}</GhostButton>
+      </div>
+    </Modal>
+  )
+}
+
+function DeviceCard({ d, tz, others, onParent, onRename, onRemove, onPassword, onConfirmFw, onReload }: { d: Device; tz: string; others: Device[]; onParent: (parent: string) => void; onRename: () => void; onRemove: () => void; onPassword: () => void; onConfirmFw: () => void; onReload: () => void }) {
   const v = d.view
+  const [fwOpen, setFwOpen] = useState(false)
+  const [fwDel, setFwDel] = useState<NatRule | null>(null)
   const memPct = v.mem_total > 0 ? Math.round(((v.mem_total - v.mem_free) * 100) / v.mem_total) : null
   const [now] = useState(() => Date.now())
   const [showDown, setShowDown] = useState(false)
@@ -108,6 +204,8 @@ function DeviceCard({ d, tz, others, onParent, onRename, onRemove, onPassword, o
   return (
     <Card title={d.name} note={sub} right={<div className="flex gap-2">{d.kind === 'keenetic' && <GhostButton size="s" onClick={onPassword}>{t('rt.changePass')}</GhostButton>}<GhostButton size="s" onClick={onRename}>{t('rt.rename')}</GhostButton><GhostButton size="s" onClick={onRemove}>{t('rt.remove')}</GhostButton></div>}>
       <div className="space-y-4">
+        {fwOpen && <ForwardDialog d={d} onClose={() => setFwOpen(false)} onDone={onReload} />}
+        {fwDel && <DeleteForwardDialog d={d} rule={fwDel} onClose={() => setFwDel(null)} onDone={onReload} />}
         {(d.new_forwards?.length ?? 0) > 0 && (
           <div role="alert" className="rounded-lg border border-red/40 bg-red/10 p-3 text-[13px]">
             <div className="mb-1 font-medium">{t('rt.newFw')}</div>
@@ -169,15 +267,19 @@ function DeviceCard({ d, tz, others, onParent, onRename, onRemove, onPassword, o
             <p className="mt-1.5 text-xs text-muted">{t('rt.topNote')}</p>
           </div>
         )}
-        {(v.nat?.length ?? 0) > 0 && (
+        {((v.nat?.length ?? 0) > 0 || d.kind === 'keenetic') && (
           <div>
-            <h3 className="mb-1.5 text-[13px] font-medium">{t('rt.nat')}</h3>
+            <div className="mb-1.5 flex items-center justify-between">
+              <h3 className="text-[13px] font-medium">{t('rt.nat')}</h3>
+              {d.kind === 'keenetic' && <GhostButton size="s" onClick={() => setFwOpen(true)}>{t('rt.fwOpen')}</GhostButton>}
+            </div>
             <DataTable caption={t('rt.nat')} rows={v.nat ?? []} rowKey={(x) => `${x.chain}|${x.action}|${x.dst_port ?? ''}|${x.to_addr ?? ''}|${x.comment ?? ''}`} pageSize={12} columns={[
               { key: 'rule', title: t('rt.col.rule'), cell: (x) => <span className="font-medium">{x.chain} · {x.action}</span> },
               { key: 'to', title: t('rt.col.to'), className: 'tnum', cell: (x) => (x.dst_port || x.to_addr || x.to_ports ? `${x.dst_port ? `:${x.dst_port} → ` : ''}${x.to_addr ?? ''}${x.to_ports ? `:${x.to_ports}` : ''}` : '—') },
               { key: 'pk', title: t('rt.col.hits'), align: 'right', className: 'tnum', sort: (x) => x.packets, descFirst: true, cell: (x) => (x.packets < 0 ? '—' : x.packets) },
               { key: 'by', title: t('rt.col.bytes'), align: 'right', className: 'tnum', sort: (x) => x.bytes, descFirst: true, cell: (x) => (x.bytes < 0 ? '—' : formatBytes(x.bytes)) },
               { key: 'cm', title: t('rt.col.note'), cell: (x) => x.comment || '—' },
+              ...(d.kind === 'keenetic' ? [{ key: 'del', title: '', align: 'right' as const, cell: (x: NatRule) => (x.ref ? <GhostButton size="s" onClick={() => setFwDel(x)}>{t('rt.fwDel')}</GhostButton> : null) }] : []),
             ]} />
           </div>
         )}
@@ -330,7 +432,7 @@ export default function Routers() {
       {parentError && <p role="alert" className="text-[13px] text-red">{parentError}</p>}
       {!data && !error && <Skeleton className="h-40" />}
       {data && data.devices.length === 0 && <p className="text-[13px] text-muted">{t('rt.empty')}</p>}
-      {data?.devices.map((d) => <DeviceCard key={d.id} d={d} tz={filters.tz} others={data.devices.filter((o) => o.id !== d.id)} onParent={(p) => void setParent(d.id, p)} onRename={() => setRenaming(d)} onRemove={() => setRemoving(d)} onPassword={() => setPasswording(d)} onConfirmFw={() => void confirmFw(d.id)} />)}
+      {data?.devices.map((d) => <DeviceCard key={d.id} d={d} tz={filters.tz} others={data.devices.filter((o) => o.id !== d.id)} onParent={(p) => void setParent(d.id, p)} onRename={() => setRenaming(d)} onRemove={() => setRemoving(d)} onPassword={() => setPasswording(d)} onConfirmFw={() => void confirmFw(d.id)} onReload={reload} />)}
       {passwording && <PasswordDialog d={passwording} onClose={() => setPasswording(null)} onDone={reload} />}
       {renaming && <RenameDialog d={renaming} onClose={() => setRenaming(null)} onDone={reload} />}
       {adding && <NewDialog onClose={() => setAdding(false)} onMade={reload} />}

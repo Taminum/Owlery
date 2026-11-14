@@ -94,3 +94,18 @@ func (s *Store) ConfirmForwards(ctx context.Context, id string) error {
 	_, err = s.pool.Exec(ctx, `UPDATE net_forwards SET confirmed=true WHERE device_id=$1`, vid)
 	return err
 }
+
+// AllowForward records a rule as known: the owner made it themselves, so no alert is due.
+func (s *Store) AllowForward(ctx context.Context, id string, n netdev.NatRule) error {
+	vid, err := ParseID(id)
+	if err != nil {
+		return ErrNotFound
+	}
+	raw, err := json.Marshal(n)
+	if err != nil {
+		return err
+	}
+	_, err = s.pool.Exec(ctx, `INSERT INTO net_forwards (device_id, key, rule, confirmed) VALUES ($1,$2,$3,true)
+ON CONFLICT (device_id, key) DO UPDATE SET confirmed=true`, vid, forwardKey(n), raw)
+	return err
+}

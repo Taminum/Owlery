@@ -1,6 +1,7 @@
 // Package keenetic asks a Keenetic router how it is doing, through its web interface (RCI), which is the same address the
-// router has under its KeenDNS name. Only the read-only "show" commands are ever sent, and only a fixed few of them: the
-// router also has commands that would hand out the password hashes of its users, and those are never asked for.
+// router has under its KeenDNS name. Reading uses only a fixed few read-only "show" commands: the router also has commands
+// that would hand out the password hashes of its users, and those are never asked for. The only writes are in forward.go:
+// one port forward added or removed, in a fixed shape, at the owner's request.
 package keenetic
 
 import (
@@ -49,6 +50,16 @@ func Code(err error) string {
 		return ""
 	case errors.Is(err, ErrAuth):
 		return "auth"
+	case errors.Is(err, ErrForbidden):
+		return "forbidden"
+	case errors.Is(err, ErrRejected):
+		return "rejected"
+	case errors.Is(err, ErrUnknownHost):
+		return "unknown_host"
+	case errors.Is(err, ErrPortTaken):
+		return "port_taken"
+	case errors.Is(err, ErrMissing):
+		return "missing"
 	case errors.Is(err, ErrUnreachable):
 		return "unreachable"
 	default:
@@ -255,6 +266,7 @@ type forwardResp struct {
 	Protocol  string `json:"protocol"`
 	Port      text   `json:"port"`
 	ToPort    text   `json:"to-port"`
+	Index     string `json:"index"`
 	ToHost    string `json:"to-host"`
 	ToAddress string `json:"to-address"`
 	Comment   string `json:"comment"`
@@ -393,7 +405,7 @@ func (c *Client) Poll(ctx context.Context) (netdev.Report, error) {
 				tp = string(f.Port)
 			}
 			r.Nat = append(r.Nat, netdev.NatRule{Chain: "dstnat", Action: "forward " + netdev.Clean(f.Protocol, 8), Packets: -1, Bytes: -1,
-				DstPort: netdev.Clean(string(f.Port), 40), ToAddr: netdev.Clean(to, 60), ToPorts: netdev.Clean(tp, 40), Comment: netdev.Clean(f.Comment, 80)})
+				DstPort: netdev.Clean(string(f.Port), 40), ToAddr: netdev.Clean(to, 60), ToPorts: netdev.Clean(tp, 40), Comment: netdev.Clean(f.Comment, 80), Ref: netdev.Clean(f.Index, 64)})
 		}
 	} else if errors.Is(err, ErrAuth) {
 		return netdev.Report{}, err

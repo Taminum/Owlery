@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from '../lib/auth'
 import { setCsrf } from '../lib/api'
@@ -207,6 +207,46 @@ describe('Роутеры: Keenetic', () => {
     fireEvent.change(screen.getByLabelText('Новый пароль'), { target: { value: 'fresh' } })
     fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }))
     await vi.waitFor(() => expect(sent).toBe('{"password":"fresh"}'))
+  })
+
+  it('opens a port on a Keenetic and takes one away, and says why when the router refuses', async () => {
+    const calls: string[] = []
+    let refuse = true
+    const nat = [{ chain: 'dstnat', action: 'forward tcp', packets: -1, bytes: -1, dst_port: '8001', to_addr: '192.168.88.20', to_ports: '8001', comment: 'NVR', ref: 'ab12' }, { chain: 'dstnat', action: 'upnp udp', packets: 1, bytes: 2, dst_port: '5000', to_addr: '192.168.88.20', comment: 'app' }]
+    const k = device({ id: 'k1', name: 'Рабочий', kind: 'keenetic', url: 'https://p.keenetic.pro' })
+    ;(k.view as { nat?: unknown }).nat = nat
+    mockApi({
+      me: owner,
+      handler: (r) => {
+        if (r.path === '/api/v1/net-devices/k1/forwards' && r.method === 'POST') {
+          calls.push('POST ' + JSON.stringify(r.body))
+          if (refuse) { refuse = false; return { status: 422, body: { code: 'forbidden', message: 'x', request_id: 'r' } } }
+          return { status: 204 }
+        }
+        if (r.path === '/api/v1/net-devices/k1/forwards/ab12' && r.method === 'DELETE') { calls.push('DELETE'); return { status: 204 } }
+        if (r.path === '/api/v1/net-devices') return { status: 200, body: { devices: [k] } }
+        return undefined
+      },
+    })
+    renderPage()
+    await screen.findByText('Рабочий')
+    expect(screen.getAllByRole('button', { name: 'Закрыть порт' })).toHaveLength(1) // only the forward Owlery may remove, not the UPnP one
+    fireEvent.click(screen.getByRole('button', { name: 'Открыть порт' }))
+    const dialog = within(screen.getByRole('dialog'))
+    const open = dialog.getByRole('button', { name: 'Открыть порт' })
+    expect(open).toBeDisabled()
+    fireEvent.change(screen.getByLabelText('Порт снаружи'), { target: { value: '8080' } })
+    fireEvent.change(screen.getByLabelText('Порт на устройстве (если другой)'), { target: { value: '80' } })
+    fireEvent.change(screen.getByLabelText('Заметка'), { target: { value: 'web' } })
+    fireEvent.click(open)
+    expect(await screen.findByText(/нет права менять настройки/)).toBeInTheDocument()
+    fireEvent.click(open)
+    await vi.waitFor(() => expect(calls).toHaveLength(2))
+    expect(calls[1]).toBe('POST {"protocol":"tcp","port":8080,"to_addr":"192.168.88.20","to_port":80,"comment":"web"}')
+    await vi.waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    fireEvent.click(screen.getByRole('button', { name: 'Закрыть порт' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Закрыть порт' }))
+    await vi.waitFor(() => expect(calls.at(-1)).toBe('DELETE'))
   })
 
   it('offers a password change only for a router that is asked', async () => {

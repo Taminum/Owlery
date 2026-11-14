@@ -51,6 +51,7 @@ type NatRule struct {
 	ToAddr  string `json:"to_addr,omitempty"`
 	ToPorts string `json:"to_ports,omitempty"`
 	Comment string `json:"comment,omitempty"`
+	Ref     string `json:"ref,omitempty"` // the router's own number for a forward Owlery may remove (Keenetic)
 }
 
 // Report is one piece or the whole of what a device said. A piece without "cpu" carries no statistics (only clients, perhaps).
