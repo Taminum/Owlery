@@ -13,6 +13,7 @@ export const notifyTuneText = {
   'ntf.g.dns': 'DNS (изменения и сбои проверки)',
   'ntf.g.users': 'Подписки и трафик пользователей',
   'ntf.g.billing': 'Оплаты серверов',
+  'ntf.g.home': 'Дом (Proxmox: гости, диски, бэкапы, Tailscale)',
   'ntf.tune.resolved': 'Сообщать, когда проблема закрылась («Закрыто: …»)',
   'ntf.tune.quiet': 'Тихие часы: не беспокоить, кроме срочного',
   'ntf.tune.from': 'С',
