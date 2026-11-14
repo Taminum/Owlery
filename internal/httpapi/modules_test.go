@@ -2,7 +2,7 @@ package httpapi
 
 import "testing"
 
-func TestModulesOnByDefaultOwnerTurnsThemOff(t *testing.T) {
+func TestModulesOnByDefaultExceptProxmoxOwnerTurnsThemOff(t *testing.T) {
 	w := newAgentWorld(t)
 	type list struct {
 		Modules []struct {
@@ -18,8 +18,8 @@ func TestModulesOnByDefaultOwnerTurnsThemOff(t *testing.T) {
 		}
 		return out
 	}
-	if s := state(); len(s) != 5 || !s["awg"] || !s["remnawave"] {
-		t.Fatalf("everything starts on: %v", s)
+	if s := state(); len(s) != 6 || !s["awg"] || !s["remnawave"] || s["proxmox"] {
+		t.Fatalf("everything starts on except Proxmox, which needs setting up: %v", s)
 	}
 	if st, _ := w.adm.do("PUT", "/api/v1/modules/awg", map[string]any{"enabled": false}); st != 403 {
 		t.Errorf("an admin may not switch modules: %d", st)

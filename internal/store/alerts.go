@@ -26,6 +26,12 @@ const (
 	AlertSubLeak     = "sub_leak"     // a subscription was asked for from so many different addresses that it has likely been passed on
 	AlertTorrent     = "torrent"      // the torrent blocker of a node caught a subscription again and again
 
+	// Proxmox at home (an optional module). They belong to no panel: they are the owner's.
+	AlertPVEGuest     = "pve_guest"     // a guest that was running has stopped
+	AlertPVEDisk      = "pve_disk"      // a guest's disk or a storage is nearly full, or will be soon
+	AlertPVEBackup    = "pve_backup"    // the backup job failed, or a guest has not been backed up for days
+	AlertPVETailscale = "pve_tailscale" // a running guest has dropped out of Tailscale
+
 	// DNS Map. These belong to no panel: they are the owner's.
 	AlertDNSFailed = "dns_check_failed" // the last run could not settle even the apex's basic records
 	AlertDNSChange = "dns_change"       // an important record changed in the last day, confirmed by two resolvers

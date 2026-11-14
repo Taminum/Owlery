@@ -218,6 +218,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/subscriptions", s.session(s.subscriptions))
 	mux.Handle("GET /api/v1/subscriptions/leaks", s.session(s.subscriptionLeaks))
 	mux.Handle("GET /api/v1/subscriptions/leaks/ips", s.session(s.subscriptionLeakIPs))
+	mux.Handle("GET /api/v1/home/proxmox", s.session(s.proxmoxHome))
 	mux.Handle("GET /api/v1/subscriptions/torrents", s.session(s.subscriptionTorrents))
 	mux.Handle("GET /api/v1/subscriptions/devices", s.session(s.subscriptionDevices))
 	mux.Handle("GET /api/v1/modules", s.session(s.moduleList))

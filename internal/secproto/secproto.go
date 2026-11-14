@@ -344,6 +344,72 @@ type HostProc struct {
 	RSS   int64   `json:"rss"`         // resident memory in bytes
 }
 
+// --- Proxmox ----------------------------------------------------------------------------------------
+//
+// An agent that runs on a Proxmox host and has been given a read-only API token also tells how the host and its guests
+// are doing. Like the host reading it carries no sequence number and is not acknowledged: the server keeps the last one
+// as the current state and a thin series for trends.
+
+// CapProxmox is announced by an agent that reads a Proxmox host.
+const CapProxmox = "proxmox"
+
+const (
+	MaxPVEGuests   = 200
+	MaxPVEStorages = 32
+	MaxPVEBytes    = 256 << 10
+)
+
+// PVEGuest is one container (lxc) or virtual machine (qemu).
+type PVEGuest struct {
+	ID       int     `json:"id"`
+	Kind     string  `json:"kind"` // lxc | qemu
+	Name     string  `json:"name"`
+	Status   string  `json:"status"` // running | stopped | ...
+	CPUs     int     `json:"cpus,omitempty"`
+	CPUPct   float64 `json:"cpu"`
+	MemUsed  int64   `json:"mem"`
+	MemTotal int64   `json:"mem_max"`
+	DiskUsed int64   `json:"disk"`
+	DiskMax  int64   `json:"disk_max"`
+	Uptime   int64   `json:"up"`
+	LAN      string  `json:"lan,omitempty"`    // address in the home network
+	Tailnet  string  `json:"ts,omitempty"`     // Tailscale address
+	TSOnline *bool   `json:"ts_up,omitempty"`  // nil when Tailscale on the host does not know the guest
+	Backup   int64   `json:"backup,omitempty"` // unix time of the newest backup of this guest, 0 when none
+	Template bool    `json:"tmpl,omitempty"`
+}
+
+// PVEStorage is one storage of the node.
+type PVEStorage struct {
+	Name    string `json:"name"`
+	Type    string `json:"type,omitempty"`
+	Used    int64  `json:"used"`
+	Total   int64  `json:"total"`
+	Backups bool   `json:"backups,omitempty"` // takes backups
+	Active  bool   `json:"active"`
+}
+
+// Proxmox is what one reading of a Proxmox host says.
+type Proxmox struct {
+	Type         string       `json:"type"` // "proxmox"
+	At           time.Time    `json:"at"`
+	Version      string       `json:"version,omitempty"`
+	Node         string       `json:"node"`
+	Online       bool         `json:"online"`
+	CPUs         int          `json:"cpus,omitempty"`
+	CPUPct       float64      `json:"cpu"`
+	MemUsed      int64        `json:"mem"`
+	MemTotal     int64        `json:"mem_max"`
+	DiskUsed     int64        `json:"disk"`
+	DiskTotal    int64        `json:"disk_max"`
+	Uptime       int64        `json:"up"`
+	Tailnet      string       `json:"ts,omitempty"`
+	LastBackupOK *bool        `json:"backup_ok,omitempty"` // how the newest backup job ended, nil when none ran lately
+	LastBackupAt int64        `json:"backup_at,omitempty"` // unix time it ended
+	Guests       []PVEGuest   `json:"guests"`
+	Storages     []PVEStorage `json:"storages"`
+}
+
 // CapShell is announced by an agent whose machine allows a terminal: on Linux a root helper is installed next to the
 // agent (the agent itself is not root), on Windows the agent was installed with -allow-shell.
 const CapShell = "shell"

@@ -12,6 +12,7 @@ import Devices from './pages/Devices'
 import Digest from './pages/Digest'
 import Awg from './pages/Awg'
 import Billing from './pages/Billing'
+import ProxmoxPage from './pages/Proxmox'
 import Servers from './pages/Servers'
 import ServerCard from './pages/ServerCard'
 import Start from './pages/Start'
@@ -51,6 +52,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="security/:id" element={<SecurityDetail />} />
             <Route path="awg" element={<Awg />} />
             <Route path="billing" element={<Billing />} />
+            <Route path="proxmox" element={<ProxmoxPage />} />
             <Route path="hosts" element={<Navigate to="/servers?view=load" replace />} />
             <Route path="servers" element={<Servers />} />
             <Route path="servers/:id" element={<ServerCard />} />

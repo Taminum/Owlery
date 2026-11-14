@@ -1,13 +1,13 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import { api } from './api'
 
-export type ModuleId = 'remnawave' | 'awg' | 'security' | 'intel' | 'billing'
-export const MODULES: ModuleId[] = ['remnawave', 'awg', 'security', 'intel', 'billing']
+export type ModuleId = 'remnawave' | 'awg' | 'security' | 'intel' | 'billing' | 'proxmox'
+export const MODULES: ModuleId[] = ['remnawave', 'awg', 'security', 'intel', 'billing', 'proxmox']
 
 interface ModuleState { id: ModuleId; enabled: boolean }
 
 // Which optional parts are on. Until the server answers everything counts as on, so the menu never flickers away.
-let off = new Set<ModuleId>()
+let off = new Set<ModuleId>(['proxmox']) // needs setting up first: off until the server says otherwise
 let loaded = false
 let loading = false
 const listeners = new Set<() => void>()

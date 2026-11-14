@@ -19,7 +19,7 @@ const (
 	PanelFailures = 3
 )
 
-var Kinds = []string{store.AlertAgentSilent, store.AlertPanelSync, store.AlertProbeDown, store.AlertSecAgent, store.AlertSecTLS, store.AlertSecPort, store.AlertDNSFailed, store.AlertDNSChange, store.AlertUserExpiry, store.AlertUserTraffic, store.AlertSubLeak, store.AlertTorrent, store.AlertBillDue, store.AlertAWGDown, store.AlertAWGToolsOld, store.AlertHostDisk, store.AlertHostDiskForecast, store.AlertHostCPU, store.AlertHostMem, store.AlertHostFlood, store.AlertHostContainer, store.AlertHostContainerDown, store.AlertPanelBackup, store.AlertNetDown, store.AlertNetConnFull, store.AlertLANNew}
+var Kinds = []string{store.AlertAgentSilent, store.AlertPanelSync, store.AlertProbeDown, store.AlertSecAgent, store.AlertSecTLS, store.AlertSecPort, store.AlertDNSFailed, store.AlertDNSChange, store.AlertUserExpiry, store.AlertUserTraffic, store.AlertSubLeak, store.AlertTorrent, store.AlertBillDue, store.AlertAWGDown, store.AlertAWGToolsOld, store.AlertHostDisk, store.AlertHostDiskForecast, store.AlertHostCPU, store.AlertHostMem, store.AlertHostFlood, store.AlertHostContainer, store.AlertHostContainerDown, store.AlertPanelBackup, store.AlertNetDown, store.AlertNetConnFull, store.AlertLANNew, store.AlertPVEGuest, store.AlertPVEDisk, store.AlertPVEBackup, store.AlertPVETailscale}
 
 // ProbeFailures is how many probes in a row must fail before a channel counts as down: one lost
 // packet is not an outage.
@@ -123,6 +123,10 @@ func Evaluate(ctx context.Context, st *store.Store, now time.Time) (opened, clos
 	if err != nil {
 		return 0, 0, err
 	}
+	pve, err := PVEFromStore(ctx, st, now)
+	if err != nil {
+		return 0, 0, err
+	}
 	bills, err := st.BillDueStates(ctx)
 	if err != nil {
 		return 0, 0, err
@@ -152,6 +156,7 @@ func Evaluate(ctx context.Context, st *store.Store, now time.Time) (opened, clos
 	conds = append(conds, UserConditions(users, now)...)
 	conds = append(conds, SubLeakConditions(leaks)...)
 	conds = append(conds, TorrentConditions(torrents)...)
+	conds = append(conds, pve...)
 	conds = append(conds, BillConditions(bills, now)...)
 	last, lastOK, err := st.BackupAlertState(ctx)
 	if err != nil {
