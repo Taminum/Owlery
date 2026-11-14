@@ -41,6 +41,8 @@ type NetDevice struct {
 	ParentID  *string    `json:"parent_id"` // the router this one stands behind; nil for the router at the edge of a network
 	Online    bool       `json:"online"`    // heard from in the last five minutes
 	View      NetView    `json:"view"`
+	PullURL   string     `json:"url,omitempty"`        // the address Owlery asks, for a router that is asked
+	PullError string     `json:"pull_error,omitempty"` // why the last ask failed: unreachable, auth or unexpected
 }
 
 const netOnlineWithin = 5 * time.Minute
@@ -80,7 +82,7 @@ func (s *Store) CreateNetDevice(ctx context.Context, name, kind string, tokenHas
 }
 
 func (s *Store) ListNetDevices(ctx context.Context, now time.Time) ([]NetDevice, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id, name, kind, created_at, last_seen, last, parent_id FROM net_devices WHERE archived_at IS NULL ORDER BY lower(name)`)
+	rows, err := s.pool.Query(ctx, `SELECT id, name, kind, created_at, last_seen, last, parent_id, COALESCE(pull_url,''), COALESCE(pull_error,'') FROM net_devices WHERE archived_at IS NULL ORDER BY lower(name)`)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +93,7 @@ func (s *Store) ListNetDevices(ctx context.Context, now time.Time) ([]NetDevice,
 		var id uuid.UUID
 		var raw []byte
 		var parent *uuid.UUID
-		if err := rows.Scan(&id, &d.Name, &d.Kind, &d.CreatedAt, &d.LastSeen, &raw, &parent); err != nil {
+		if err := rows.Scan(&id, &d.Name, &d.Kind, &d.CreatedAt, &d.LastSeen, &raw, &parent, &d.PullURL, &d.PullError); err != nil {
 			return nil, err
 		}
 		d.ID, d.View = id.String(), decodeView(raw)
@@ -282,7 +284,7 @@ func (s *Store) SaveNetReport(ctx context.Context, id string, r netdev.Report, n
 		if err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, `UPDATE net_devices SET last=$2, counters=$3, last_seen=$4 WHERE id=$1`, vid, nraw, ncraw, now)
+		_, err = tx.Exec(ctx, `UPDATE net_devices SET last=$2, counters=$3, last_seen=$4, pull_error=NULL, pull_error_at=NULL WHERE id=$1`, vid, nraw, ncraw, now)
 		return err
 	})
 }

@@ -1,10 +1,18 @@
 package httpapi
 
 import (
+	"bytes"
+	"crypto/md5" //nolint:gosec
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/Taminum/Owlery/internal/keenetic"
+	"github.com/Taminum/Owlery/internal/store"
 )
 
 func TestRouterReportsThroughItsTokenAndTheOwnerSeesPortsClientsAndSpeeds(t *testing.T) {
@@ -213,4 +221,138 @@ func TestARouterCanStandBehindAnotherButNotInALoop(t *testing.T) {
 	if set(b, "") != 204 {
 		t.Fatal("clear")
 	}
+}
+
+// fakeKeenetic answers like a Keenetic router whose "Test" user has the password "pw".
+func fakeKeenetic(t *testing.T) *httptest.Server {
+	t.Helper()
+	const realm, challenge = "Keenetic Sprinter", "CH"
+	return httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/auth" {
+			if r.Method == http.MethodGet {
+				w.Header().Set("X-NDM-Challenge", challenge)
+				w.Header().Set("X-NDM-Realm", realm)
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			var in struct{ Login, Password string }
+			_ = json.NewDecoder(r.Body).Decode(&in)
+			m := md5.Sum([]byte("Test:" + realm + ":pw")) //nolint:gosec
+			s := sha256.Sum256([]byte(challenge + hex.EncodeToString(m[:])))
+			if in.Login != "Test" || in.Password != hex.EncodeToString(s[:]) {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			http.SetCookie(w, &http.Cookie{Name: "ok", Value: "1", Path: "/", Secure: true})
+			return
+		}
+		if c, err := r.Cookie("ok"); err != nil || c.Value != "1" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.RequestURI() {
+		case "/rci/show/version":
+			_, _ = w.Write([]byte(`{"title":"4.3.6.3","model":"Sprinter (KN-3710)"}`))
+		case "/rci/show/system":
+			_, _ = w.Write([]byte(`{"cpuload":12,"memtotal":1000,"memfree":100,"uptime":"500","conntotal":100,"connfree":90}`))
+		case "/rci/show/ip/hotspot":
+			_, _ = w.Write([]byte(`{"host":[{"mac":"e8:6a:64:7e:0a:b8","ip":"192.168.0.90","hostname":"Desk","active":true}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+}
+
+func TestAKeeneticIsCheckedStoredSealedAndAskedByTheOwnersWord(t *testing.T) {
+	w := newWorld(t)
+	router := fakeKeenetic(t)
+	defer router.Close()
+	w.h.srv.KeeneticClient = func(base, login, password string) (*keenetic.Client, error) {
+		c, err := keenetic.New(base, login, password)
+		if c != nil {
+			c.HTTP = router.Client()
+		}
+		return c, err
+	}
+	add := func(c *client, body map[string]any) (int, []byte) { return c.do("POST", "/api/v1/net-devices", body) }
+	good := map[string]any{"name": "Рабочий", "kind": "keenetic", "url": router.URL, "login": "Test", "password": "pw"}
+	if st, _ := add(w.viewer, good); st != 403 {
+		t.Fatalf("a viewer must not add a router: %d", st)
+	}
+	bad := map[string]any{"name": "Рабочий", "kind": "keenetic", "url": router.URL, "login": "Test", "password": "nope"}
+	if st, b := add(w.owner, bad); st != 422 || !strings.Contains(string(b), "router_auth") {
+		t.Fatalf("a wrong password is told apart: %d %s", st, b)
+	}
+	for _, in := range []map[string]any{
+		{"name": "x", "kind": "keenetic", "url": "http://plain.example", "login": "Test", "password": "pw"},
+		{"name": "x", "kind": "keenetic", "url": router.URL, "login": "", "password": "pw"},
+	} {
+		if st, _ := add(w.owner, in); st != 422 {
+			t.Errorf("%v: %d", in, st)
+		}
+	}
+	_, b := w.owner.get("/api/v1/net-devices")
+	if strings.Contains(string(b), "Рабочий") {
+		t.Fatalf("a router that failed the check must not be kept: %s", b)
+	}
+	st, b := add(w.owner, good)
+	if st != 201 {
+		t.Fatalf("%d %s", st, b)
+	}
+	if strings.Contains(string(b), `"pw"`) || strings.Contains(string(b), "token") || strings.Contains(string(b), "password") {
+		t.Fatalf("the password must never come back: %s", b)
+	}
+	var made struct {
+		Device struct {
+			ID string `json:"id"`
+		} `json:"device"`
+	}
+	_ = json.Unmarshal(b, &made)
+	_, b = w.owner.get("/api/v1/net-devices")
+	for _, want := range []string{`"name":"Рабочий"`, `"kind":"keenetic"`, `"board":"Sprinter (KN-3710)"`, `"host":"Desk"`, `"online":true`, `"url":"` + router.URL + `"`} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("%s is missing: %s", want, b)
+		}
+	}
+	if st, _ := add(w.owner, good); st != 409 {
+		t.Errorf("the same name twice: %d", st)
+	}
+	pulls, err := w.h.st.PullDevices(ctx)
+	if err != nil || len(pulls) != 1 {
+		t.Fatalf("%v %v", err, pulls)
+	}
+	if bytes.Contains(pulls[0].Sealed.Ciphertext, []byte("pw")) || pulls[0].Login != "Test" {
+		t.Fatalf("the password is kept sealed: %+v", pulls[0])
+	}
+	if pw, err := w.h.ring.Open(store.NetPullAAD(made.Device.ID), pulls[0].Sealed); err != nil || string(pw) != "pw" {
+		t.Fatalf("the sealed password must open for this router only: %v", err)
+	}
+	if _, err := w.h.ring.Open(store.NetPullAAD("another"), pulls[0].Sealed); err == nil {
+		t.Fatal("a password sealed for one router must not open for another")
+	}
+	// A new password is checked before it replaces the old one.
+	if st, b := w.owner.do("PATCH", "/api/v1/net-devices/"+made.Device.ID, map[string]any{"password": "wrong"}); st != 422 {
+		t.Fatalf("a wrong new password: %d %s", st, b)
+	}
+	if pw, _ := w.h.ring.Open(store.NetPullAAD(made.Device.ID), mustPull(t, w.h.st).Sealed); string(pw) != "pw" {
+		t.Fatal("the old password must stay when the new one is refused")
+	}
+	if st, b := w.owner.do("PATCH", "/api/v1/net-devices/"+made.Device.ID, map[string]any{"password": "pw"}); st != 204 {
+		t.Fatalf("the right password: %d %s", st, b)
+	}
+	// The poller cannot reach a router on this machine: that is told on the page, and nothing else changes.
+	(&keenetic.Runner{St: w.h.st, Ring: w.h.ring}).Once(ctx)
+	_, b = w.owner.get("/api/v1/net-devices")
+	if !strings.Contains(string(b), `"pull_error":"unreachable"`) {
+		t.Errorf("the failure is not shown: %s", b)
+	}
+}
+
+func mustPull(t *testing.T, st *store.Store) store.PullDevice {
+	t.Helper()
+	p, err := st.PullDevices(ctx)
+	if err != nil || len(p) != 1 {
+		t.Fatalf("%v %v", err, p)
+	}
+	return p[0]
 }

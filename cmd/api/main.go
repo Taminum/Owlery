@@ -28,6 +28,7 @@ import (
 	"github.com/Taminum/Owlery/internal/geoip"
 	"github.com/Taminum/Owlery/internal/httpapi"
 	"github.com/Taminum/Owlery/internal/ingest"
+	"github.com/Taminum/Owlery/internal/keenetic"
 	"github.com/Taminum/Owlery/internal/keyrotate"
 	"github.com/Taminum/Owlery/internal/live"
 	"github.com/Taminum/Owlery/internal/netintel"
@@ -196,6 +197,7 @@ func serve(log *slog.Logger) error {
 		go sy.RunProtection(ctx, 10*time.Minute)
 	}
 	go alerts.Run(ctx, st, time.Minute, log)
+	go (&keenetic.Runner{St: st, Ring: ring, Log: log}).Run(ctx, time.Minute)
 	go srv.WarmAnalytics(ctx)
 	go func() { // the half-hour sums the overview reads; while the past is still being filled, without the minute's pause
 		t := time.NewTimer(20 * time.Second)

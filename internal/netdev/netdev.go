@@ -111,6 +111,10 @@ func fromCP1251(s string) string {
 	return b.String()
 }
 
+// Clean makes text from a device fit to show: control characters become spaces, the length is cut to n bytes without
+// splitting a letter.
+func Clean(s string, n int) string { return clean(s, n) }
+
 func clean(s string, n int) string {
 	if !utf8.ValidString(s) {
 		s = fromCP1251(s)

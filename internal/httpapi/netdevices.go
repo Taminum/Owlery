@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"crypto/subtle"
 	"errors"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Taminum/Owlery/internal/auth"
+	"github.com/Taminum/Owlery/internal/keenetic"
 	"github.com/Taminum/Owlery/internal/netdev"
 	"github.com/Taminum/Owlery/internal/store"
 )
@@ -184,7 +186,120 @@ cp /tmp/owlery-cron /etc/crontabs/root && rm -f /tmp/owlery-cron
 `
 
 // deviceKinds are the kinds of network device that can be added.
-var deviceKinds = map[string]bool{"mikrotik": true, "openwrt": true}
+var deviceKinds = map[string]bool{"mikrotik": true, "openwrt": true, store.KindKeenetic: true}
+
+func (s *Server) newKeenetic(base, login, password string) (*keenetic.Client, error) {
+	if s.KeeneticClient != nil {
+		return s.KeeneticClient(base, login, password)
+	}
+	return keenetic.New(base, login, password)
+}
+
+// routerCredentials checks the login and password typed for a router that is asked.
+func (s *Server) routerCredentials(w http.ResponseWriter, r *http.Request, login, password string) bool {
+	if l := strings.TrimSpace(login); l == "" || len(l) > 64 || password == "" || len(password) > 128 {
+		s.writeErr(w, r, http.StatusUnprocessableEntity, "invalid_credentials", "a login (up to 64 characters) and a password (up to 128) are required")
+		return false
+	}
+	return true
+}
+
+// tryRouter signs in to the router with what was typed and reads it once. When that fails the answer says why.
+func (s *Server) tryRouter(w http.ResponseWriter, r *http.Request, base, login, password string) (netdev.Report, bool) {
+	c, err := s.newKeenetic(base, login, password)
+	if err != nil {
+		s.writeErr(w, r, http.StatusUnprocessableEntity, "invalid_url", "the address must be https://name or https://name:port")
+		return netdev.Report{}, false
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 40*time.Second)
+	defer cancel()
+	rep, err := c.Poll(ctx)
+	if err != nil {
+		s.writeErr(w, r, http.StatusUnprocessableEntity, "router_"+keenetic.Code(err), "the router could not be read: "+keenetic.Code(err))
+		return netdev.Report{}, false
+	}
+	return rep, true
+}
+
+// createKeenetic adds a router that Owlery asks. The password is checked against the router first and then kept sealed.
+func (s *Server) createKeenetic(w http.ResponseWriter, r *http.Request, a auth.Actor, name, rawURL, login, password string) {
+	if s.Ring == nil {
+		s.writeErr(w, r, http.StatusServiceUnavailable, "no_keys", "no master key is configured")
+		return
+	}
+	base, err := keenetic.ParseBase(rawURL)
+	if err != nil {
+		s.writeErr(w, r, http.StatusUnprocessableEntity, "invalid_url", "the address must be https://name or https://name:port")
+		return
+	}
+	login = strings.TrimSpace(login)
+	if !s.routerCredentials(w, r, login, password) {
+		return
+	}
+	rep, ok := s.tryRouter(w, r, base, login, password)
+	if !ok {
+		return
+	}
+	id := store.NewNetDeviceID()
+	sealed, err := s.Ring.Seal(store.NetPullAAD(id), []byte(password))
+	if err != nil {
+		s.writeErr(w, r, http.StatusInternalServerError, "internal", "internal error")
+		return
+	}
+	d, err := s.Store.CreatePullDevice(r.Context(), id, name, store.KindKeenetic, base, login, sealed, rep, time.Now().UTC())
+	switch {
+	case errors.Is(err, store.ErrConflict):
+		s.writeErr(w, r, http.StatusConflict, "name_taken", "a device with this name already exists")
+		return
+	case err != nil:
+		s.writeErr(w, r, http.StatusInternalServerError, "internal", "internal error")
+		return
+	}
+	s.audit(r, a, "", "netdevice.create", "netdevice", d.ID, map[string]any{"name": d.Name, "kind": d.Kind, "url": base})
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusCreated, map[string]any{"device": d})
+}
+
+// changeRouterPassword gives a router that is asked a new password, after checking that the router accepts it.
+func (s *Server) changeRouterPassword(w http.ResponseWriter, r *http.Request, a auth.Actor, id, password string) bool {
+	if s.Ring == nil {
+		s.writeErr(w, r, http.StatusServiceUnavailable, "no_keys", "no master key is configured")
+		return false
+	}
+	devs, err := s.Store.PullDevices(r.Context())
+	if err != nil {
+		s.writeErr(w, r, http.StatusInternalServerError, "internal", "internal error")
+		return false
+	}
+	var dev *store.PullDevice
+	for i := range devs {
+		if devs[i].ID == id {
+			dev = &devs[i]
+		}
+	}
+	if dev == nil {
+		s.writeErr(w, r, http.StatusNotFound, "not_found", "no such router that is asked for its state")
+		return false
+	}
+	if !s.routerCredentials(w, r, dev.Login, password) {
+		return false
+	}
+	rep, ok := s.tryRouter(w, r, dev.URL, dev.Login, password)
+	if !ok {
+		return false
+	}
+	sealed, err := s.Ring.Seal(store.NetPullAAD(id), []byte(password))
+	if err == nil {
+		err = s.Store.SetPullSecret(r.Context(), id, sealed)
+	}
+	if err != nil {
+		s.writeErr(w, r, http.StatusInternalServerError, "internal", "internal error")
+		return false
+	}
+	_ = s.Store.SaveNetReport(r.Context(), id, rep, time.Now().UTC())
+	s.audit(r, a, "", "netdevice.password", "netdevice", id, nil)
+	return true
+}
 
 // buildDeviceScript is what the page shows the owner once, with the token worked in.
 func buildDeviceScript(kind, host, token string) string {
@@ -257,8 +372,11 @@ func (s *Server) createNetDevice(w http.ResponseWriter, r *http.Request, a auth.
 		return
 	}
 	var in struct {
-		Name string `json:"name"`
-		Kind string `json:"kind"`
+		Name     string `json:"name"`
+		Kind     string `json:"kind"`
+		URL      string `json:"url"`
+		Login    string `json:"login"`
+		Password string `json:"password"`
 	}
 	if !s.decode(w, r, &in) {
 		return
@@ -272,6 +390,10 @@ func (s *Server) createNetDevice(w http.ResponseWriter, r *http.Request, a auth.
 	}
 	if !deviceKinds[in.Kind] {
 		s.writeErr(w, r, http.StatusUnprocessableEntity, "invalid_kind", "unknown kind of device")
+		return
+	}
+	if in.Kind == store.KindKeenetic {
+		s.createKeenetic(w, r, a, in.Name, in.URL, in.Login, in.Password)
 		return
 	}
 	secret, err := auth.NewToken()
@@ -302,6 +424,7 @@ func (s *Server) renameNetDevice(w http.ResponseWriter, r *http.Request, a auth.
 	var in struct {
 		Name     *string `json:"name"`
 		ParentID *string `json:"parent_id"`
+		Password *string `json:"password"` // a new password, for a router that is asked
 	}
 	if !s.decode(w, r, &in) {
 		return
@@ -327,6 +450,9 @@ func (s *Server) renameNetDevice(w http.ResponseWriter, r *http.Request, a auth.
 			return
 		}
 		s.audit(r, a, "", "netdevice.rename", "netdevice", id, map[string]any{"name": strings.TrimSpace(*in.Name)})
+	}
+	if in.Password != nil && !s.changeRouterPassword(w, r, a, id, *in.Password) {
+		return
 	}
 	if in.ParentID != nil {
 		if err := s.Store.SetNetParent(r.Context(), id, *in.ParentID); err != nil {
