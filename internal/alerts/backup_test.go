@@ -3,6 +3,7 @@ package alerts
 import (
 	"testing"
 
+	"github.com/Taminum/Owlery/internal/netdev"
 	"github.com/Taminum/Owlery/internal/store"
 	"time"
 )
@@ -82,5 +83,20 @@ func TestNetConditionsFlagARouterThatAnswersButHasNoWayOut(t *testing.T) {
 	}
 	if len(cut) != 1 || cut[0] != "cut" {
 		t.Fatalf("%v", cut)
+	}
+}
+
+func TestNetConditionsFlagANewOpenPort(t *testing.T) {
+	now := time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)
+	at := now.Add(-time.Minute)
+	d := store.NetDevice{ID: "r", Name: "edge", LastSeen: &at, NewForwards: []netdev.NatRule{{Action: "upnp udp", DstPort: "58849", ToAddr: "192.168.1.5", ToPorts: "58849", Comment: "ZeroTier"}}}
+	var got []store.Condition
+	for _, c := range NetConditions([]store.NetDevice{d}, now) {
+		if c.Kind == store.AlertNetForward {
+			got = append(got, c)
+		}
+	}
+	if len(got) != 1 || got[0].Label != "Новый проброс порта на «edge»: 58849" {
+		t.Fatalf("%+v", got)
 	}
 }

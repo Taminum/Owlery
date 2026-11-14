@@ -34,16 +34,17 @@ type NetView struct {
 }
 
 type NetDevice struct {
-	ID        string     `json:"id"`
-	Name      string     `json:"name"`
-	Kind      string     `json:"kind"`
-	CreatedAt time.Time  `json:"created_at"`
-	LastSeen  *time.Time `json:"last_seen"`
-	ParentID  *string    `json:"parent_id"` // the router this one stands behind; nil for the router at the edge of a network
-	Online    bool       `json:"online"`    // heard from in the last five minutes
-	View      NetView    `json:"view"`
-	PullURL   string     `json:"url,omitempty"`        // the address Owlery asks, for a router that is asked
-	PullError string     `json:"pull_error,omitempty"` // why the last ask failed: unreachable, auth or unexpected
+	ID          string           `json:"id"`
+	Name        string           `json:"name"`
+	Kind        string           `json:"kind"`
+	CreatedAt   time.Time        `json:"created_at"`
+	LastSeen    *time.Time       `json:"last_seen"`
+	ParentID    *string          `json:"parent_id"` // the router this one stands behind; nil for the router at the edge of a network
+	Online      bool             `json:"online"`    // heard from in the last five minutes
+	View        NetView          `json:"view"`
+	PullURL     string           `json:"url,omitempty"`          // the address Owlery asks, for a router that is asked
+	NewForwards []netdev.NatRule `json:"new_forwards,omitempty"` // open ports nobody has looked at yet
+	PullError   string           `json:"pull_error,omitempty"`   // why the last ask failed: unreachable, auth or unexpected
 }
 
 const netOnlineWithin = 5 * time.Minute
@@ -105,7 +106,18 @@ func (s *Store) ListNetDevices(ctx context.Context, now time.Time) ([]NetDevice,
 		d.Online = d.LastSeen != nil && now.Sub(*d.LastSeen) < netOnlineWithin
 		out = append(out, d)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	nf, err := s.newForwards(ctx, now)
+	if err != nil {
+		return nil, err
+	}
+	for i := range out {
+		out[i].NewForwards = nf[out[i].ID]
+	}
+	return out, nil
 }
 
 // RenameNetDevice changes the name of a live device.
@@ -259,6 +271,9 @@ func (s *Store) SaveNetReport(ctx context.Context, id string, r netdev.Report, n
 			if len(v.Nat) < netdev.MaxNat {
 				v.Nat = append(v.Nat, n)
 			}
+		}
+		if err := recordForwards(ctx, tx, vid, r, now); err != nil {
+			return err
 		}
 		if r.ResetClients {
 			v.Clients = []netdev.Client{}
