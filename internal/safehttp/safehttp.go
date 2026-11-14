@@ -431,7 +431,7 @@ func mapTransportErr(err error) error {
 		strings.Contains(err.Error(), "tls:") || strings.Contains(err.Error(), "x509:") {
 		return newErr(CodeTLS, "TLS verification failed")
 	}
-	return newErr(CodeRequestFailed, "request failed")
+	return newErr(CodeRequestFailed, "request failed (%T: %v)", err, err)
 }
 
 // PublicAddr reports whether an address is one the server may connect to on a user's behalf: a
