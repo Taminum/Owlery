@@ -59,6 +59,12 @@ func fakeRouter(t *testing.T, login, password string, paths *[]string) *httptest
 				{"mac":"ac:c5:1b:24:2b:4d","ip":"192.168.0.71","hostname":"","name":"Printer - Home","active":true},
 				{"mac":"00:25:ab:20:34:7c","ip":"192.168.0.95","hostname":"Gone","active":false},
 				{"mac":"zz","ip":"192.168.0.99","hostname":"Broken","active":true}]}`))
+		case "/rci/show/sc/ip/static":
+			_, _ = w.Write([]byte(`[{"interface":"PPPoE0","protocol":"tcp","port":"8001","to-host":"AA:BB:CC:DD:EE:01","comment":"NVR"},{"interface":"PPPoE0","protocol":"tcp","port":"84","to-host":"AA:BB:CC:DD:EE:01","comment":"off","disable":true},{"interface":"PPPoE0","protocol":"tcpudp","port":"9025","to-port":"3389","to-address":"192.168.1.9","comment":"RDP"}]`))
+		case "/rci/show/upnp/redirect":
+			_, _ = w.Write([]byte(`{"entry":[{"protocol":"udp","port":58849,"to-address":"192.168.1.5","to-port":"58849","description":"ZeroTier","packets":3,"bytes":120}]}`))
+		case "/rci/show/internet/status":
+			_, _ = w.Write([]byte(`{"internet":false}`))
 		case "/rci/show/interface":
 			_, _ = w.Write([]byte(`{"GigabitEthernet0":{"type":"GigabitEthernet","state":"up","link":"up"},"0":{"type":"Port","link":"up"},
 				"GigabitEthernet0/Vlan1":{"type":"Vlan","state":"up","link":"up"},
@@ -106,6 +112,21 @@ func TestPollReadsTheRouterWithOnlyShowCommands(t *testing.T) {
 	}
 	if len(r.Ifaces) != 2 || r.Ifaces[0].Name != "Bridge0" || r.Ifaces[1].Name != "PPPoE0" || r.Ifaces[1].RX != 409890362492 || !r.Ifaces[1].Up {
 		t.Fatalf("interfaces (the lines and the cable ports are left out): %+v", r.Ifaces)
+	}
+	if !r.ResetNat || len(r.Nat) != 3 {
+		t.Fatalf("two enabled forwards and one UPnP entry (the switched-off one is left out): %+v", r.Nat)
+	}
+	if n := r.Nat[0]; n.Action != "forward tcp" || n.DstPort != "8001" || n.ToAddr != "AA:BB:CC:DD:EE:01" || n.ToPorts != "8001" || n.Comment != "NVR" || n.Packets != -1 {
+		t.Fatalf("a forward to a machine known only by its MAC: %+v", n)
+	}
+	if n := r.Nat[1]; n.DstPort != "9025" || n.ToAddr != "192.168.1.9" || n.ToPorts != "3389" {
+		t.Fatalf("a forward to another port: %+v", n)
+	}
+	if n := r.Nat[2]; n.Action != "upnp udp" || n.Comment != "ZeroTier" || n.Packets != 3 || n.Bytes != 120 {
+		t.Fatalf("upnp: %+v", n)
+	}
+	if r.Internet == nil || *r.Internet {
+		t.Fatalf("the router says there is no way out: %v", r.Internet)
 	}
 }
 

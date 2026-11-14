@@ -30,6 +30,7 @@ type NetView struct {
 	ConnAt    *time.Time         `json:"conn_at,omitempty"`
 	Top       []netdev.TopSource `json:"top"`
 	Nat       []netdev.NatRule   `json:"nat"`
+	Internet  *bool              `json:"internet,omitempty"` // the router's own verdict on the way out, when it gives one
 }
 
 type NetDevice struct {
@@ -247,6 +248,10 @@ func (s *Store) SaveNetReport(ctx context.Context, id string, r netdev.Report, n
 				v.Top = []netdev.TopSource{}
 			}
 		}
+		if r.Internet != nil {
+			ok := *r.Internet
+			v.Internet = &ok
+		}
 		if r.ResetNat {
 			v.Nat = []netdev.NatRule{}
 		}
@@ -294,3 +299,6 @@ const AlertNetDown = "net_down"
 
 // AlertNetConnFull: the connection tracking table of a router is nearly full, and new connections will be dropped.
 const AlertNetConnFull = "net_conn_full"
+
+// AlertNetInternet: the router answers, but says it has no way out to the internet.
+const AlertNetInternet = "net_internet_down"

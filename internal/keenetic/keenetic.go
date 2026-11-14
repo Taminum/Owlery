@@ -239,6 +239,44 @@ type hotspotResp struct {
 	} `json:"host"`
 }
 
+// text reads a value the router writes sometimes as a number and sometimes as a string.
+type text string
+
+func (t *text) UnmarshalJSON(b []byte) error {
+	v := strings.Trim(strings.TrimSpace(string(b)), `"`)
+	if v == "null" {
+		v = ""
+	}
+	*t = text(v)
+	return nil
+}
+
+type forwardResp struct {
+	Protocol  string `json:"protocol"`
+	Port      text   `json:"port"`
+	ToPort    text   `json:"to-port"`
+	ToHost    string `json:"to-host"`
+	ToAddress string `json:"to-address"`
+	Comment   string `json:"comment"`
+	Disable   bool   `json:"disable"`
+}
+
+type upnpResp struct {
+	Entry []struct {
+		Protocol    string `json:"protocol"`
+		Port        text   `json:"port"`
+		ToPort      text   `json:"to-port"`
+		ToAddress   string `json:"to-address"`
+		Description string `json:"description"`
+		Packets     flex   `json:"packets"`
+		Bytes       flex   `json:"bytes"`
+	} `json:"entry"`
+}
+
+type internetResp struct {
+	Internet bool `json:"internet"`
+}
+
 type ifaceInfo struct {
 	Type    string `json:"type"`
 	State   string `json:"state"`
@@ -284,7 +322,7 @@ func (c *Client) Poll(ctx context.Context) (netdev.Report, error) {
 	if err := get(ctx, h, c.base, "show/ip/hotspot", &hs); err != nil {
 		return netdev.Report{}, err
 	}
-	r := netdev.Report{HasStats: true, ResetClients: true, Board: netdev.Clean(ver.Model, 60), Version: netdev.Clean(ver.Title, 40)}
+	r := netdev.Report{HasStats: true, ResetClients: true, ResetNat: true, Board: netdev.Clean(ver.Model, 60), Version: netdev.Clean(ver.Title, 40)}
 	r.UptimeSec = int64(sys.Uptime)
 	r.CPU = sys.CPULoad
 	if r.CPU < 0 {
@@ -311,6 +349,14 @@ func (c *Client) Poll(ctx context.Context) (netdev.Report, error) {
 		}
 		r.HasConn, r.Conn, r.ConnMax = true, used, int64(sys.ConnTotal)
 	}
+	ipOf := map[string]string{} // the address behind each known MAC, for a forward that names only the machine
+	for _, x := range hs.Host {
+		if ip, hw := net.ParseIP(strings.TrimSpace(x.IP)), strings.TrimSpace(x.MAC); ip != nil {
+			if m, err := net.ParseMAC(hw); err == nil {
+				ipOf[strings.ToUpper(m.String())] = ip.String()
+			}
+		}
+	}
 	for _, x := range hs.Host {
 		if !x.Active || len(r.Clients) >= netdev.MaxClients {
 			continue
@@ -325,6 +371,54 @@ func (c *Client) Poll(ctx context.Context) (netdev.Report, error) {
 			name = x.Name
 		}
 		r.Clients = append(r.Clients, netdev.Client{IP: ip.String(), MAC: strings.ToUpper(hw.String()), Host: netdev.Clean(name, 60)})
+	}
+	// What is open to the outside and whether the way out works are bonuses too: an older firmware may not know them.
+	var fw []forwardResp
+	if err := get(ctx, h, c.base, "show/sc/ip/static", &fw); err == nil {
+		for _, f := range fw {
+			if f.Disable || len(r.Nat) >= netdev.MaxNat {
+				continue
+			}
+			to := strings.TrimSpace(f.ToAddress)
+			if to == "" {
+				if m, err := net.ParseMAC(strings.TrimSpace(f.ToHost)); err == nil {
+					to = ipOf[strings.ToUpper(m.String())]
+					if to == "" {
+						to = strings.ToUpper(m.String())
+					}
+				}
+			}
+			tp := string(f.ToPort)
+			if tp == "" {
+				tp = string(f.Port)
+			}
+			r.Nat = append(r.Nat, netdev.NatRule{Chain: "dstnat", Action: "forward " + netdev.Clean(f.Protocol, 8), Packets: -1, Bytes: -1,
+				DstPort: netdev.Clean(string(f.Port), 40), ToAddr: netdev.Clean(to, 60), ToPorts: netdev.Clean(tp, 40), Comment: netdev.Clean(f.Comment, 80)})
+		}
+	} else if errors.Is(err, ErrAuth) {
+		return netdev.Report{}, err
+	}
+	var up upnpResp
+	if err := get(ctx, h, c.base, "show/upnp/redirect", &up); err == nil {
+		for _, u := range up.Entry {
+			if len(r.Nat) >= netdev.MaxNat {
+				break
+			}
+			tp := string(u.ToPort)
+			if tp == "" {
+				tp = string(u.Port)
+			}
+			r.Nat = append(r.Nat, netdev.NatRule{Chain: "dstnat", Action: "upnp " + netdev.Clean(u.Protocol, 8), Packets: int64(u.Packets), Bytes: int64(u.Bytes),
+				DstPort: netdev.Clean(string(u.Port), 40), ToAddr: netdev.Clean(u.ToAddress, 60), ToPorts: netdev.Clean(tp, 40), Comment: netdev.Clean(u.Description, 80)})
+		}
+	} else if errors.Is(err, ErrAuth) {
+		return netdev.Report{}, err
+	}
+	var in internetResp
+	if err := get(ctx, h, c.base, "show/internet/status", &in); err == nil {
+		r.Internet = &in.Internet
+	} else if errors.Is(err, ErrAuth) {
+		return netdev.Report{}, err
 	}
 	// The interfaces are a bonus: when the list or a counter cannot be had, the rest is still worth keeping.
 	var all map[string]ifaceInfo
