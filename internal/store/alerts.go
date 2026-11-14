@@ -24,6 +24,7 @@ const (
 	AlertUserExpiry  = "user_expiry"  // an active user's subscription ends within days
 	AlertUserTraffic = "user_traffic" // an active user has used most of the traffic limit
 	AlertSubLeak     = "sub_leak"     // a subscription was asked for from so many different addresses that it has likely been passed on
+	AlertTorrent     = "torrent"      // the torrent blocker of a node caught a subscription again and again
 
 	// DNS Map. These belong to no panel: they are the owner's.
 	AlertDNSFailed = "dns_check_failed" // the last run could not settle even the apex's basic records
