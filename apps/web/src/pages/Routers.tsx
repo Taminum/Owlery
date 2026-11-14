@@ -16,7 +16,7 @@ interface TopSrc { ip: string; n: number }
 interface NatRule { chain: string; action: string; packets: number; bytes: number; dst_port?: string; to_addr?: string; to_ports?: string; comment?: string }
 interface Client { ip: string; mac: string; host?: string }
 interface Device {
-  id: string; name: string; kind?: string; url?: string; pull_error?: string; parent_id?: string | null; online: boolean; last_seen: string | null
+  id: string; name: string; kind?: string; url?: string; new_forwards?: NatRule[]; pull_error?: string; parent_id?: string | null; online: boolean; last_seen: string | null
   view: { board: string; version: string; uptime: number; cpu: number; mem_free: number; mem_total: number; temp?: number; stats_at?: string; ifaces: Iface[]; clients: Client[]; conn?: number; conn_max?: number; top?: TopSrc[]; nat?: NatRule[]; internet?: boolean }
 }
 
@@ -94,7 +94,7 @@ function PasswordDialog({ d, onClose, onDone }: { d: Device; onClose: () => void
   )
 }
 
-function DeviceCard({ d, tz, others, onParent, onRename, onRemove, onPassword }: { d: Device; tz: string; others: Device[]; onParent: (parent: string) => void; onRename: () => void; onRemove: () => void; onPassword: () => void }) {
+function DeviceCard({ d, tz, others, onParent, onRename, onRemove, onPassword, onConfirmFw }: { d: Device; tz: string; others: Device[]; onParent: (parent: string) => void; onRename: () => void; onRemove: () => void; onPassword: () => void; onConfirmFw: () => void }) {
   const v = d.view
   const memPct = v.mem_total > 0 ? Math.round(((v.mem_total - v.mem_free) * 100) / v.mem_total) : null
   const [now] = useState(() => Date.now())
@@ -108,6 +108,15 @@ function DeviceCard({ d, tz, others, onParent, onRename, onRemove, onPassword }:
   return (
     <Card title={d.name} note={sub} right={<div className="flex gap-2">{d.kind === 'keenetic' && <GhostButton size="s" onClick={onPassword}>{t('rt.changePass')}</GhostButton>}<GhostButton size="s" onClick={onRename}>{t('rt.rename')}</GhostButton><GhostButton size="s" onClick={onRemove}>{t('rt.remove')}</GhostButton></div>}>
       <div className="space-y-4">
+        {(d.new_forwards?.length ?? 0) > 0 && (
+          <div role="alert" className="rounded-lg border border-red/40 bg-red/10 p-3 text-[13px]">
+            <div className="mb-1 font-medium">{t('rt.newFw')}</div>
+            <ul className="mb-2 space-y-0.5 tnum">
+              {d.new_forwards?.map((n) => <li key={`${n.action}|${n.dst_port}|${n.to_addr}|${n.to_ports}`}>{n.action}: {n.dst_port ? `:${n.dst_port} → ` : ''}{n.to_addr ?? ''}{n.to_ports ? `:${n.to_ports}` : ''}{n.comment ? ` (${n.comment})` : ''}</li>)}
+            </ul>
+            <GhostButton size="s" onClick={onConfirmFw}>{t('rt.newFwOk')}</GhostButton>
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-2 text-[13px]">
           <label className="flex items-center gap-1.5 text-muted">
             {t('rt.parent')}
@@ -295,6 +304,14 @@ export default function Routers() {
     }
     reload()
   }
+  const confirmFw = async (id: string) => {
+    try {
+      await api.post(`/api/v1/net-devices/${id}/forwards/confirm`, {})
+    } catch {
+      /* the list reloads below and shows what is still open */
+    }
+    reload()
+  }
   const remove = async () => {
     if (!removing) return
     setBusy(true)
@@ -313,7 +330,7 @@ export default function Routers() {
       {parentError && <p role="alert" className="text-[13px] text-red">{parentError}</p>}
       {!data && !error && <Skeleton className="h-40" />}
       {data && data.devices.length === 0 && <p className="text-[13px] text-muted">{t('rt.empty')}</p>}
-      {data?.devices.map((d) => <DeviceCard key={d.id} d={d} tz={filters.tz} others={data.devices.filter((o) => o.id !== d.id)} onParent={(p) => void setParent(d.id, p)} onRename={() => setRenaming(d)} onRemove={() => setRemoving(d)} onPassword={() => setPasswording(d)} />)}
+      {data?.devices.map((d) => <DeviceCard key={d.id} d={d} tz={filters.tz} others={data.devices.filter((o) => o.id !== d.id)} onParent={(p) => void setParent(d.id, p)} onRename={() => setRenaming(d)} onRemove={() => setRemoving(d)} onPassword={() => setPasswording(d)} onConfirmFw={() => void confirmFw(d.id)} />)}
       {passwording && <PasswordDialog d={passwording} onClose={() => setPasswording(null)} onDone={reload} />}
       {renaming && <RenameDialog d={renaming} onClose={() => setRenaming(null)} onDone={reload} />}
       {adding && <NewDialog onClose={() => setAdding(false)} onMade={reload} />}

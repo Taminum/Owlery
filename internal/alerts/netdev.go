@@ -27,6 +27,18 @@ func NetConditions(devs []store.NetDevice, now time.Time) []store.Condition {
 			out = append(out, store.Condition{Kind: store.AlertNetInternet, Subject: d.ID, Label: "Нет выхода в интернет: " + d.Name,
 				Detail: "Роутер отвечает, но сам сообщает, что интернета нет"})
 		}
+		for _, n := range d.NewForwards {
+			to := n.ToAddr
+			if n.ToPorts != "" {
+				to += ":" + n.ToPorts
+			}
+			what := n.Comment
+			if what == "" {
+				what = "без названия"
+			}
+			out = append(out, store.Condition{Kind: store.AlertNetForward, Subject: d.ID + "|" + n.DstPort + "|" + n.ToAddr + "|" + n.ToPorts + "|" + n.Action, Label: "Новый проброс порта на «" + d.Name + "»: " + n.DstPort,
+				Detail: n.Action + ", порт " + n.DstPort + " → " + to + " (" + what + ")"})
+		}
 		if d.LastSeen == nil || now.Sub(*d.LastSeen) < NetSilent {
 			continue
 		}

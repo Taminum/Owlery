@@ -475,3 +475,21 @@ func (s *Server) deleteNetDevice(w http.ResponseWriter, r *http.Request, a auth.
 	s.audit(r, a, "", "netdevice.delete", "netdevice", r.PathValue("id"), nil)
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// confirmForwards marks the open ports of a router as looked at, which closes the alert about them.
+func (s *Server) confirmForwards(w http.ResponseWriter, r *http.Request, a auth.Actor, _ store.Session) {
+	if !s.ownerOnly(w, r, a) {
+		return
+	}
+	err := s.Store.ConfirmForwards(r.Context(), r.PathValue("id"))
+	if errors.Is(err, store.ErrNotFound) {
+		s.writeErr(w, r, http.StatusNotFound, "not_found", "no such router")
+		return
+	}
+	if err != nil {
+		s.writeErr(w, r, http.StatusInternalServerError, "internal", "internal error")
+		return
+	}
+	s.audit(r, a, "", "netdevice.forwards_confirm", "netdevice", r.PathValue("id"), nil)
+	w.WriteHeader(http.StatusNoContent)
+}
