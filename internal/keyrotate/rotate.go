@@ -73,5 +73,32 @@ func Run(ctx context.Context, st *store.Store, ring *secrets.Keyring) (Result, e
 			res.Raced++
 		}
 	}
+	pulls, err := st.AllNetPull(ctx)
+	if err != nil {
+		return res, err
+	}
+	for _, ref := range pulls {
+		aad := store.NetPullAAD(ref.DeviceID)
+		next, changed, err := ring.Reseal(aad, ref.Sealed)
+		if err != nil {
+			return res, fmt.Errorf("router %s: cannot decrypt the password with the available keys", ref.DeviceID)
+		}
+		if !changed {
+			res.Current++
+			continue
+		}
+		if _, err := ring.Open(aad, next); err != nil {
+			return res, fmt.Errorf("router %s: re-encrypted value failed verification", ref.DeviceID)
+		}
+		ok, err := st.ReplaceNetPullIf(ctx, ref.DeviceID, ref.Sealed.KeyVersion, next)
+		if err != nil {
+			return res, err
+		}
+		if ok {
+			res.Rotated++
+		} else {
+			res.Raced++
+		}
+	}
 	return res, nil
 }

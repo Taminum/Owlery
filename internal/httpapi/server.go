@@ -25,6 +25,7 @@ import (
 	"github.com/Taminum/Owlery/internal/awgops"
 	"github.com/Taminum/Owlery/internal/gemini"
 	"github.com/Taminum/Owlery/internal/ingestproto"
+	"github.com/Taminum/Owlery/internal/keenetic"
 	"github.com/Taminum/Owlery/internal/live"
 	"github.com/Taminum/Owlery/internal/netintel"
 	"github.com/Taminum/Owlery/internal/pulse"
@@ -71,6 +72,8 @@ type Server struct {
 	Sync   *syncer.Syncer
 	Ingest http.Handler // the agents' WebSocket endpoint; authenticates by agent credential, not by session
 	Pulses *pulse.Cache // the quick readings of the machines, in memory
+	// KeeneticClient makes the client that asks a Keenetic router (tests give one that trusts their fake router); nil = the real one.
+	KeeneticClient func(base, login, password string) (*keenetic.Client, error)
 	// LatestRelease replaces the look-up of the newest release at GitHub (tests, or a network that cannot reach it).
 	LatestRelease func(context.Context) (string, error)
 	latest        latestCache

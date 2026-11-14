@@ -16,7 +16,7 @@ interface TopSrc { ip: string; n: number }
 interface NatRule { chain: string; action: string; packets: number; bytes: number; dst_port?: string; to_addr?: string; to_ports?: string; comment?: string }
 interface Client { ip: string; mac: string; host?: string }
 interface Device {
-  id: string; name: string; kind?: string; parent_id?: string | null; online: boolean; last_seen: string | null
+  id: string; name: string; kind?: string; url?: string; pull_error?: string; parent_id?: string | null; online: boolean; last_seen: string | null
   view: { board: string; version: string; uptime: number; cpu: number; mem_free: number; mem_total: number; temp?: number; stats_at?: string; ifaces: Iface[]; clients: Client[]; conn?: number; conn_max?: number; top?: TopSrc[]; nat?: NatRule[] }
 }
 
@@ -31,7 +31,7 @@ function Tile({ label, value, sub }: { label: string; value: string; sub?: strin
 }
 
 function why(e: unknown): string {
-  if (e instanceof ApiError && (e.code === 'name_taken' || e.code === 'invalid_name')) return t(`rt.err.${e.code}` as MsgKey)
+  if (e instanceof ApiError && ['name_taken', 'invalid_name', 'invalid_url', 'invalid_credentials', 'router_auth', 'router_unreachable', 'router_unexpected'].includes(e.code)) return t(`rt.err.${e.code}` as MsgKey)
   return t('rt.err.other')
 }
 
@@ -64,7 +64,37 @@ function RenameDialog({ d, onClose, onDone }: { d: Device; onClose: () => void; 
   )
 }
 
-function DeviceCard({ d, tz, others, onParent, onRename, onRemove }: { d: Device; tz: string; others: Device[]; onParent: (parent: string) => void; onRename: () => void; onRemove: () => void }) {
+function PasswordDialog({ d, onClose, onDone }: { d: Device; onClose: () => void; onDone: () => void }) {
+  const [password, setPassword] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const save = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      await api.patch(`/api/v1/net-devices/${d.id}`, { password })
+      onDone()
+      onClose()
+    } catch (e) {
+      setError(why(e))
+      setBusy(false)
+    }
+  }
+  return (
+    <Modal title={t('rt.passTitle', { name: d.name })} onClose={onClose} busy={busy}>
+      <label htmlFor="rt-newpass" className="mb-1.5 block text-[13px] font-medium">{t('rt.newPass')}</label>
+      <input id="rt-newpass" type="password" autoComplete="new-password" data-autofocus className={inputCls} value={password} maxLength={128} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && password && void save()} />
+      {busy && <p className="mt-2 text-xs text-muted">{t('rt.checking')}</p>}
+      {error && <p role="alert" className="mt-2 text-xs text-red">{error}</p>}
+      <div className="mt-4 flex gap-2">
+        <PrimaryButton size="m" onClick={save} disabled={busy || !password}>{t('rt.save')}</PrimaryButton>
+        <GhostButton size="m" onClick={onClose} disabled={busy}>{t('common.cancel')}</GhostButton>
+      </div>
+    </Modal>
+  )
+}
+
+function DeviceCard({ d, tz, others, onParent, onRename, onRemove, onPassword }: { d: Device; tz: string; others: Device[]; onParent: (parent: string) => void; onRename: () => void; onRemove: () => void; onPassword: () => void }) {
   const v = d.view
   const memPct = v.mem_total > 0 ? Math.round(((v.mem_total - v.mem_free) * 100) / v.mem_total) : null
   const [now] = useState(() => Date.now())
@@ -74,9 +104,9 @@ function DeviceCard({ d, tz, others, onParent, onRename, onRemove }: { d: Device
   // Ports without a cable fold away; if nothing is plugged in, show them all rather than an empty table.
   const ports = showDown || upPorts.length === 0 ? v.ifaces : upPorts
   const names = new Map(v.clients.filter((c) => c.host).map((c) => [c.ip, c.host as string]))
-  const sub = [v.board, v.version && (d.kind === 'openwrt' ? v.version : `RouterOS ${v.version}`)].filter(Boolean).join(', ')
+  const sub = [v.board, v.version && (d.kind === 'openwrt' ? v.version : d.kind === 'keenetic' ? `KeeneticOS ${v.version}` : `RouterOS ${v.version}`)].filter(Boolean).join(', ')
   return (
-    <Card title={d.name} note={sub} right={<div className="flex gap-2"><GhostButton size="s" onClick={onRename}>{t('rt.rename')}</GhostButton><GhostButton size="s" onClick={onRemove}>{t('rt.remove')}</GhostButton></div>}>
+    <Card title={d.name} note={sub} right={<div className="flex gap-2">{d.kind === 'keenetic' && <GhostButton size="s" onClick={onPassword}>{t('rt.changePass')}</GhostButton>}<GhostButton size="s" onClick={onRename}>{t('rt.rename')}</GhostButton><GhostButton size="s" onClick={onRemove}>{t('rt.remove')}</GhostButton></div>}>
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2 text-[13px]">
           <label className="flex items-center gap-1.5 text-muted">
@@ -90,6 +120,8 @@ function DeviceCard({ d, tz, others, onParent, onRename, onRemove }: { d: Device
             : d.online ? <Chip tone="green">{t('rt.online')}</Chip>
             : <Chip tone="red">{t('rt.offline')}</Chip>}
           {d.last_seen && !d.online && <span className="text-muted">{formatDateTime(d.last_seen, tz)}</span>}
+          {d.pull_error && <Chip tone="red">{t(`rt.pullErr.${d.pull_error}` as MsgKey)}</Chip>}
+          {d.url && <span className="text-muted">{t('rt.pulled', { url: d.url.replace(/^https:\/\//, '') })}</span>}
           {d.online && v.uptime > 0 && <span className="text-muted">{t('rt.up', { d: durationText(new Date(now - v.uptime * 1000).toISOString(), null) })}</span>}
         </div>
         {v.stats_at && (
@@ -159,6 +191,9 @@ interface Made { token: string; script: string; device: { name: string; kind?: s
 function NewDialog({ onClose, onMade }: { onClose: () => void; onMade: () => void }) {
   const [name, setName] = useState('')
   const [kind, setKind] = useState('mikrotik')
+  const [url, setUrl] = useState('')
+  const [login, setLogin] = useState('')
+  const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [made, setMade] = useState<Made | null>(null)
@@ -167,6 +202,12 @@ function NewDialog({ onClose, onMade }: { onClose: () => void; onMade: () => voi
     setBusy(true)
     setError('')
     try {
+      if (kind === 'keenetic') {
+        await api.post('/api/v1/net-devices', { name: name.trim(), kind, url: url.trim(), login: login.trim(), password })
+        onMade()
+        onClose()
+        return
+      }
       setMade(await api.post<Made>('/api/v1/net-devices', { name: name.trim(), kind }))
       onMade()
     } catch (e) {
@@ -204,12 +245,31 @@ function NewDialog({ onClose, onMade }: { onClose: () => void; onMade: () => voi
       <select id="rt-kind" className={`${inputCls} mb-3`} value={kind} onChange={(e) => setKind(e.target.value)}>
         <option value="mikrotik">MikroTik (RouterOS)</option>
         <option value="openwrt">OpenWrt</option>
+        <option value="keenetic">{t('rt.kind.keenetic')}</option>
       </select>
       <label htmlFor="rt-name" className="mb-1.5 block text-[13px] font-medium">{t('rt.name')}</label>
       <input id="rt-name" data-autofocus className={inputCls} value={name} maxLength={60} placeholder={t('rt.namePh')} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && name.trim() && void create()} />
+      {kind === 'keenetic' && (
+        <div className="mt-3 space-y-3">
+          <div>
+            <label htmlFor="rt-url" className="mb-1.5 block text-[13px] font-medium">{t('rt.url')}</label>
+            <input id="rt-url" className={inputCls} value={url} maxLength={255} placeholder={t('rt.urlPh')} autoComplete="off" onChange={(e) => setUrl(e.target.value)} />
+          </div>
+          <div>
+            <label htmlFor="rt-login" className="mb-1.5 block text-[13px] font-medium">{t('rt.login')}</label>
+            <input id="rt-login" className={inputCls} value={login} maxLength={64} autoComplete="off" onChange={(e) => setLogin(e.target.value)} />
+          </div>
+          <div>
+            <label htmlFor="rt-pass" className="mb-1.5 block text-[13px] font-medium">{t('rt.password')}</label>
+            <input id="rt-pass" type="password" className={inputCls} value={password} maxLength={128} autoComplete="new-password" onChange={(e) => setPassword(e.target.value)} />
+          </div>
+          <p className="text-xs text-muted">{t('rt.kHint')}</p>
+        </div>
+      )}
+      {busy && kind === 'keenetic' && <p className="mt-2 text-xs text-muted">{t('rt.checking')}</p>}
       {error && <p role="alert" className="mt-2 text-xs text-red">{error}</p>}
       <div className="mt-4 flex gap-2">
-        <PrimaryButton size="m" onClick={create} disabled={busy || !name.trim()}>{t('rt.create')}</PrimaryButton>
+        <PrimaryButton size="m" onClick={create} disabled={busy || !name.trim() || (kind === 'keenetic' && (!url.trim() || !login.trim() || !password))}>{t('rt.create')}</PrimaryButton>
         <GhostButton size="m" onClick={onClose} disabled={busy}>{t('common.cancel')}</GhostButton>
       </div>
     </Modal>
@@ -222,6 +282,7 @@ export default function Routers() {
   const [adding, setAdding] = useState(false)
   const [removing, setRemoving] = useState<Device | null>(null)
   const [renaming, setRenaming] = useState<Device | null>(null)
+  const [passwording, setPasswording] = useState<Device | null>(null)
   const [busy, setBusy] = useState(false)
   const [parentError, setParentError] = useState('')
   const setParent = async (id: string, parent: string) => {
@@ -251,12 +312,13 @@ export default function Routers() {
       {parentError && <p role="alert" className="text-[13px] text-red">{parentError}</p>}
       {!data && !error && <Skeleton className="h-40" />}
       {data && data.devices.length === 0 && <p className="text-[13px] text-muted">{t('rt.empty')}</p>}
-      {data?.devices.map((d) => <DeviceCard key={d.id} d={d} tz={filters.tz} others={data.devices.filter((o) => o.id !== d.id)} onParent={(p) => void setParent(d.id, p)} onRename={() => setRenaming(d)} onRemove={() => setRemoving(d)} />)}
+      {data?.devices.map((d) => <DeviceCard key={d.id} d={d} tz={filters.tz} others={data.devices.filter((o) => o.id !== d.id)} onParent={(p) => void setParent(d.id, p)} onRename={() => setRenaming(d)} onRemove={() => setRemoving(d)} onPassword={() => setPasswording(d)} />)}
+      {passwording && <PasswordDialog d={passwording} onClose={() => setPasswording(null)} onDone={reload} />}
       {renaming && <RenameDialog d={renaming} onClose={() => setRenaming(null)} onDone={reload} />}
       {adding && <NewDialog onClose={() => setAdding(false)} onMade={reload} />}
       {removing && (
         <Modal title={t('rt.removeTitle', { name: removing.name })} onClose={() => setRemoving(null)} busy={busy}>
-          <p className="text-[13px] text-muted">{t('rt.removeNote')}</p>
+          <p className="text-[13px] text-muted">{t(removing.kind === 'keenetic' ? 'rt.removeNoteK' : 'rt.removeNote')}</p>
           <div className="mt-4 flex gap-2">
             <DangerButton size="m" onClick={remove} disabled={busy}>{t('rt.remove')}</DangerButton>
             <GhostButton size="m" onClick={() => setRemoving(null)} disabled={busy}>{t('common.cancel')}</GhostButton>

@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"testing"
+	"time"
 
+	"github.com/Taminum/Owlery/internal/netdev"
 	"github.com/Taminum/Owlery/internal/secrets"
 	"github.com/Taminum/Owlery/internal/store"
 	"github.com/Taminum/Owlery/internal/store/storetest"
@@ -70,5 +72,27 @@ func TestRotationFailsLoudlyWhenAnOldKeyIsMissing(t *testing.T) {
 	after, _ := st.Credential(ctx, id)
 	if !bytes.Equal(before.Ciphertext, after.Ciphertext) || before.KeyVersion != after.KeyVersion {
 		t.Fatal("a failed rotation must leave the credential untouched")
+	}
+}
+
+func TestRotationAlsoMovesTheRouterPasswords(t *testing.T) {
+	st := storetest.New(t)
+	old := ring(t, 1, 1)
+	id := store.NewNetDeviceID()
+	sl, _ := old.Seal(store.NetPullAAD(id), []byte("router-pw"))
+	if _, err := st.CreatePullDevice(ctx, id, "Рабочий", store.KindKeenetic, "https://r.keenetic.link", "Test", sl, netdev.Report{}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	both := ring(t, 2, 1, 2)
+	res, err := Run(ctx, st, both)
+	if err != nil || res.Rotated != 1 {
+		t.Fatalf("%+v %v", res, err)
+	}
+	refs, _ := st.AllNetPull(ctx)
+	if len(refs) != 1 || refs[0].Sealed.KeyVersion != 2 {
+		t.Fatalf("%+v", refs)
+	}
+	if pt, err := ring(t, 2, 2).Open(store.NetPullAAD(id), refs[0].Sealed); err != nil || string(pt) != "router-pw" {
+		t.Fatalf("%q %v", pt, err)
 	}
 }

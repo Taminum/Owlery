@@ -143,3 +143,76 @@ describe('Роутеры: OpenWrt', () => {
     expect(screen.queryByText(/system scheduler add/)).toBeNull()
   })
 })
+
+describe('Роутеры: Keenetic', () => {
+  it('asks for the address, the user and the password, sends them once and does not show a script', async () => {
+    let sent = ''
+    mockApi({
+      me: owner,
+      handler: (r) => {
+        if (r.path === '/api/v1/net-devices' && r.method === 'POST') { sent = JSON.stringify(r.body); return { status: 201, body: { device: { name: 'Рабочий', kind: 'keenetic' } } } }
+        if (r.path === '/api/v1/net-devices') return { status: 200, body: { devices: [] } }
+        return undefined
+      },
+    })
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: /Добавить роутер/ }))
+    fireEvent.change(screen.getByLabelText('Тип роутера'), { target: { value: 'keenetic' } })
+    fireEvent.change(screen.getByLabelText('Название'), { target: { value: 'Рабочий' } })
+    expect(screen.getByRole('button', { name: 'Создать' })).toBeDisabled()
+    fireEvent.change(screen.getByLabelText('Адрес роутера'), { target: { value: ' profite.keenetic.pro ' } })
+    fireEvent.change(screen.getByLabelText('Пользователь'), { target: { value: 'Test' } })
+    fireEvent.change(screen.getByLabelText('Пароль'), { target: { value: 'pw' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Создать' }))
+    await vi.waitFor(() => expect(sent).toBe('{"name":"Рабочий","kind":"keenetic","url":"profite.keenetic.pro","login":"Test","password":"pw"}'))
+    expect(screen.queryByText(/Токен показывается/)).toBeNull()
+  })
+
+  it('says why a router was refused, in words', async () => {
+    mockApi({
+      me: owner,
+      handler: (r) => {
+        if (r.path === '/api/v1/net-devices' && r.method === 'POST') return { status: 422, body: { code: 'router_auth', message: 'x', request_id: 'r' } }
+        if (r.path === '/api/v1/net-devices') return { status: 200, body: { devices: [] } }
+        return undefined
+      },
+    })
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: /Добавить роутер/ }))
+    fireEvent.change(screen.getByLabelText('Тип роутера'), { target: { value: 'keenetic' } })
+    fireEvent.change(screen.getByLabelText('Название'), { target: { value: 'Рабочий' } })
+    fireEvent.change(screen.getByLabelText('Адрес роутера'), { target: { value: 'a.keenetic.link' } })
+    fireEvent.change(screen.getByLabelText('Пользователь'), { target: { value: 'Test' } })
+    fireEvent.change(screen.getByLabelText('Пароль'), { target: { value: 'bad' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Создать' }))
+    expect(await screen.findByText(/Роутер не принял логин или пароль/)).toBeInTheDocument()
+  })
+
+  it('shows where a Keenetic is asked and why the last ask failed, and changes the password', async () => {
+    let sent = ''
+    const k = device({ id: 'k1', name: 'Рабочий', kind: 'keenetic', url: 'https://profite.keenetic.pro', pull_error: 'auth', online: false, last_seen: '2026-11-12T01:00:00Z' })
+    mockApi({
+      me: owner,
+      handler: (r) => {
+        if (r.path === '/api/v1/net-devices/k1' && r.method === 'PATCH') { sent = JSON.stringify(r.body); return { status: 204, body: null } }
+        if (r.path === '/api/v1/net-devices') return { status: 200, body: { devices: [k] } }
+        return undefined
+      },
+    })
+    renderPage()
+    expect(await screen.findByText('роутер не принял пароль')).toBeInTheDocument()
+    expect(screen.getByText(/profite\.keenetic\.pro/)).toBeInTheDocument()
+    expect(screen.getByText(/KeeneticOS 7\.16/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Сменить пароль' }))
+    fireEvent.change(screen.getByLabelText('Новый пароль'), { target: { value: 'fresh' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }))
+    await vi.waitFor(() => expect(sent).toBe('{"password":"fresh"}'))
+  })
+
+  it('offers a password change only for a router that is asked', async () => {
+    mockApi({ me: owner, handler: (r) => (r.path === '/api/v1/net-devices' ? { status: 200, body: { devices: [device()] } } : undefined) })
+    renderPage()
+    await screen.findByText('Дом')
+    expect(screen.queryByRole('button', { name: 'Сменить пароль' })).toBeNull()
+  })
+})
