@@ -43,9 +43,14 @@ func TestPVEReaderReadsNodeGuestsBackupsAndTailnetWithOnlyGets(t *testing.T) {
 				{"type":"qemu","node":"pve","vmid":300,"name":"vm1","status":"running"},
 				{"type":"storage","node":"pve","storage":"local","plugintype":"dir","disk":10,"maxdisk":50,"content":"iso,backup","status":"available"}]}`))
 		case "/nodes/pve/storage/local/content?content=backup":
-			_, _ = w.Write([]byte(`{"data":[{"vmid":205,"ctime":100},{"vmid":205,"ctime":300},{"vmid":200,"ctime":50}]}`))
+			// A token that may only read sees no backup files; the logs of the jobs are what tells.
+			_, _ = w.Write([]byte(`{"data":[]}`))
 		case "/nodes/pve/tasks?typefilter=vzdump&limit=20":
-			_, _ = w.Write([]byte(`{"data":[{"endtime":200,"status":"OK"},{"endtime":400,"status":"job errors"}]}`))
+			_, _ = w.Write([]byte(`{"data":[{"upid":"UPID:old","endtime":200,"status":"OK"},{"upid":"UPID:new","endtime":400,"status":"job errors"}]}`))
+		case "/nodes/pve/tasks/UPID:new/log?limit=2000":
+			_, _ = w.Write([]byte(`{"data":[{"n":1,"t":"INFO: Finished Backup of VM 205 (00:00:42)"},{"n":2,"t":"ERROR: Backup of VM 200 failed - boom"}]}`))
+		case "/nodes/pve/tasks/UPID:old/log?limit=2000":
+			_, _ = w.Write([]byte(`{"data":[{"n":1,"t":"INFO: Finished Backup of VM 200 (00:01:10)"},{"n":2,"t":"INFO: Finished Backup of VM 205 (00:00:40)"}]}`))
 		case "/nodes/pve/lxc/205/interfaces":
 			_, _ = w.Write([]byte(`{"data":[{"name":"lo","inet":"127.0.0.1/8"},{"name":"eth0","inet":"192.168.1.205/24"}]}`))
 		default:
@@ -72,10 +77,10 @@ func TestPVEReaderReadsNodeGuestsBackupsAndTailnetWithOnlyGets(t *testing.T) {
 		t.Fatalf("guests (sorted by id, both kinds): %+v", p.Guests)
 	}
 	cloud := p.Guests[1]
-	if cloud.LAN != "192.168.1.205" || cloud.Tailnet != "100.81.225.100" || cloud.TSOnline == nil || !*cloud.TSOnline || cloud.Backup != 300 || cloud.DiskUsed != 88 {
+	if cloud.LAN != "192.168.1.205" || cloud.Tailnet != "100.81.225.100" || cloud.TSOnline == nil || !*cloud.TSOnline || cloud.Backup != 400 || cloud.DiskUsed != 88 {
 		t.Fatalf("cloud: %+v", cloud)
 	}
-	if m := p.Guests[0]; m.TSOnline == nil || *m.TSOnline || m.Backup != 50 || m.LAN != "" {
+	if m := p.Guests[0]; m.TSOnline == nil || *m.TSOnline || m.Backup != 200 || m.LAN != "" {
 		t.Fatalf("a stopped guest has no address from the host but is known to Tailscale: %+v", m)
 	}
 	if p.Guests[2].TSOnline != nil {

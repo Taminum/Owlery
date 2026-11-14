@@ -478,6 +478,15 @@ func (a *agent) session(ctx context.Context) error {
 					return err
 				}
 			}
+			// What Proxmox says about its node and guests: the same, nothing to acknowledge. A host that cannot be read
+			// sends nothing, which the server reads as silence.
+			if a.pve != nil {
+				if p, perr := a.pve.Read(sctx, time.Now()); perr != nil {
+					a.cfg.Log.Warn("proxmox", "err", perr.Error())
+				} else if err := write(sctx, c, p); err != nil {
+					return err
+				}
+			}
 		}
 		full = false
 		select {
