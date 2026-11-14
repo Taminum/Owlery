@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -106,6 +107,11 @@ func str(v any) string {
 	}
 	return ""
 }
+
+// maxBackupLogs is how many of the newest backup jobs have their logs read.
+const maxBackupLogs = 8
+
+var finishedBackup = regexp.MustCompile(`Finished Backup of VM (\d+)`)
 
 type tsPeer struct {
 	ip     string
@@ -226,7 +232,8 @@ func (r *pveReader) Read(ctx context.Context, now time.Time) (secproto.Proxmox, 
 	}
 	sort.Slice(out.Guests, func(i, j int) bool { return out.Guests[i].ID < out.Guests[j].ID })
 
-	// The newest backup of each guest, from what the backup storages hold.
+	// The newest backup of each guest. The storages are asked first, but a token that may only read does not see the
+	// backup files; the logs of the backup jobs say the same, and those it may read.
 	newest := map[int]int64{}
 	for _, s := range backupStores {
 		var vols []map[string]any
@@ -239,15 +246,28 @@ func (r *pveReader) Read(ctx context.Context, now time.Time) (secproto.Proxmox, 
 			}
 		}
 	}
-	// How the newest backup job ended.
 	var tasks []map[string]any
 	if r.get(ctx, "/nodes/"+node+"/tasks?typefilter=vzdump&limit=20", &tasks) == nil {
-		var last int64
-		for _, t := range tasks {
-			if end := int64(num(t["endtime"])); end > last {
-				last = end
+		sort.Slice(tasks, func(i, j int) bool { return num(tasks[i]["endtime"]) > num(tasks[j]["endtime"]) })
+		for i, t := range tasks {
+			end := int64(num(t["endtime"]))
+			if i == 0 && end > 0 {
 				ok := str(t["status"]) == "OK"
 				out.LastBackupOK, out.LastBackupAt = &ok, end
+			}
+			if i >= maxBackupLogs || end == 0 {
+				continue
+			}
+			var lines []map[string]any
+			if r.get(ctx, "/nodes/"+node+"/tasks/"+url.PathEscape(str(t["upid"]))+"/log?limit=2000", &lines) != nil {
+				continue
+			}
+			for _, ln := range lines {
+				if m := finishedBackup.FindStringSubmatch(str(ln["t"])); m != nil {
+					if id, _ := strconv.Atoi(m[1]); id > 0 && end > newest[id] {
+						newest[id] = end
+					}
+				}
 			}
 		}
 	}
