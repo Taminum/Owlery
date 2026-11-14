@@ -265,6 +265,19 @@ func (s *Server) session(ctx context.Context, c *websocket.Conn, agent store.Sec
 					s.log().Error("saving host reading", "agent", agent.ID)
 				}
 			}
+		case "proxmox":
+			// What a Proxmox host says about its node and guests: best effort, unanswered, a bad one is dropped. With the
+			// module off nothing is kept.
+			if err := s.Store.TouchSecAgent(ctx, agent.ID); err != nil {
+				closeWith(c, secproto.CloseRevoked, "revoked")
+				return
+			}
+			var p secproto.Proxmox
+			if on, err := s.Store.ModuleOn(ctx, "proxmox"); err == nil && on && len(data) <= secproto.MaxPVEBytes && json.Unmarshal(data, &p) == nil {
+				if err := s.Store.SavePVE(ctx, agent.VPSID, p, time.Now().UTC()); err != nil {
+					s.log().Error("saving proxmox reading", "agent", agent.ID)
+				}
+			}
 		case "host_backlog":
 			// Readings taken while the agent could not reach us: kept as minute samples, never as the machine's current state.
 			var b secproto.HostBacklog

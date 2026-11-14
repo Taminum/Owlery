@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { Search, FileText, BarChart3, Bell, HardDrive, Router, MonitorSmartphone, Network, Compass, Wallet, Rocket, Gauge, Laptop, Shield, Telescope, LayoutDashboard, History, Radio, Server, Settings, Users, Waypoints, X, LogOut, UserRound, ChevronsLeft, ChevronsRight, type LucideIcon } from 'lucide-react'
+import { House, Search, FileText, BarChart3, Bell, HardDrive, Router, MonitorSmartphone, Network, Compass, Wallet, Rocket, Gauge, Laptop, Shield, Telescope, LayoutDashboard, History, Radio, Server, Settings, Users, Waypoints, X, LogOut, UserRound, ChevronsLeft, ChevronsRight, type LucideIcon } from 'lucide-react'
 import { t, type MsgKey } from '../i18n'
 import { api } from '../lib/api'
 import { useLoad } from '../hooks/useLoad'
@@ -41,6 +41,7 @@ export const SECTIONS: Section[] = [
     { to: '/awg', key: 'nav.awg', icon: Shield, module: 'awg' },
   ] },
   { key: 'nav.section.intel', items: [{ to: '/intel', key: 'nav.intel', icon: Telescope, module: 'intel' }] },
+  { key: 'nav.section.house', items: [{ to: '/proxmox', key: 'nav.proxmox', icon: House, module: 'proxmox', owner: true }] },
   { key: 'nav.section.money', items: [{ to: '/billing', key: 'nav.billing', icon: Wallet, module: 'billing', owner: true }] },
   { key: 'nav.section.system', items: [
     { to: '/alerts', key: 'nav.alerts', icon: Bell },

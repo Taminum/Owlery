@@ -67,6 +67,9 @@ type Config struct {
 	// Probe makes this host a checker: the server may ask it to connect to a public TCP port or read a TLS
 	// certificate, so that a target is seen from somewhere other than the target. Off unless the host chooses it.
 	Probe bool
+	// ProxmoxTokenFile makes this agent also read the Proxmox host it runs on, through the host's own API and a token that
+	// may only read. ProxmoxURL defaults to https://127.0.0.1:8006.
+	ProxmoxTokenFile, ProxmoxURL string
 	// FastInterval is how often the set of banned addresses is compared between full reads, so that a ban is
 	// named within seconds. Zero means 5 seconds; negative turns it off.
 	FastInterval time.Duration
@@ -182,6 +185,13 @@ func Run(ctx context.Context, cfg Config) error {
 		a.hbuf = newHostBuffer(cfg.StateDir)
 	}
 	a.hw = seccollect.NewHardware(seccollect.ExecRunner{Timeout: 90 * time.Second})
+	if cfg.ProxmoxTokenFile != "" {
+		pr, perr := newPVEReader(cfg.ProxmoxURL, cfg.ProxmoxTokenFile, seccollect.ExecRunner{})
+		if perr != nil {
+			return perr
+		}
+		a.pve = pr
+	}
 	if runtime.GOOS == "linux" && cfg.ContainersFile != "" {
 		// The unit that lists the containers lists their details beside it; a machine without the unit has no such file.
 		a.docker = seccollect.NewDocker(filepath.Join(filepath.Dir(cfg.ContainersFile), "docker.jsonl"))
@@ -237,6 +247,7 @@ func Run(ctx context.Context, cfg Config) error {
 
 type agent struct {
 	cfg      Config
+	pve      *pveReader
 	url      string
 	hc       *http.Client
 	epoch    string
@@ -339,6 +350,9 @@ func (a *agent) capabilities(ban bool) []string {
 	}
 	if a.cfg.Probe {
 		caps = append(caps, secproto.CapProbe)
+	}
+	if a.pve != nil {
+		caps = append(caps, secproto.CapProxmox)
 	}
 	if a.shellReady() {
 		caps = append(caps, secproto.CapShell)

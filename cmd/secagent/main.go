@@ -71,6 +71,8 @@ func main() {
 		noHost    = flag.Bool("no-host", false, "do not report CPU, memory, disk and network use")
 		contFile  = flag.String("containers-file", "/run/remnascope-sec/containers.tsv", "the list of running containers written by remnascope-containers-list (optional)")
 		probe     = flag.Bool("probe", false, "act as a checker: let the server ask this host to connect to a public TCP port or read a TLS certificate")
+		pveToken  = flag.String("proxmox-token-file", "", "this machine is a Proxmox host: read its node and guests through its own API with the read-only token in this file")
+		pveURL    = flag.String("proxmox-url", "https://127.0.0.1:8006", "the API of this Proxmox host")
 		showVer   = flag.Bool("version", false, "print the version and exit")
 		allowWeb  = flag.Bool("allow-web", false, "let Owlery open web services bound to 127.0.0.1 here (admin panels) through the agent")
 		allowDesk = flag.Bool("allow-desktop", false, "let Owlery reach this machine's own RDP or VNC port (127.0.0.1:3389 or :5900) through the agent")
@@ -110,7 +112,7 @@ func main() {
 		*noF2B, *noSock, *noFW = true, true, true
 	}
 	cfg := secagent.Config{ServerURL: *server, TokenFile: *tokenFile, CAFile: *caFile, AllowInsecure: *insecure,
-		Interval: *interval, Version: version, Log: log, HelperSocket: *helper, StateDir: *stateDir, NoFail2ban: *noF2B, NoSockets: *noSock, NoFirewall: *noFW, NoHost: *noHost, ContainersFile: *contFile, Probe: *probe, AllowShell: *allowSh, ShellSocket: *shellSock, DockerSocket: *dockerSck, LinuxSocket: *linuxSck, AllowDesktop: *allowDesk, AllowWeb: *allowWeb, AllowScreen: *allowScr, AllowAdmin: *allowAdm, AllowBlock: *allowBlk, RemoteSecretFile: *remoteSec, AllowUpdate: *allowUpd, UpdateDir: defaultUpdateDir(*updateDir, *stateDir)}
+		Interval: *interval, Version: version, Log: log, HelperSocket: *helper, StateDir: *stateDir, NoFail2ban: *noF2B, NoSockets: *noSock, NoFirewall: *noFW, NoHost: *noHost, ContainersFile: *contFile, Probe: *probe, ProxmoxTokenFile: *pveToken, ProxmoxURL: *pveURL, AllowShell: *allowSh, ShellSocket: *shellSock, DockerSocket: *dockerSck, LinuxSocket: *linuxSck, AllowDesktop: *allowDesk, AllowWeb: *allowWeb, AllowScreen: *allowScr, AllowAdmin: *allowAdm, AllowBlock: *allowBlk, RemoteSecretFile: *remoteSec, AllowUpdate: *allowUpd, UpdateDir: defaultUpdateDir(*updateDir, *stateDir)}
 	run := func(ctx context.Context) error { return secagent.Run(ctx, cfg) }
 	if handled, err := runAsService(run, log); handled {
 		if err != nil {

@@ -491,6 +491,8 @@ export const serversText = {
   'mod.security.text': 'Fail2ban, порты снаружи, сертификаты, firewall и журнал. Агент и ресурсы машин работают и без этого модуля.',
   'mod.intel': 'Разведка',
   'mod.intel.text': 'Разведка по адресу и DNS Map.',
+  'mod.proxmox': 'Proxmox (дом)',
+  'mod.proxmox.text': 'Домашний сервер Proxmox: контейнеры и виртуальные машины, диски, бэкапы, Tailscale. Нужен агент безопасности на самом Proxmox.',
   'mod.billing': 'Оплаты',
   'mod.billing.text': 'Ваш список оплат: напоминания и расходы в месяц.',
   'mod.on': 'Включён',
