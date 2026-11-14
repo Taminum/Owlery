@@ -72,6 +72,7 @@ type Report struct {
 	Top          []TopSource
 	ResetNat     bool // the first piece of the NAT rules: forget the old ones
 	Nat          []NatRule
+	Internet     *bool // whether the router itself finds the way out working (a router that is asked says so; nil when unknown)
 }
 
 var uptimeRe = regexp.MustCompile(`^(?:(\d+)w)?(?:(\d+)d)?(\d+):(\d+):(\d+)$`)

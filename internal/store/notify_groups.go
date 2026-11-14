@@ -8,7 +8,7 @@ type AlertGroup struct {
 
 // AlertGroups are all the kinds there are, once each.
 var AlertGroups = []AlertGroup{
-	{"agents", []string{AlertAgentSilent, AlertProbeDown, AlertNetDown}},
+	{"agents", []string{AlertAgentSilent, AlertProbeDown, AlertNetDown, AlertNetInternet}},
 	{"panels", []string{AlertPanelSync, AlertPanelBackup}},
 	{"security", []string{AlertSecAgent, AlertSecTLS, AlertSecPort, AlertLANNew}},
 	{"resources", []string{AlertHostDisk, AlertHostDiskForecast, AlertHostCPU, AlertHostMem, AlertHostContainer, AlertHostContainerDown, AlertNetConnFull}},

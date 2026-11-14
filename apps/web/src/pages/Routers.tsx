@@ -17,7 +17,7 @@ interface NatRule { chain: string; action: string; packets: number; bytes: numbe
 interface Client { ip: string; mac: string; host?: string }
 interface Device {
   id: string; name: string; kind?: string; url?: string; pull_error?: string; parent_id?: string | null; online: boolean; last_seen: string | null
-  view: { board: string; version: string; uptime: number; cpu: number; mem_free: number; mem_total: number; temp?: number; stats_at?: string; ifaces: Iface[]; clients: Client[]; conn?: number; conn_max?: number; top?: TopSrc[]; nat?: NatRule[] }
+  view: { board: string; version: string; uptime: number; cpu: number; mem_free: number; mem_total: number; temp?: number; stats_at?: string; ifaces: Iface[]; clients: Client[]; conn?: number; conn_max?: number; top?: TopSrc[]; nat?: NatRule[]; internet?: boolean }
 }
 
 function Tile({ label, value, sub }: { label: string; value: string; sub?: string }) {
@@ -120,6 +120,7 @@ function DeviceCard({ d, tz, others, onParent, onRename, onRemove, onPassword }:
             : d.online ? <Chip tone="green">{t('rt.online')}</Chip>
             : <Chip tone="red">{t('rt.offline')}</Chip>}
           {d.last_seen && !d.online && <span className="text-muted">{formatDateTime(d.last_seen, tz)}</span>}
+          {d.view.internet === false && <Chip tone="red">{t('rt.noInternet')}</Chip>}
           {d.pull_error && <Chip tone="red">{t(`rt.pullErr.${d.pull_error}` as MsgKey)}</Chip>}
           {d.url && <span className="text-muted">{t('rt.pulled', { url: d.url.replace(/^https:\/\//, '') })}</span>}
           {d.online && v.uptime > 0 && <span className="text-muted">{t('rt.up', { d: durationText(new Date(now - v.uptime * 1000).toISOString(), null) })}</span>}

@@ -64,3 +64,23 @@ func TestLANConditionsFlagOnlyNewDevicesThatAreSeenNow(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 }
+
+func TestNetConditionsFlagARouterThatAnswersButHasNoWayOut(t *testing.T) {
+	now := time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)
+	at := now.Add(-time.Minute)
+	old := now.Add(-time.Hour)
+	yes, no := true, false
+	mk := func(id string, in *bool, stats *time.Time) store.NetDevice {
+		return store.NetDevice{ID: id, Name: id, LastSeen: &at, View: store.NetView{Internet: in, StatsAt: stats}}
+	}
+	devs := []store.NetDevice{mk("fine", &yes, &at), mk("cut", &no, &at), mk("unknown", nil, &at), mk("stale", &no, &old)}
+	var cut []string
+	for _, c := range NetConditions(devs, now) {
+		if c.Kind == store.AlertNetInternet {
+			cut = append(cut, c.Subject)
+		}
+	}
+	if len(cut) != 1 || cut[0] != "cut" {
+		t.Fatalf("%v", cut)
+	}
+}

@@ -23,6 +23,10 @@ func NetConditions(devs []store.NetDevice, now time.Time) []store.Condition {
 			out = append(out, store.Condition{Kind: store.AlertNetConnFull, Subject: d.ID, Label: "Таблица соединений почти полна: " + d.Name,
 				Detail: fmt.Sprintf("%d из %d (%d%%)", v.Conn, v.ConnMax, v.Conn*100/v.ConnMax)})
 		}
+		if v := d.View; v.Internet != nil && !*v.Internet && v.StatsAt != nil && now.Sub(*v.StatsAt) < NetSilent {
+			out = append(out, store.Condition{Kind: store.AlertNetInternet, Subject: d.ID, Label: "Нет выхода в интернет: " + d.Name,
+				Detail: "Роутер отвечает, но сам сообщает, что интернета нет"})
+		}
 		if d.LastSeen == nil || now.Sub(*d.LastSeen) < NetSilent {
 			continue
 		}
