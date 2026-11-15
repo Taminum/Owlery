@@ -248,6 +248,35 @@ func Parse(body string) (Report, error) {
 				n.Comment = clean(f[7], 80)
 			}
 			r.Nat, used = append(r.Nat, n), used+1
+		case "reset_access":
+			r.HasAccess, used = true, used+1
+		case "blocked":
+			f := strings.Split(v, ",")
+			hw, err := net.ParseMAC(strings.TrimSpace(f[0]))
+			if err != nil || len(hw) != 6 || len(r.Blocked) >= MaxClients {
+				continue
+			}
+			b := Blocked{MAC: strings.ToUpper(hw.String())}
+			if len(f) > 1 {
+				if ip := net.ParseIP(strings.TrimSpace(f[1])); ip != nil {
+					b.IP = ip.String()
+				}
+			}
+			if len(f) > 2 {
+				b.Host = clean(f[2], 60)
+			}
+			r.Blocked, used = append(r.Blocked, b), used+1
+		case "reserved":
+			f := strings.Split(v, ",")
+			if len(f) < 2 || len(r.Reserved) >= MaxClients {
+				continue
+			}
+			hw, err := net.ParseMAC(strings.TrimSpace(f[0]))
+			ip := net.ParseIP(strings.TrimSpace(f[1]))
+			if err != nil || len(hw) != 6 || ip == nil {
+				continue
+			}
+			r.Reserved, used = append(r.Reserved, Reserve{MAC: strings.ToUpper(hw.String()), IP: ip.String()}), used+1
 		case "reset_clients":
 			r.ResetClients, used = true, used+1
 		case "if":

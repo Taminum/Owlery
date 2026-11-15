@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"crypto/subtle"
 	"errors"
 	"io"
 	"net/http"
@@ -92,10 +91,75 @@ const routerScript = `:local url "https://@HOST@@PATH@"
   }
 }
 :if ([:len $b] > 0) do={ /tool fetch url=$url http-method=post http-header-field=$hdr http-data=$b keep-result=no }
+:do {
+  :set b ("reset_access=1" . $nl)
+  :foreach r in=[/ip firewall filter find where comment~"^owlery-block "] do={
+    :set b ($b . "blocked=" . [:pick [/ip firewall filter get $r comment] 13 30] . $nl)
+  }
+  :foreach l in=[/ip dhcp-server lease find where dynamic=no] do={
+    :local mc ""
+    :local ad ""
+    :do { :set mc [/ip dhcp-server lease get $l mac-address] } on-error={}
+    :do { :set ad [/ip dhcp-server lease get $l address] } on-error={}
+    :if ([:len $mc] = 17 && [:len $ad] > 0) do={ :set b ($b . "reserved=" . $mc . "," . $ad . $nl) }
+  }
+  /tool fetch url=$url http-method=post http-header-field=$hdr http-data=$b keep-result=no
+} on-error={}
+:local cu "https://@HOST@@CPATH@"
+:local macre "^[0-9A-F][0-9A-F]:[0-9A-F][0-9A-F]:[0-9A-F][0-9A-F]:[0-9A-F][0-9A-F]:[0-9A-F][0-9A-F]:[0-9A-F][0-9A-F]\$"
+:for q from=1 to=5 do={
+  :do {
+    :local res [/tool fetch url=$cu http-header-field=$hdr output=user as-value]
+    :local cmd ($res->"data")
+    :if ([:len $cmd] > 0) do={
+      :local p1 [:find $cmd "|"]
+      :local cid [:pick $cmd 0 $p1]
+      :local rest [:pick $cmd ($p1 + 1) [:len $cmd]]
+      :local p2 [:find $rest "|"]
+      :local kind [:pick $rest 0 $p2]
+      :set rest [:pick $rest ($p2 + 1) [:len $rest]]
+      :local p3 [:find $rest "|"]
+      :local a1 [:pick $rest 0 $p3]
+      :local a2 [:pick $rest ($p3 + 1) [:len $rest]]
+      :local ok false
+      :local why ""
+      :do {
+        :if ($kind = "reboot") do={ /system reboot }
+        :if ($kind = "block" || $kind = "unblock" || $kind = "reserve" || $kind = "unreserve") do={
+          :if ($a1 ~ $macre) do={
+            :if ($kind = "block") do={
+              :if ([:len [/ip firewall filter find where comment=("owlery-block " . $a1)]] = 0) do={
+                /ip firewall filter add chain=forward src-mac-address=$a1 action=drop comment=("owlery-block " . $a1) place-before=0
+              }
+              :set ok true
+            }
+            :if ($kind = "unblock") do={
+              /ip firewall filter remove [find where comment=("owlery-block " . $a1)]
+              :set ok true
+            }
+            :if ($kind = "reserve") do={
+              /ip dhcp-server lease make-static [find where mac-address=$a1 and dynamic=yes]
+              :if ([:len [/ip dhcp-server lease find where mac-address=$a1 and dynamic=no]] > 0) do={ :set ok true } else={ :set why "no lease" }
+            }
+            :if ($kind = "unreserve") do={
+              /ip dhcp-server lease remove [find where mac-address=$a1 and dynamic=no]
+              :set ok true
+            }
+          } else={ :set why "bad address" }
+        }
+      } on-error={ :set ok false; :set why "error" }
+      :if ($kind != "reboot") do={
+        :local ans ("ack=" . $cid . ",ok")
+        :if (!$ok) do={ :set ans ("ack=" . $cid . ",fail," . $why) }
+        /tool fetch url=$cu http-method=post http-header-field=$hdr http-data=$ans keep-result=no
+      }
+    }
+  } on-error={}
+}
 `
 
 func buildRouterScript(host, token string) string {
-	return strings.NewReplacer("@HOST@", host, "@PATH@", NetIngestPath, "@TOKEN@", token).Replace(routerScript)
+	return strings.NewReplacer("@HOST@", host, "@PATH@", NetIngestPath, "@CPATH@", NetCommandsPath, "@TOKEN@", token).Replace(routerScript)
 }
 
 // openwrtInstall is what the owner pastes into an SSH session on an OpenWrt router: it writes the reporting script, adds it to cron
@@ -163,6 +227,17 @@ cpu_line() { awk '/^cpu /{print $2+$3+$4+$5+$6+$7+$8, $5}' /proc/stat; }
     fi
     j=$((j+1))
   done
+  echo "reset_access=1"
+  i=0
+  while uci -q get "firewall.@rule[$i]" >/dev/null 2>&1; do
+    case "$(uci -q get "firewall.@rule[$i].name")" in owlery-block-*) echo "blocked=$(uci -q get "firewall.@rule[$i].src_mac" | tr -d '\r\n,')";; esac
+    i=$((i+1))
+  done
+  i=0
+  while uci -q get "dhcp.@host[$i]" >/dev/null 2>&1; do
+    echo "reserved=$(uci -q get "dhcp.@host[$i].mac" | tr -d '\r\n,'),$(uci -q get "dhcp.@host[$i].ip" | tr -d '\r\n,')"
+    i=$((i+1))
+  done
   echo "reset_clients=1"
   if [ -r /tmp/dhcp.leases ]; then
     while read -r exp mac ip host rest; do
@@ -174,6 +249,84 @@ cpu_line() { awk '/^cpu /{print $2+$3+$4+$5+$6+$7+$8, $5}' /proc/stat; }
 post "$f"; rc=$?
 rm -f "$f"
 [ "$rc" = 0 ] || logger -t owlery "report was not sent (curl or wget with https is needed)"
+# What the panel asks for: a few things that are built in below and nothing else, one at a time, each answered.
+CU="https://@HOST@@CPATH@"
+ask() {
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsS -m 20 -H "Authorization: Bearer $TOKEN" "$CU"
+  else
+    wget -q -O - --header="Authorization: Bearer $TOKEN" "$CU"
+  fi
+}
+answer() {
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsS -m 20 -X POST -H "Authorization: Bearer $TOKEN" --data "$1" "$CU" >/dev/null
+  else
+    wget -q -O /dev/null --header="Authorization: Bearer $TOKEN" --post-data="$1" "$CU"
+  fi
+}
+upper() { echo "$1" | tr 'a-z' 'A-Z'; }
+ismac() { echo "$1" | grep -Eq '^([0-9A-F]{2}:){5}[0-9A-F]{2}$'; }
+isip() { echo "$1" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$'; }
+drop_rules() {
+  while :; do
+    idx=""; j=0
+    while uci -q get "firewall.@rule[$j]" >/dev/null 2>&1; do
+      if [ "$(uci -q get "firewall.@rule[$j].name")" = "owlery-block-$1" ]; then idx=$j; break; fi
+      j=$((j+1))
+    done
+    [ -n "$idx" ] || break
+    uci delete "firewall.@rule[$idx]"
+  done
+}
+drop_hosts() {
+  while :; do
+    idx=""; j=0
+    while uci -q get "dhcp.@host[$j]" >/dev/null 2>&1; do
+      if [ "$(upper "$(uci -q get "dhcp.@host[$j].mac")")" = "$1" ]; then idx=$j; break; fi
+      j=$((j+1))
+    done
+    [ -n "$idx" ] || break
+    uci delete "dhcp.@host[$idx]"
+  done
+}
+n=0
+while [ "$n" -lt 5 ]; do
+  n=$((n+1))
+  line=$(ask 2>/dev/null) || break
+  [ -n "$line" ] || break
+  id=${line%%|*}; rest=${line#*|}; kind=${rest%%|*}; rest=${rest#*|}; a1=${rest%%|*}; a2=${rest#*|}
+  ok=0; why=""
+  case "$kind" in
+    reboot) ( sleep 3; reboot ) >/dev/null 2>&1 & continue ;;
+    block|unblock|reserve|unreserve)
+      if ! ismac "$a1"; then why="bad address"; else
+        case "$kind" in
+          block)
+            drop_rules "$a1"
+            s=$(uci add firewall rule)
+            uci set "firewall.$s.name=owlery-block-$a1"; uci set "firewall.$s.src=lan"; uci set "firewall.$s.src_mac=$a1"
+            uci set "firewall.$s.dest=*"; uci set "firewall.$s.target=DROP"
+            uci commit firewall && /etc/init.d/firewall reload >/dev/null 2>&1 && ok=1 ;;
+          unblock)
+            drop_rules "$a1"
+            uci commit firewall && /etc/init.d/firewall reload >/dev/null 2>&1 && ok=1 ;;
+          reserve)
+            if ! isip "$a2"; then why="bad address"; else
+              drop_hosts "$a1"
+              s=$(uci add dhcp host)
+              uci set "dhcp.$s.mac=$a1"; uci set "dhcp.$s.ip=$a2"
+              uci commit dhcp && /etc/init.d/dnsmasq reload >/dev/null 2>&1 && ok=1
+            fi ;;
+          unreserve)
+            drop_hosts "$a1"
+            uci commit dhcp && /etc/init.d/dnsmasq reload >/dev/null 2>&1 && ok=1 ;;
+        esac
+      fi ;;
+    *) why="unknown" ;;
+  esac
+  if [ "$ok" = 1 ]; then answer "ack=$id,ok"; else [ -n "$why" ] || why="failed"; answer "ack=$id,fail,$why"; fi
+done
 exit $rc
 OWL_EOF
 chmod +x /usr/bin/owlery-report.sh
@@ -304,7 +457,7 @@ func (s *Server) changeRouterPassword(w http.ResponseWriter, r *http.Request, a 
 // buildDeviceScript is what the page shows the owner once, with the token worked in.
 func buildDeviceScript(kind, host, token string) string {
 	if kind == "openwrt" {
-		return strings.NewReplacer("@HOST@", host, "@PATH@", NetIngestPath, "@TOKEN@", token).Replace(openwrtInstall)
+		return strings.NewReplacer("@HOST@", host, "@PATH@", NetIngestPath, "@CPATH@", NetCommandsPath, "@TOKEN@", token).Replace(openwrtInstall)
 	}
 	return buildRouterScript(host, token)
 }
@@ -315,17 +468,8 @@ func (s *Server) netIngest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	h, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-	id, secret, found := strings.Cut(h, ".")
-	deny := func() { http.Error(w, "unauthorized", http.StatusUnauthorized) }
-	if !ok || !found || id == "" || len(secret) < 20 || len(secret) > 200 {
-		deny()
-		return
-	}
-	want, _, err := s.Store.NetDeviceForAuth(r.Context(), id)
-	got := store.HashAgentSecret(secret)
-	if err != nil || subtle.ConstantTimeCompare(got, want) != 1 {
-		deny()
+	id, ok := s.netAuth(w, r)
+	if !ok {
 		return
 	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, netdev.MaxBody+1))

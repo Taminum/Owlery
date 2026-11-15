@@ -30,6 +30,7 @@ type NetView struct {
 	ConnAt    *time.Time         `json:"conn_at,omitempty"`
 	Top       []netdev.TopSource `json:"top"`
 	Nat       []netdev.NatRule   `json:"nat"`
+	Control   bool               `json:"control,omitempty"`  // the router reports the blocked devices and kept addresses, so it can be asked to change them
 	Blocked   []netdev.Blocked   `json:"blocked,omitempty"`  // devices the router refuses
 	Reserved  []netdev.Reserve   `json:"reserved,omitempty"` // addresses the router keeps for a device
 	Internet  *bool              `json:"internet,omitempty"` // the router's own verdict on the way out, when it gives one
@@ -45,6 +46,7 @@ type NetDevice struct {
 	Online      bool             `json:"online"`    // heard from in the last five minutes
 	View        NetView          `json:"view"`
 	PullURL     string           `json:"url,omitempty"`          // the address Owlery asks, for a router that is asked
+	Commands    []NetCommand     `json:"commands,omitempty"`     // what was asked of a router that reports by a script, and how it went
 	Group       string           `json:"group,omitempty"`        // the owner's own sorting label
 	NewForwards []netdev.NatRule `json:"new_forwards,omitempty"` // open ports nobody has looked at yet
 	PullError   string           `json:"pull_error,omitempty"`   // why the last ask failed: unreachable, auth or unexpected
@@ -117,8 +119,13 @@ func (s *Store) ListNetDevices(ctx context.Context, now time.Time) ([]NetDevice,
 	if err != nil {
 		return nil, err
 	}
+	cm, err := s.recentNetCommands(ctx, now)
+	if err != nil {
+		return nil, err
+	}
 	for i := range out {
 		out[i].NewForwards = nf[out[i].ID]
+		out[i].Commands = cm[out[i].ID]
 	}
 	return out, nil
 }
@@ -278,7 +285,7 @@ func (s *Store) SaveNetReport(ctx context.Context, id string, r netdev.Report, n
 			}
 		}
 		if r.HasAccess {
-			v.Blocked, v.Reserved = r.Blocked, r.Reserved
+			v.Control, v.Blocked, v.Reserved = true, r.Blocked, r.Reserved
 		}
 		if r.Internet != nil {
 			ok := *r.Internet

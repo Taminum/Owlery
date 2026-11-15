@@ -1,6 +1,7 @@
 package netdev
 
 import (
+	"strings"
 	"testing"
 	"unicode/utf8"
 )
@@ -74,5 +75,25 @@ func TestCleanReadsWindows1251(t *testing.T) {
 	}
 	if got := clean("ПриветМир", 8); !utf8.ValidString(got) || len(got) > 8 {
 		t.Fatalf("cut: %q", got)
+	}
+}
+
+func TestParseReadsBlockedAndReservedLines(t *testing.T) {
+	body := strings.Join([]string{
+		"reset_access=1",
+		"blocked=aa:bb:cc:dd:ee:01,192.168.1.5,phone",
+		"blocked=nonsense",
+		"reserved=aa:bb:cc:dd:ee:02,192.168.1.6",
+		"reserved=aa:bb:cc:dd:ee:03",
+	}, "\n")
+	r, err := Parse(body)
+	if err != nil || !r.HasAccess {
+		t.Fatal(err, r.HasAccess)
+	}
+	if len(r.Blocked) != 1 || r.Blocked[0].MAC != "AA:BB:CC:DD:EE:01" || r.Blocked[0].IP != "192.168.1.5" || r.Blocked[0].Host != "phone" {
+		t.Fatalf("%+v", r.Blocked)
+	}
+	if len(r.Reserved) != 1 || r.Reserved[0].MAC != "AA:BB:CC:DD:EE:02" || r.Reserved[0].IP != "192.168.1.6" {
+		t.Fatalf("%+v", r.Reserved)
 	}
 }

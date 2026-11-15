@@ -19,10 +19,12 @@ interface Client { ip: string; mac: string; host?: string }
 interface Blocked { mac: string; ip?: string; host?: string }
 interface Reserve { mac: string; ip: string }
 interface Act { title: string; note: string; label: string; danger?: boolean; method: 'post' | 'put' | 'del'; path: string; body?: unknown }
+interface Command { id: number; kind: string; a1?: string; state: 'waiting' | 'sent' | 'done' | 'failed'; note?: string }
 interface Device {
+  commands?: Command[]
   group?: string
   id: string; name: string; kind?: string; url?: string; new_forwards?: NatRule[]; pull_error?: string; parent_id?: string | null; online: boolean; last_seen: string | null
-  view: { board: string; version: string; uptime: number; cpu: number; mem_free: number; mem_total: number; temp?: number; stats_at?: string; ifaces: Iface[]; clients: Client[]; conn?: number; conn_max?: number; top?: TopSrc[]; nat?: NatRule[]; internet?: boolean; blocked?: Blocked[]; reserved?: Reserve[] }
+  view: { board: string; version: string; uptime: number; cpu: number; mem_free: number; mem_total: number; temp?: number; stats_at?: string; ifaces: Iface[]; clients: Client[]; conn?: number; conn_max?: number; top?: TopSrc[]; nat?: NatRule[]; internet?: boolean; control?: boolean; blocked?: Blocked[]; reserved?: Reserve[] }
 }
 
 function Tile({ label, value, sub }: { label: string; value: string; sub?: string }) {
@@ -229,8 +231,22 @@ function DeviceCard({ d, tz, others, onParent, onRename, onRemove, onPassword, o
   const [fwOpen, setFwOpen] = useState(false)
   const [fwDel, setFwDel] = useState<NatRule | null>(null)
   const [act, setAct] = useState<Act | null>(null)
+  const [rotating, setRotating] = useState(false)
+  const [fresh, setFresh] = useState<Made | null>(null)
+  const direct = d.kind === 'keenetic'
+  const canAct = direct || !!d.view.control
+  // One change: straight at a Keenetic, and for the others put in the queue the router asks for once a minute.
+  const mk = (kind: 'block' | 'unblock' | 'reserve' | 'unreserve' | 'reboot', mac: string, a: Omit<Act, 'method' | 'path' | 'body'>): Act => {
+    if (!direct) return { ...a, note: `${a.note} ${t('rt.queueNote')}`, method: 'post', path: `${dev0}/commands`, body: { kind, mac } }
+    if (kind === 'reboot') return { ...a, method: 'post', path: `${dev0}/reboot` }
+    if (kind === 'block') return { ...a, method: 'post', path: `${dev0}/clients/${mac}/block` }
+    if (kind === 'unblock') return { ...a, method: 'del', path: `${dev0}/clients/${mac}/block` }
+    if (kind === 'reserve') return { ...a, method: 'put', path: `${dev0}/clients/${mac}/reserve` }
+    return { ...a, method: 'del', path: `${dev0}/clients/${mac}/reserve` }
+  }
   const reservedBy = new Map((d.view.reserved ?? []).map((x) => [x.mac, x.ip]))
   const dev = `/api/v1/net-devices/${d.id}`
+  const dev0 = dev
   const memPct = v.mem_total > 0 ? Math.round(((v.mem_total - v.mem_free) * 100) / v.mem_total) : null
   const [now] = useState(() => Date.now())
   const [showDown, setShowDown] = useState(false)
@@ -241,8 +257,10 @@ function DeviceCard({ d, tz, others, onParent, onRename, onRemove, onPassword, o
   const names = new Map(v.clients.filter((c) => c.host).map((c) => [c.ip, c.host as string]))
   const sub = [v.board, v.version && (d.kind === 'openwrt' ? v.version : d.kind === 'keenetic' ? `KeeneticOS ${v.version}` : `RouterOS ${v.version}`)].filter(Boolean).join(', ')
   return (
-    <Card title={d.name} note={sub} right={<div className="flex gap-2">{d.kind === 'keenetic' && <GhostButton size="s" onClick={() => setAct({ title: t('rt.rebootTitle', { name: d.name }), note: t('rt.rebootNote'), label: t('rt.reboot'), danger: true, method: 'post', path: `${dev}/reboot` })}>{t('rt.reboot')}</GhostButton>}{d.kind === 'keenetic' && <GhostButton size="s" onClick={onPassword}>{t('rt.changePass')}</GhostButton>}<GhostButton size="s" onClick={onGroup}>{t('rt.group')}</GhostButton><GhostButton size="s" onClick={onRename}>{t('rt.rename')}</GhostButton><GhostButton size="s" onClick={onRemove}>{t('rt.remove')}</GhostButton></div>}>
+    <Card title={d.name} note={sub} right={<div className="flex gap-2">{canAct && <GhostButton size="s" onClick={() => setAct(mk('reboot', '', { title: t('rt.rebootTitle', { name: d.name }), note: t('rt.rebootNote'), label: t('rt.reboot'), danger: true }))}>{t('rt.reboot')}</GhostButton>}{!canAct && <GhostButton size="s" onClick={() => setRotating(true)}>{t('rt.enable')}</GhostButton>}{d.kind === 'keenetic' && <GhostButton size="s" onClick={onPassword}>{t('rt.changePass')}</GhostButton>}<GhostButton size="s" onClick={onGroup}>{t('rt.group')}</GhostButton><GhostButton size="s" onClick={onRename}>{t('rt.rename')}</GhostButton><GhostButton size="s" onClick={onRemove}>{t('rt.remove')}</GhostButton></div>}>
       <div className="space-y-4">
+        {rotating && <RotateDialog d={d} onClose={() => setRotating(false)} onMade={(m) => { setRotating(false); setFresh(m); onReload() }} />}
+        {fresh && <ScriptDialog made={fresh} replace onClose={() => setFresh(null)} />}
         {act && <ActionDialog act={act} onClose={() => setAct(null)} onDone={onReload} />}
         {fwOpen && <ForwardDialog d={d} onClose={() => setFwOpen(false)} onDone={onReload} />}
         {fwDel && <DeleteForwardDialog d={d} rule={fwDel} onClose={() => setFwDel(null)} onDone={onReload} />}
@@ -330,10 +348,23 @@ function DeviceCard({ d, tz, others, onParent, onRename, onRemove, onPassword, o
               { key: 'name', title: t('rt.col.name'), sort: (c) => c.host ?? '', cell: (c) => c.host || '—' },
               { key: 'ip', title: t('rt.col.ip'), className: 'tnum', sort: (c) => c.ip, cell: (c) => c.ip },
               { key: 'mac', title: t('rt.col.mac'), className: 'font-mono text-xs', cell: (c) => c.mac },
-              ...(d.kind === 'keenetic' ? [{ key: 'act', title: '', align: 'right' as const, cell: (c: Client) => <span className="flex justify-end gap-2">{reservedBy.has(c.mac) && <Chip>{t('rt.kept')}</Chip>}<GhostButton size="s" onClick={() => setAct(reservedBy.has(c.mac) ? { title: t('rt.unkeepTitle'), note: t('rt.unkeepNote'), label: t('rt.unkeep'), method: 'del', path: `${dev}/clients/${c.mac}/reserve` } : { title: t('rt.keepTitle'), note: t('rt.keepNote', { ip: c.ip }), label: t('rt.keep'), method: 'put', path: `${dev}/clients/${c.mac}/reserve` })}>{t(reservedBy.has(c.mac) ? 'rt.unkeep' : 'rt.keep')}</GhostButton><GhostButton size="s" onClick={() => setAct({ title: t('rt.blockTitle', { name: c.host || c.ip }), note: t('rt.blockNote'), label: t('rt.block'), danger: true, method: 'post', path: `${dev}/clients/${c.mac}/block` })}>{t('rt.block')}</GhostButton></span> }] : []),
+              ...(canAct ? [{ key: 'act', title: '', align: 'right' as const, cell: (c: Client) => <span className="flex justify-end gap-2">{reservedBy.has(c.mac) && <Chip>{t('rt.kept')}</Chip>}<GhostButton size="s" onClick={() => setAct(reservedBy.has(c.mac) ? mk('unreserve', c.mac, { title: t('rt.unkeepTitle'), note: t('rt.unkeepNote'), label: t('rt.unkeep') }) : mk('reserve', c.mac, { title: t('rt.keepTitle'), note: t('rt.keepNote', { ip: c.ip }), label: t('rt.keep') }))}>{t(reservedBy.has(c.mac) ? 'rt.unkeep' : 'rt.keep')}</GhostButton><GhostButton size="s" onClick={() => setAct(mk('block', c.mac, { title: t('rt.blockTitle', { name: c.host || c.ip }), note: t('rt.blockNote'), label: t('rt.block'), danger: true }))}>{t('rt.block')}</GhostButton></span> }] : []),
             ]} />
           )}
         </div>
+        {(d.commands?.length ?? 0) > 0 && (
+          <div>
+            <h3 className="mb-1.5 text-[13px] font-medium">{t('rt.commands')}</h3>
+            <ul className="space-y-1 text-[13px]">
+              {d.commands?.map((c) => (
+                <li key={c.id} className="flex items-center gap-2">
+                  <Chip tone={c.state === 'done' ? 'green' : c.state === 'failed' ? 'red' : 'amber'}>{t(`rt.cmdState.${c.state}` as MsgKey)}</Chip>
+                  <span>{t(`rt.cmd.${c.kind}` as MsgKey)}{c.a1 ? <span className="ml-1.5 font-mono text-xs text-muted">{c.a1}</span> : null}{c.state === 'failed' && c.note ? <span className="ml-1.5 text-muted">({c.note})</span> : null}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {(v.blocked?.length ?? 0) > 0 && (
           <div>
             <h3 className="mb-1.5 text-[13px] font-medium">{t('rt.blocked')}</h3>
@@ -341,7 +372,7 @@ function DeviceCard({ d, tz, others, onParent, onRename, onRemove, onPassword, o
               {v.blocked?.map((b) => (
                 <li key={b.mac} className="flex items-center justify-between gap-2">
                   <span><span className="font-mono text-xs">{b.mac}</span>{b.host || b.ip ? <span className="ml-2 text-muted">{[b.host, b.ip].filter(Boolean).join(', ')}</span> : null}</span>
-                  <GhostButton size="s" onClick={() => setAct({ title: t('rt.unblockTitle'), note: t('rt.unblockNote'), label: t('rt.unblock'), method: 'del', path: `${dev}/clients/${b.mac}/block` })}>{t('rt.unblock')}</GhostButton>
+                  {canAct && <GhostButton size="s" onClick={() => setAct(mk('unblock', b.mac, { title: t('rt.unblockTitle'), note: t('rt.unblockNote'), label: t('rt.unblock') }))}>{t('rt.unblock')}</GhostButton>}
                 </li>
               ))}
             </ul>
@@ -354,6 +385,58 @@ function DeviceCard({ d, tz, others, onParent, onRename, onRemove, onPassword, o
 
 interface Made { token: string; script: string; device: { name: string; kind?: string } }
 
+function ScriptDialog({ made, replace, onClose }: { made: Made; replace?: boolean; onClose: () => void }) {
+  const [copied, setCopied] = useState('')
+  const copy = (key: string, text: string) => { void navigator.clipboard?.writeText(text); setCopied(key) }
+  const cmd = '/system scheduler add name=owlery interval=1m on-event="/system script run owlery"'
+  const ow = made.device.kind === 'openwrt'
+  return (
+    <Modal title={t(replace ? 'rt.rotTitle' : 'rt.created', { name: made.device.name })} onClose={onClose} wide>
+      <div className="space-y-3 text-[13px]">
+        <p className="text-muted">{t('rt.tokenOnce')}</p>
+        <p>{t(ow ? 'rt.owStep1' : replace ? 'rt.rotStep' : 'rt.step1')}</p>
+        <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-all rounded-control bg-canvas p-3 font-mono text-xs leading-5">{made.script}</pre>
+        <GhostButton size="m" onClick={() => copy('script', made.script)}>{copied === 'script' ? t('rt.copied') : t('rt.copy')}</GhostButton>
+        {!ow && !replace && (
+          <>
+            <p>{t('rt.step2')}</p>
+            <pre className="whitespace-pre-wrap break-all rounded-control bg-canvas p-3 font-mono text-xs leading-5">{cmd}</pre>
+            <GhostButton size="m" onClick={() => copy('cmd', cmd)}>{copied === 'cmd' ? t('rt.copied') : t('rt.copy')}</GhostButton>
+          </>
+        )}
+        <p className="text-muted">{t(ow ? 'rt.owStep2' : 'rt.step3')}</p>
+        <div className="pt-1"><PrimaryButton size="m" onClick={onClose}>{t('rt.done')}</PrimaryButton></div>
+      </div>
+    </Modal>
+  )
+}
+
+function RotateDialog({ d, onClose, onMade }: { d: Device; onClose: () => void; onMade: (m: Made) => void }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const go = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      const r = await api.post<{ token: string; script: string }>(`/api/v1/net-devices/${d.id}/rotate`, {})
+      onMade({ token: r.token, script: r.script, device: { name: d.name, kind: d.kind } })
+    } catch (e) {
+      setError(why(e))
+      setBusy(false)
+    }
+  }
+  return (
+    <Modal title={t('rt.enableTitle', { name: d.name })} onClose={onClose} busy={busy}>
+      <p className="text-[13px] text-muted">{t('rt.enableNote')}</p>
+      {error && <p role="alert" className="mt-2 text-xs text-red">{error}</p>}
+      <div className="mt-4 flex gap-2">
+        <PrimaryButton size="m" onClick={go} disabled={busy}>{t('rt.enable')}</PrimaryButton>
+        <GhostButton size="m" onClick={onClose} disabled={busy}>{t('common.cancel')}</GhostButton>
+      </div>
+    </Modal>
+  )
+}
+
 function NewDialog({ onClose, onMade }: { onClose: () => void; onMade: () => void }) {
   const [name, setName] = useState('')
   const [kind, setKind] = useState('mikrotik')
@@ -363,7 +446,6 @@ function NewDialog({ onClose, onMade }: { onClose: () => void; onMade: () => voi
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [made, setMade] = useState<Made | null>(null)
-  const [copied, setCopied] = useState('')
   const create = async () => {
     setBusy(true)
     setError('')
@@ -382,29 +464,7 @@ function NewDialog({ onClose, onMade }: { onClose: () => void; onMade: () => voi
       setBusy(false)
     }
   }
-  const copy = (key: string, text: string) => { void navigator.clipboard?.writeText(text); setCopied(key) }
-  if (made) {
-    const cmd = '/system scheduler add name=owlery interval=1m on-event="/system script run owlery"'
-    return (
-      <Modal title={t('rt.created', { name: made.device.name })} onClose={onClose} wide>
-        <div className="space-y-3 text-[13px]">
-          <p className="text-muted">{t('rt.tokenOnce')}</p>
-          <p>{t(made.device.kind === 'openwrt' ? 'rt.owStep1' : 'rt.step1')}</p>
-          <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-all rounded-control bg-canvas p-3 font-mono text-xs leading-5">{made.script}</pre>
-          <GhostButton size="m" onClick={() => copy('script', made.script)}>{copied === 'script' ? t('rt.copied') : t('rt.copy')}</GhostButton>
-          {made.device.kind !== 'openwrt' && (
-            <>
-              <p>{t('rt.step2')}</p>
-              <pre className="whitespace-pre-wrap break-all rounded-control bg-canvas p-3 font-mono text-xs leading-5">{cmd}</pre>
-              <GhostButton size="m" onClick={() => copy('cmd', cmd)}>{copied === 'cmd' ? t('rt.copied') : t('rt.copy')}</GhostButton>
-            </>
-          )}
-          <p className="text-muted">{t(made.device.kind === 'openwrt' ? 'rt.owStep2' : 'rt.step3')}</p>
-          <div className="pt-1"><PrimaryButton size="m" onClick={onClose}>{t('rt.done')}</PrimaryButton></div>
-        </div>
-      </Modal>
-    )
-  }
+  if (made) return <ScriptDialog made={made} onClose={onClose} />
   return (
     <Modal title={t('rt.newTitle')} onClose={onClose} busy={busy}>
       <label htmlFor="rt-kind" className="mb-1.5 block text-[13px] font-medium">{t('rt.kind')}</label>

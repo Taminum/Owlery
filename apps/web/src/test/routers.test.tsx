@@ -341,6 +341,39 @@ describe('Роутеры: Keenetic', () => {
     ])
   })
 
+  it('asks a MikroTik through the queue once its script knows how, and offers a new script before that', async () => {
+    const calls: string[] = []
+    const old = device({ id: 'o1', name: 'Старый' })
+    const fresh = device({ id: 'n1', name: 'Новый', commands: [{ id: 1, kind: 'block', a1: 'AA:BB:CC:DD:EE:01', state: 'done' }, { id: 2, kind: 'reserve', a1: 'AA:BB:CC:DD:EE:01', state: 'failed', note: 'no lease' }] })
+    Object.assign(fresh.view, { control: true, blocked: [{ mac: 'DE:AD:BE:EF:00:01', host: 'stranger' }] })
+    mockApi({
+      me: owner,
+      handler: (r) => {
+        if (r.path === '/api/v1/net-devices/n1/commands' && r.method === 'POST') { calls.push(JSON.stringify(r.body)); return { status: 202 } }
+        if (r.path === '/api/v1/net-devices/o1/rotate' && r.method === 'POST') { calls.push('rotate'); return { status: 200, body: { token: 'T.secret', script: ':local url "x"' } } }
+        if (r.path === '/api/v1/net-devices') return { status: 200, body: { devices: [old, fresh] } }
+        return undefined
+      },
+    })
+    const first = renderPage('/routers/n1')
+    await screen.findByText('Новый')
+    expect(screen.queryByRole('button', { name: 'Включить управление' })).toBeNull()
+    expect(screen.getByText('выполнено')).toBeInTheDocument()
+    expect(screen.getByText(/no lease/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Заблокировать' }))
+    expect(within(screen.getByRole('dialog')).getByText(/в течение минуты/)).toBeInTheDocument()
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Заблокировать' }))
+    await vi.waitFor(() => expect(calls).toEqual(['{"kind":"block","mac":"AA:BB:CC:DD:EE:01"}']))
+    first.unmount()
+    renderPage('/routers/o1')
+    await screen.findByText('Старый')
+    expect(screen.queryByRole('button', { name: 'Заблокировать' })).toBeNull() // its script does not know how yet
+    fireEvent.click(screen.getByRole('button', { name: 'Включить управление' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Включить управление' }))
+    expect(await screen.findByText(/:local url "x"/)).toBeInTheDocument()
+    expect(calls.at(-1)).toBe('rotate')
+  })
+
   it('offers a password change only for a router that is asked', async () => {
     mockApi({ me: owner, handler: (r) => (r.path === '/api/v1/net-devices' ? { status: 200, body: { devices: [device()] } } : undefined) })
     renderPage('/routers/d1')
