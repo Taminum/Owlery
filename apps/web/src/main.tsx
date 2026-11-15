@@ -64,6 +64,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="digest" element={<Digest />} />
             <Route path="panels" element={<Panels />} />
             <Route path="routers" element={<Routers />} />
+            <Route path="routers/:id" element={<Routers />} />
             <Route path="lan" element={<LanDevices />} />
             <Route path="map" element={<NetworkMap />} />
             <Route path="report" element={<MonthReport />} />

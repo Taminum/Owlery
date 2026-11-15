@@ -571,3 +571,36 @@ func TestADeviceIsBlockedAnAddressKeptAForwardSwitchedAndTheRouterRestartedByThe
 		t.Fatalf("restart: %d", st)
 	}
 }
+
+func TestARouterIsPutInAGroupByTheOwnerOnly(t *testing.T) {
+	w := newWorld(t)
+	st, b := w.owner.do("POST", "/api/v1/net-devices", map[string]any{"name": "Дом", "kind": "mikrotik"})
+	if st != 201 {
+		t.Fatalf("%d %s", st, b)
+	}
+	var made struct {
+		Device struct {
+			ID string `json:"id"`
+		} `json:"device"`
+	}
+	_ = json.Unmarshal(b, &made)
+	path := "/api/v1/net-devices/" + made.Device.ID
+	if st, _ := w.viewer.do("PATCH", path, map[string]any{"group": "Работа"}); st != 403 {
+		t.Fatalf("a viewer must not group a router: %d", st)
+	}
+	if st, _ := w.owner.do("PATCH", path, map[string]any{"group": strings.Repeat("я", 41)}); st != 422 {
+		t.Fatalf("a long name: %d", st)
+	}
+	if st, _ := w.owner.do("PATCH", path, map[string]any{"group": " Работа "}); st != 204 {
+		t.Fatalf("%d", st)
+	}
+	if _, b := w.owner.get("/api/v1/net-devices"); !strings.Contains(string(b), `"group":"Работа"`) {
+		t.Fatalf("%s", b)
+	}
+	if st, _ := w.owner.do("PATCH", path, map[string]any{"group": ""}); st != 204 {
+		t.Fatalf("%d", st)
+	}
+	if _, b := w.owner.get("/api/v1/net-devices"); strings.Contains(string(b), `"group"`) {
+		t.Fatalf("taken out: %s", b)
+	}
+}

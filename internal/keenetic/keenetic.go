@@ -247,6 +247,7 @@ type hotspotResp struct {
 		Hostname string `json:"hostname"`
 		Name     string `json:"name"`
 		Active   bool   `json:"active"`
+		Access   string `json:"access"`
 	} `json:"host"`
 }
 
@@ -370,7 +371,7 @@ func (c *Client) Poll(ctx context.Context) (netdev.Report, error) {
 		}
 	}
 	for _, x := range hs.Host {
-		if !x.Active || len(r.Clients) >= netdev.MaxClients {
+		if !x.Active || x.Access == "deny" || len(r.Clients) >= netdev.MaxClients { // a device the router refuses is not a client
 			continue
 		}
 		ip, mac := net.ParseIP(strings.TrimSpace(x.IP)), strings.TrimSpace(x.MAC)

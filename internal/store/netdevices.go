@@ -45,6 +45,7 @@ type NetDevice struct {
 	Online      bool             `json:"online"`    // heard from in the last five minutes
 	View        NetView          `json:"view"`
 	PullURL     string           `json:"url,omitempty"`          // the address Owlery asks, for a router that is asked
+	Group       string           `json:"group,omitempty"`        // the owner's own sorting label
 	NewForwards []netdev.NatRule `json:"new_forwards,omitempty"` // open ports nobody has looked at yet
 	PullError   string           `json:"pull_error,omitempty"`   // why the last ask failed: unreachable, auth or unexpected
 }
@@ -86,7 +87,7 @@ func (s *Store) CreateNetDevice(ctx context.Context, name, kind string, tokenHas
 }
 
 func (s *Store) ListNetDevices(ctx context.Context, now time.Time) ([]NetDevice, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id, name, kind, created_at, last_seen, last, parent_id, COALESCE(pull_url,''), COALESCE(pull_error,'') FROM net_devices WHERE archived_at IS NULL ORDER BY lower(name)`)
+	rows, err := s.pool.Query(ctx, `SELECT id, name, kind, created_at, last_seen, last, parent_id, COALESCE(pull_url,''), COALESCE(pull_error,''), COALESCE(grp,'') FROM net_devices WHERE archived_at IS NULL ORDER BY lower(name)`)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +98,7 @@ func (s *Store) ListNetDevices(ctx context.Context, now time.Time) ([]NetDevice,
 		var id uuid.UUID
 		var raw []byte
 		var parent *uuid.UUID
-		if err := rows.Scan(&id, &d.Name, &d.Kind, &d.CreatedAt, &d.LastSeen, &raw, &parent, &d.PullURL, &d.PullError); err != nil {
+		if err := rows.Scan(&id, &d.Name, &d.Kind, &d.CreatedAt, &d.LastSeen, &raw, &parent, &d.PullURL, &d.PullError, &d.Group); err != nil {
 			return nil, err
 		}
 		d.ID, d.View = id.String(), decodeView(raw)
@@ -145,6 +146,20 @@ func (s *Store) RenameNetDevice(ctx context.Context, id, name string) error {
 
 // SetNetParent says which router a device stands behind ("" for none). A device cannot stand behind itself or behind one of its own
 // descendants.
+// SetNetGroup puts a router in a named group (empty takes it out).
+func (s *Store) SetNetGroup(ctx context.Context, id, group string) error {
+	vid, err := ParseID(id)
+	if err != nil {
+		return ErrNotFound
+	}
+	g := cleanText(group, 40)
+	tag, err := s.pool.Exec(ctx, `UPDATE net_devices SET grp=NULLIF($2,'') WHERE id=$1 AND archived_at IS NULL`, vid, g)
+	if err == nil && tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return err
+}
+
 func (s *Store) SetNetParent(ctx context.Context, id, parent string) error {
 	vid, err := ParseID(id)
 	if err != nil {

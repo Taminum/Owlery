@@ -8,14 +8,15 @@ import { mockApi, owner } from './helpers'
 
 afterEach(() => vi.unstubAllGlobals())
 
-function renderPage() {
+function renderPage(path = '/routers') {
   setCsrf('')
   return render(
-    <MemoryRouter initialEntries={['/routers']}>
+    <MemoryRouter initialEntries={[path]}>
       <AuthProvider>
         <Routes>
           <Route element={<Layout />}>
             <Route path="routers" element={<Routers />} />
+            <Route path="routers/:id" element={<Routers />} />
           </Route>
         </Routes>
       </AuthProvider>
@@ -36,7 +37,7 @@ const device = (over: object = {}) => ({
 describe('Роутеры', () => {
   it('shows the state, the ports and the clients of a router', async () => {
     mockApi({ me: owner, handler: (r) => (r.path === '/api/v1/net-devices' ? { status: 200, body: { devices: [device()] } } : undefined) })
-    renderPage()
+    renderPage('/routers/d1')
     expect(await screen.findByText('Дом')).toBeInTheDocument()
     expect(screen.getByText('на связи')).toBeInTheDocument()
     expect(screen.getByText('7%')).toBeInTheDocument()
@@ -55,9 +56,11 @@ describe('Роутеры', () => {
           ? { status: 200, body: { devices: [device({ online: false, last_seen: '2026-11-12T01:00:00Z' }), device({ id: 'd2', name: 'Дача', online: false, last_seen: null, view: { board: '', version: '', uptime: 0, cpu: 0, mem_free: 0, mem_total: 0, ifaces: [], clients: [] } })] } }
           : undefined,
     })
-    renderPage()
+    const first = renderPage('/routers/d1')
     expect(await screen.findByText('не отвечает')).toBeInTheDocument()
-    expect(screen.getByText('ещё не присылал данные')).toBeInTheDocument()
+    first.unmount()
+    renderPage('/routers/d2')
+    expect(await screen.findByText('ещё не присылал данные')).toBeInTheDocument()
     expect(screen.getByText(/Клиентов нет/)).toBeInTheDocument()
   })
 
@@ -65,7 +68,7 @@ describe('Роутеры', () => {
     const base = device()
     const view = { ...base.view, conn: 812, conn_max: 16384, top: [{ ip: '192.168.88.20', n: 300 }], nat: [{ chain: 'dstnat', action: 'dst-nat', packets: 5, bytes: 300, dst_port: '8080', to_addr: '192.168.88.20', to_ports: '80', comment: 'web' }] }
     mockApi({ me: owner, handler: (r) => (r.path === '/api/v1/net-devices' ? { status: 200, body: { devices: [device({ view })] } } : undefined) })
-    renderPage()
+    renderPage('/routers/d1')
     expect(await screen.findByText('812')).toBeInTheDocument()
     expect(screen.getByText('из 16384 возможных')).toBeInTheDocument()
     expect(screen.getByText('300')).toBeInTheDocument()
@@ -77,7 +80,7 @@ describe('Роутеры', () => {
     const base = device()
     const ifaces = [...base.view.ifaces, { name: 'ether5', rx: 0, tx: 0, up: false, rx_bps: 0, tx_bps: 0 }]
     mockApi({ me: owner, handler: (r) => (r.path === '/api/v1/net-devices' ? { status: 200, body: { devices: [device({ view: { ...base.view, ifaces } })] } } : undefined) })
-    renderPage()
+    renderPage('/routers/d1')
     expect(await screen.findByText('ether1')).toBeInTheDocument()
     expect(screen.queryByText('ether5')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /Ещё 1 без кабеля/ }))
@@ -94,11 +97,49 @@ describe('Роутеры', () => {
         return undefined
       },
     })
-    renderPage()
+    renderPage('/routers/d1')
     fireEvent.click(await screen.findByRole('button', { name: 'Переименовать' }))
     fireEvent.change(screen.getByLabelText('Название'), { target: { value: 'Дом' } })
     fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }))
     await vi.waitFor(() => expect(sent).toBe('{"name":"Дом"}'))
+  })
+
+  it('lists routers as small cards, problems first, filters them by group, and opens one', async () => {
+    const ok = device({ id: 'a', name: 'Дом', group: 'Дом' })
+    const work = device({ id: 'b', name: 'Офис', group: 'Работа' })
+    const down = device({ id: 'c', name: 'Склад', group: 'Работа', online: false })
+    const loose = device({ id: 'e', name: 'Гараж' })
+    mockApi({ me: owner, handler: (r) => (r.path === '/api/v1/net-devices' ? { status: 200, body: { devices: [ok, work, down, loose] } } : undefined) })
+    renderPage()
+    await screen.findByText('Склад')
+    const names = () => screen.getAllByRole('link').map((a) => a.textContent ?? '').filter((x) => /Дом|Офис|Склад|Гараж/.test(x))
+    expect(names()[0]).toContain('Склад') // the one that does not answer comes first
+    expect(screen.queryByText('Порты')).toBeNull() // the whole card is on its own page
+    fireEvent.click(screen.getByRole('button', { name: 'Работа' }))
+    expect(names()).toHaveLength(2)
+    expect(screen.queryByText('Гараж')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Без группы' }))
+    expect(names()).toHaveLength(1)
+    fireEvent.click(within(screen.getByRole('group', { name: 'Группы роутеров' })).getByRole('button', { name: 'Все' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Есть проблемы' }))
+    expect(names()).toHaveLength(1)
+    expect(screen.getByRole('link', { name: /Склад/ })).toHaveAttribute('href', '/routers/c')
+  })
+
+  it('puts a router in a group', async () => {
+    let sent = ''
+    mockApi({
+      me: owner,
+      handler: (r) => {
+        if (r.path === '/api/v1/net-devices/d1' && r.method === 'PATCH') { sent = JSON.stringify(r.body); return { status: 204 } }
+        return r.path === '/api/v1/net-devices' ? { status: 200, body: { devices: [device()] } } : undefined
+      },
+    })
+    renderPage('/routers/d1')
+    fireEvent.click(await screen.findByRole('button', { name: 'Группа' }))
+    fireEvent.change(screen.getByLabelText('Группа', { selector: 'input' }), { target: { value: ' Работа ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }))
+    await vi.waitFor(() => expect(sent).toBe('{"group":"Работа"}'))
   })
 
   it('creates a router and shows the script with its token once', async () => {
@@ -199,7 +240,7 @@ describe('Роутеры: Keenetic', () => {
         return undefined
       },
     })
-    renderPage()
+    renderPage('/routers/k1')
     expect(await screen.findByText('роутер не принял пароль')).toBeInTheDocument()
     expect(screen.getByText(/profite\.keenetic\.pro/)).toBeInTheDocument()
     expect(screen.getByText(/KeeneticOS 7\.16/)).toBeInTheDocument()
@@ -228,7 +269,7 @@ describe('Роутеры: Keenetic', () => {
         return undefined
       },
     })
-    renderPage()
+    renderPage('/routers/k1')
     await screen.findByText('Рабочий')
     expect(screen.getAllByRole('button', { name: 'Закрыть порт' })).toHaveLength(1) // only the forward Owlery may remove, not the UPnP one
     fireEvent.click(screen.getByRole('button', { name: 'Открыть порт' }))
@@ -265,7 +306,7 @@ describe('Роутеры: Keenetic', () => {
         return undefined
       },
     })
-    renderPage()
+    renderPage('/routers/k1')
     await screen.findByText('Рабочий')
     const confirm = async (open: string, go: string) => {
       fireEvent.click(screen.getByRole('button', { name: open }))
@@ -288,7 +329,7 @@ describe('Роутеры: Keenetic', () => {
 
   it('offers a password change only for a router that is asked', async () => {
     mockApi({ me: owner, handler: (r) => (r.path === '/api/v1/net-devices' ? { status: 200, body: { devices: [device()] } } : undefined) })
-    renderPage()
+    renderPage('/routers/d1')
     await screen.findByText('Дом')
     expect(screen.queryByRole('button', { name: 'Сменить пароль' })).toBeNull()
   })
