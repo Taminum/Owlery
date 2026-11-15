@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -602,5 +603,105 @@ func TestARouterIsPutInAGroupByTheOwnerOnly(t *testing.T) {
 	}
 	if _, b := w.owner.get("/api/v1/net-devices"); strings.Contains(string(b), `"group"`) {
 		t.Fatalf("taken out: %s", b)
+	}
+}
+
+func TestARouterThatReportsByAScriptIsAskedThroughAQueueItAsksFor(t *testing.T) {
+	w := newWorld(t)
+	st, b := w.owner.do("POST", "/api/v1/net-devices", map[string]any{"name": "Дом", "kind": "mikrotik"})
+	if st != 201 {
+		t.Fatalf("%d %s", st, b)
+	}
+	var made struct {
+		Token  string `json:"token"`
+		Device struct {
+			ID string `json:"id"`
+		} `json:"device"`
+	}
+	_ = json.Unmarshal(b, &made)
+	call := func(method, token, body string) (int, string) {
+		req, _ := http.NewRequest(method, w.h.ts.URL+NetCommandsPath, strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		out, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(out)
+	}
+	if c, _ := call("GET", made.Device.ID+".wrongwrongwrongwrongwrong", ""); c != 401 {
+		t.Fatalf("a wrong token: %d", c)
+	}
+	if c, _ := call("GET", made.Token, ""); c != 204 {
+		t.Fatalf("nothing is asked yet: %d", c)
+	}
+	// the router lists a client, so that an address can be kept for it
+	rep := "cpu=1\nreset_clients=1\nclient=192.168.88.20,aa:bb:cc:dd:ee:01,pc\n"
+	req, _ := http.NewRequest("POST", w.h.ts.URL+NetIngestPath, strings.NewReader(rep))
+	req.Header.Set("Authorization", "Bearer "+made.Token)
+	resp, _ := http.DefaultClient.Do(req)
+	resp.Body.Close()
+
+	path := "/api/v1/net-devices/" + made.Device.ID + "/commands"
+	if st, _ := w.viewer.do("POST", path, map[string]any{"kind": "reboot"}); st != 403 {
+		t.Fatalf("a viewer must not ask: %d", st)
+	}
+	for _, in := range []map[string]any{{"kind": "format"}, {"kind": "block", "mac": "nonsense"}, {"kind": "reserve", "mac": "AA:BB:CC:DD:EE:99"}} {
+		if st, _ := w.owner.do("POST", path, in); st != 422 {
+			t.Errorf("%v: %d", in, st)
+		}
+	}
+	for _, in := range []map[string]any{{"kind": "block", "mac": "aa:bb:cc:dd:ee:01"}, {"kind": "block", "mac": "AA:BB:CC:DD:EE:01"}, {"kind": "reserve", "mac": "AA:BB:CC:DD:EE:01"}, {"kind": "reboot"}} {
+		if st, b := w.owner.do("POST", path, in); st != 202 {
+			t.Fatalf("%v: %d %s", in, st, b)
+		}
+	}
+	c, line := call("GET", made.Token, "")
+	if c != 200 || !strings.HasSuffix(line, "|block|AA:BB:CC:DD:EE:01|") {
+		t.Fatalf("the oldest first, the same ask only once: %d %q", c, line)
+	}
+	id := strings.SplitN(line, "|", 2)[0]
+	if c, _ := call("POST", made.Token, "ack="+id+",ok\n"); c != 204 {
+		t.Fatalf("ack: %d", c)
+	}
+	c, line = call("GET", made.Token, "")
+	if c != 200 || !strings.Contains(line, "|reserve|AA:BB:CC:DD:EE:01|192.168.88.20") {
+		t.Fatalf("the next: %d %q", c, line)
+	}
+	id = strings.SplitN(line, "|", 2)[0]
+	call("POST", made.Token, "ack="+id+",fail,no such lease\n")
+	c, line = call("GET", made.Token, "")
+	if c != 200 || !strings.Contains(line, "|reboot||") {
+		t.Fatalf("%d %q", c, line)
+	}
+	if c, _ := call("GET", made.Token, ""); c != 204 {
+		t.Fatalf("a reboot is handed out once, and nothing else is left: %d", c)
+	}
+	_, b = w.owner.get("/api/v1/net-devices")
+	for _, want := range []string{`"state":"done"`, `"state":"failed"`, `no such lease`} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("%s is missing from the list: %s", want, b)
+		}
+	}
+
+	// a new token: the old script stops at once
+	st, b = w.owner.do("POST", "/api/v1/net-devices/"+made.Device.ID+"/rotate", nil)
+	var again struct {
+		Token  string `json:"token"`
+		Script string `json:"script"`
+	}
+	_ = json.Unmarshal(b, &again)
+	if st != 200 || again.Token == "" || again.Token == made.Token || !strings.Contains(again.Script, NetCommandsPath) {
+		t.Fatalf("%d %s", st, b)
+	}
+	if c, _ := call("GET", made.Token, ""); c != 401 {
+		t.Fatalf("the old token must stop: %d", c)
+	}
+	if c, _ := call("GET", again.Token, ""); c != 204 {
+		t.Fatalf("the new one works: %d", c)
+	}
+	if st, _ := w.viewer.do("POST", "/api/v1/net-devices/"+made.Device.ID+"/rotate", nil); st != 403 {
+		t.Fatalf("a viewer must not rotate: %d", st)
 	}
 }
