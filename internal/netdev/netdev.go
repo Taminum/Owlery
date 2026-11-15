@@ -25,6 +25,7 @@ type Iface struct {
 	RX    int64   `json:"rx"` // byte counters since the interface came up
 	TX    int64   `json:"tx"`
 	Up    bool    `json:"up"`
+	Wan   bool    `json:"wan,omitempty"` // the router itself says this is the way out to the provider (a router that is asked)
 	RXBps float64 `json:"rx_bps"`
 	TXBps float64 `json:"tx_bps"`
 }

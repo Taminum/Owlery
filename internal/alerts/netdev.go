@@ -23,9 +23,21 @@ func NetConditions(devs []store.NetDevice, now time.Time) []store.Condition {
 			out = append(out, store.Condition{Kind: store.AlertNetConnFull, Subject: d.ID, Label: "Таблица соединений почти полна: " + d.Name,
 				Detail: fmt.Sprintf("%d из %d (%d%%)", v.Conn, v.ConnMax, v.Conn*100/v.ConnMax)})
 		}
-		if v := d.View; v.Internet != nil && !*v.Internet && v.StatsAt != nil && now.Sub(*v.StatsAt) < NetSilent {
-			out = append(out, store.Condition{Kind: store.AlertNetInternet, Subject: d.ID, Label: "Нет выхода в интернет: " + d.Name,
-				Detail: "Роутер отвечает, но сам сообщает, что интернета нет"})
+		if v := d.View; v.StatsAt != nil && now.Sub(*v.StatsAt) < NetSilent {
+			// A link to the provider that is down is the cause and is told as such; with every link up and still no way out, the
+			// trouble is further away, and that is told instead.
+			wanDown := false
+			for _, f := range v.Ifaces {
+				if f.Wan && !f.Up {
+					wanDown = true
+					out = append(out, store.Condition{Kind: store.AlertNetWAN, Subject: d.ID + "|" + f.Name, Label: "Канал провайдера упал: " + d.Name,
+						Detail: "Роутер отвечает, но соединение «" + f.Name + "» не работает"})
+				}
+			}
+			if v.Internet != nil && !*v.Internet && !wanDown {
+				out = append(out, store.Condition{Kind: store.AlertNetInternet, Subject: d.ID, Label: "Нет выхода в интернет: " + d.Name,
+					Detail: "Роутер отвечает, канал к провайдеру поднят, но интернета нет"})
+			}
 		}
 		for _, n := range d.NewForwards {
 			to := n.ToAddr
