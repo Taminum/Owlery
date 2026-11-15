@@ -462,13 +462,12 @@ function RouterTile({ d }: { d: Device }) {
         <div><div className="text-muted">{t('rt.mem')}</div><div className="text-[15px]">{d.online && memPct !== null ? `${memPct}%` : '—'}</div></div>
         <div><div className="text-muted">{t('rt.tileClients')}</div><div className="text-[15px]">{v.clients.length}</div></div>
       </div>
-      {(d.pull_error || v.internet === false || (d.new_forwards?.length ?? 0) > 0) && (
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {d.pull_error && <Chip tone="red">{t(`rt.pullErr.${d.pull_error}` as MsgKey)}</Chip>}
-          {v.internet === false && <Chip tone="red">{t('rt.noInternet')}</Chip>}
-          {(d.new_forwards?.length ?? 0) > 0 && <Chip tone="red">{t('rt.newFwN', { n: d.new_forwards?.length ?? 0 })}</Chip>}
-        </div>
-      )}
+      <div className="mt-3 flex min-h-[26px] flex-wrap items-center gap-1.5">
+        {d.pull_error && <Chip tone="red">{t(`rt.pullErr.${d.pull_error}` as MsgKey)}</Chip>}
+        {v.internet === false && <Chip tone="red">{t('rt.noInternet')}</Chip>}
+        {(d.new_forwards?.length ?? 0) > 0 && <Chip tone="red">{t('rt.newFwN', { n: d.new_forwards?.length ?? 0 })}</Chip>}
+        {!d.pull_error && v.internet !== false && (d.new_forwards?.length ?? 0) === 0 && <span className="text-xs text-muted">{t('rt.allFine')}</span>}
+      </div>
     </Link>
   )
 }
@@ -511,6 +510,7 @@ export default function Routers() {
   const { data, error, reload } = useLoad((s) => api.get<{ devices: Device[] }>('/api/v1/net-devices', s), [], 30_000)
   const [groupFilter, setGroupFilter] = useState('')
   const [only, setOnly] = useState<'all' | 'problems'>('all')
+  const [kindFilter, setKindFilter] = useState('')
   const [grouping, setGrouping] = useState<Device | null>(null)
   const [adding, setAdding] = useState(false)
   const [removing, setRemoving] = useState<Device | null>(null)
@@ -549,7 +549,9 @@ export default function Routers() {
   }
   const all = data?.devices ?? []
   const groups = [...new Set(all.map((d) => d.group).filter((g): g is string => !!g))].sort((a, b) => a.localeCompare(b, 'ru'))
+  const kinds = [...new Set(all.map((d) => d.kind ?? 'mikrotik'))].sort()
   const shown = all
+    .filter((d) => (kindFilter === '' ? true : (d.kind ?? 'mikrotik') === kindFilter))
     .filter((d) => (groupFilter === '' ? true : groupFilter === '\u0000' ? !d.group : d.group === groupFilter))
     .filter((d) => (only === 'problems' ? problem(d) : true))
     .sort((a, b) => Number(problem(b)) - Number(problem(a)) || a.name.localeCompare(b.name, 'ru'))
@@ -575,6 +577,12 @@ export default function Routers() {
                 { value: '', label: t('rt.f.all') },
                 ...groups.map((g) => ({ value: g, label: g })),
                 { value: '\u0000', label: t('rt.f.noGroup') },
+              ]} />
+            )}
+            {kinds.length > 1 && (
+              <Segmented label={t('rt.brands')} value={kindFilter} onChange={setKindFilter} options={[
+                { value: '', label: t('rt.f.all') },
+                ...kinds.map((k) => ({ value: k, label: k === 'openwrt' ? 'OpenWrt' : k === 'keenetic' ? 'Keenetic' : 'MikroTik' })),
               ]} />
             )}
             <Segmented label={t('rt.state')} value={only} onChange={setOnly} options={[{ value: 'all', label: t('rt.f.all') }, { value: 'problems', label: t('rt.f.problems') }]} />

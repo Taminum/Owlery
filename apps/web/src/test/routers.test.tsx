@@ -126,6 +126,20 @@ describe('Роутеры', () => {
     expect(screen.getByRole('link', { name: /Склад/ })).toHaveAttribute('href', '/routers/c')
   })
 
+  it('filters the routers by brand, and every card has the same shape', async () => {
+    mockApi({ me: owner, handler: (r) => (r.path === '/api/v1/net-devices' ? { status: 200, body: { devices: [device({ id: 'a', name: 'Дом' }), device({ id: 'k', name: 'Профит', kind: 'keenetic' }), device({ id: 'o', name: 'Дача', kind: 'openwrt' })] } } : undefined) })
+    renderPage()
+    await screen.findByText('Профит')
+    expect(screen.getAllByText('без замечаний')).toHaveLength(3)
+    const brands = within(screen.getByRole('group', { name: 'Марка роутера' }))
+    fireEvent.click(brands.getByRole('button', { name: 'Keenetic' }))
+    expect(screen.getByText('Профит')).toBeInTheDocument()
+    expect(screen.queryByText('Дом')).toBeNull()
+    expect(screen.queryByText('Дача')).toBeNull()
+    fireEvent.click(brands.getByRole('button', { name: 'Все' }))
+    expect(screen.getByText('Дача')).toBeInTheDocument()
+  })
+
   it('puts a router in a group', async () => {
     let sent = ''
     mockApi({

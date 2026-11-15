@@ -37,7 +37,7 @@ func recordForwards(ctx context.Context, tx pgx.Tx, deviceID uuid.UUID, r netdev
 	}
 	known := base == nil || now.Sub(*base) < fwBaselineWindow
 	for _, n := range r.Nat {
-		if n.Chain != "dstnat" || n.Off {
+		if n.Chain != "dstnat" || n.Off || strings.HasPrefix(n.Action, "upnp") {
 			continue
 		}
 		raw, err := json.Marshal(n)
@@ -58,7 +58,7 @@ ON CONFLICT (device_id, key) DO UPDATE SET rule=EXCLUDED.rule, last_seen=EXCLUDE
 
 // NewForwards lists, for each router, the open forwards nobody has looked at yet and that the router still lists.
 func (s *Store) newForwards(ctx context.Context, now time.Time) (map[string][]netdev.NatRule, error) {
-	rows, err := s.pool.Query(ctx, `SELECT device_id, rule FROM net_forwards WHERE NOT confirmed AND last_seen > $1 ORDER BY first_seen, key`, now.Add(-fwSeenWithin))
+	rows, err := s.pool.Query(ctx, `SELECT device_id, rule FROM net_forwards WHERE NOT confirmed AND last_seen > $1 AND rule->>'action' NOT LIKE 'upnp%' ORDER BY first_seen, key`, now.Add(-fwSeenWithin))
 	if err != nil {
 		return nil, err
 	}
