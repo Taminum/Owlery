@@ -50,6 +50,11 @@ func TestANewOpenPortWaitsForTheOwnerButTheFirstListIsKnown(t *testing.T) {
 	if n := news(later); n != 0 {
 		t.Fatalf("confirmed: %d", n)
 	}
+	upnp := netdev.NatRule{Chain: "dstnat", Action: "upnp udp", DstPort: "58849", ToAddr: "192.168.1.5", ToPorts: "58849"}
+	save(later.Add(30*time.Second), masq, fw("8080", "192.168.1.5"), fw("3389", "192.168.1.9"), upnp)
+	if n := news(later.Add(30 * time.Second)); n != 0 {
+		t.Fatalf("a program opening its own port through UPnP is no alert: %d", n)
+	}
 	gone := later.Add(time.Minute)
 	save(gone, masq, fw("8080", "192.168.1.5"), fw("3389", "192.168.1.9"))
 	if n := news(gone); n != 0 {

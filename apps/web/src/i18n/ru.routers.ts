@@ -75,6 +75,8 @@ export const routersText = {
   'rt.notFound': 'Такого роутера нет.',
   'rt.emptyFilter': 'В этой группе нет подходящих роутеров.',
   'rt.tileClients': 'Клиентов',
+  'rt.allFine': 'без замечаний',
+  'rt.brands': 'Марка роутера',
   'rt.noInternet': 'нет выхода в интернет',
   'rt.col.conns': 'Соединений',
   'rt.col.rule': 'Правило',
