@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Taminum/Owlery/internal/heartbeat"
 )
 
 type Config struct {
@@ -32,6 +34,7 @@ type Config struct {
 	ServicesDomain    string // optional: parent domain of web services' subdomains; empty = off
 	SyncEnabled       bool
 	SessionTTL        time.Duration
+	HeartbeatURL      string // optional: an outside address asked once a minute while the panel is well, so that its silence is noticed
 	IdleTTL           time.Duration
 }
 
@@ -109,6 +112,13 @@ func Load(get func(string) string) (Config, error) {
 			errs = append(errs, errors.New("SESSION_TTL_HOURS must be 1 to 720"))
 		} else {
 			c.SessionTTL = time.Duration(n) * time.Hour
+		}
+	}
+	if v := strings.TrimSpace(get("HEARTBEAT_URL")); v != "" {
+		if u, err := heartbeat.Parse(v); err != nil {
+			errs = append(errs, err)
+		} else {
+			c.HeartbeatURL = u
 		}
 	}
 	if (c.BootstrapOwner == "") != (c.BootstrapPassFile == "") {

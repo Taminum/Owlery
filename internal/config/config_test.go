@@ -49,3 +49,15 @@ func TestRejectsBadValues(t *testing.T) {
 		}
 	}
 }
+
+func TestTheHeartbeatAddressIsOptionalAndMustBeHTTPS(t *testing.T) {
+	if c, err := Load(env(nil)); err != nil || c.HeartbeatURL != "" {
+		t.Fatalf("off by default: %v %q", err, c.HeartbeatURL)
+	}
+	if c, err := Load(env(map[string]string{"HEARTBEAT_URL": " https://hc-ping.com/abc "})); err != nil || c.HeartbeatURL != "https://hc-ping.com/abc" {
+		t.Fatalf("%v %q", err, c.HeartbeatURL)
+	}
+	if _, err := Load(env(map[string]string{"HEARTBEAT_URL": "http://hc-ping.com/abc"})); err == nil {
+		t.Fatal("plain http must be refused")
+	}
+}
