@@ -54,6 +54,7 @@ services:
       BOOTSTRAP_PASSWORD_FILE: /run/secrets/owner_password
       GEMINI_API_KEY_FILE: /run/secrets/gemini_api_key
       RECORDS_DIR: /var/lib/owlery/records # terminal sessions, one file each
+      HEARTBEAT_URL: ${HEARTBEAT_URL:-} # an outside dead man's switch asked once a minute while the panel is well; empty = off
       GUACD_ADDR: guacd:4822 # remote desktops; remove to turn them off
       DESKTOP_HOST: api
       # Web services open at https://<name>.<SERVICES_DOMAIN>; it needs a wildcard DNS record *.<domain> to this server.

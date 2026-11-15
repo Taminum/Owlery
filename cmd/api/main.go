@@ -26,6 +26,7 @@ import (
 	"github.com/Taminum/Owlery/internal/dnsworker"
 	"github.com/Taminum/Owlery/internal/gemini"
 	"github.com/Taminum/Owlery/internal/geoip"
+	"github.com/Taminum/Owlery/internal/heartbeat"
 	"github.com/Taminum/Owlery/internal/httpapi"
 	"github.com/Taminum/Owlery/internal/ingest"
 	"github.com/Taminum/Owlery/internal/keenetic"
@@ -195,6 +196,9 @@ func serve(log *slog.Logger) error {
 		go sy.RunPulse(ctx, srv.Pulse, 15*time.Second)
 		go sy.RunSubscriptions(ctx, 10*time.Minute)
 		go sy.RunProtection(ctx, 10*time.Minute)
+	}
+	if c.HeartbeatURL != "" {
+		go (&heartbeat.Beater{URL: c.HeartbeatURL, Alive: st.Ping, Log: log}).Run(ctx, time.Minute)
 	}
 	go alerts.Run(ctx, st, time.Minute, log)
 	go (&keenetic.Runner{St: st, Ring: ring, Log: log}).Run(ctx, time.Minute)

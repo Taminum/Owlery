@@ -95,3 +95,6 @@ func (s *Store) inTx(ctx context.Context, fn func(pgx.Tx) error) error {
 	}
 	return tx.Commit(ctx)
 }
+
+// Ping says whether the database answers.
+func (s *Store) Ping(ctx context.Context) error { return s.pool.Ping(ctx) }
