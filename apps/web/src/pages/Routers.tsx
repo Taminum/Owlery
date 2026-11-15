@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { Plus } from 'lucide-react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { ArrowLeft, Plus } from 'lucide-react'
 import { t, type MsgKey } from '../i18n'
 import { api, ApiError } from '../lib/api'
 import { formatBytes, formatDateTime, formatRate } from '../lib/format'
 import { useApp } from '../lib/context'
 import { useLoad } from '../hooks/useLoad'
-import { Card, Chip, Skeleton } from '../components/ui'
+import { Card, Chip, Segmented, Skeleton } from '../components/ui'
 import { DangerButton, GhostButton, Modal, PrimaryButton, inputCls } from '../components/Modal'
 import { DataTable } from '../components/DataTable'
 import { PageHead } from '../components/Analyzer'
@@ -19,6 +20,7 @@ interface Blocked { mac: string; ip?: string; host?: string }
 interface Reserve { mac: string; ip: string }
 interface Act { title: string; note: string; label: string; danger?: boolean; method: 'post' | 'put' | 'del'; path: string; body?: unknown }
 interface Device {
+  group?: string
   id: string; name: string; kind?: string; url?: string; new_forwards?: NatRule[]; pull_error?: string; parent_id?: string | null; online: boolean; last_seen: string | null
   view: { board: string; version: string; uptime: number; cpu: number; mem_free: number; mem_total: number; temp?: number; stats_at?: string; ifaces: Iface[]; clients: Client[]; conn?: number; conn_max?: number; top?: TopSrc[]; nat?: NatRule[]; internet?: boolean; blocked?: Blocked[]; reserved?: Reserve[] }
 }
@@ -222,7 +224,7 @@ function ActionDialog({ act, onClose, onDone }: { act: Act; onClose: () => void;
   )
 }
 
-function DeviceCard({ d, tz, others, onParent, onRename, onRemove, onPassword, onConfirmFw, onReload }: { d: Device; tz: string; others: Device[]; onParent: (parent: string) => void; onRename: () => void; onRemove: () => void; onPassword: () => void; onConfirmFw: () => void; onReload: () => void }) {
+function DeviceCard({ d, tz, others, onParent, onRename, onRemove, onPassword, onGroup, onConfirmFw, onReload }: { d: Device; tz: string; others: Device[]; onParent: (parent: string) => void; onRename: () => void; onRemove: () => void; onPassword: () => void; onGroup: () => void; onConfirmFw: () => void; onReload: () => void }) {
   const v = d.view
   const [fwOpen, setFwOpen] = useState(false)
   const [fwDel, setFwDel] = useState<NatRule | null>(null)
@@ -239,7 +241,7 @@ function DeviceCard({ d, tz, others, onParent, onRename, onRemove, onPassword, o
   const names = new Map(v.clients.filter((c) => c.host).map((c) => [c.ip, c.host as string]))
   const sub = [v.board, v.version && (d.kind === 'openwrt' ? v.version : d.kind === 'keenetic' ? `KeeneticOS ${v.version}` : `RouterOS ${v.version}`)].filter(Boolean).join(', ')
   return (
-    <Card title={d.name} note={sub} right={<div className="flex gap-2">{d.kind === 'keenetic' && <GhostButton size="s" onClick={() => setAct({ title: t('rt.rebootTitle', { name: d.name }), note: t('rt.rebootNote'), label: t('rt.reboot'), danger: true, method: 'post', path: `${dev}/reboot` })}>{t('rt.reboot')}</GhostButton>}{d.kind === 'keenetic' && <GhostButton size="s" onClick={onPassword}>{t('rt.changePass')}</GhostButton>}<GhostButton size="s" onClick={onRename}>{t('rt.rename')}</GhostButton><GhostButton size="s" onClick={onRemove}>{t('rt.remove')}</GhostButton></div>}>
+    <Card title={d.name} note={sub} right={<div className="flex gap-2">{d.kind === 'keenetic' && <GhostButton size="s" onClick={() => setAct({ title: t('rt.rebootTitle', { name: d.name }), note: t('rt.rebootNote'), label: t('rt.reboot'), danger: true, method: 'post', path: `${dev}/reboot` })}>{t('rt.reboot')}</GhostButton>}{d.kind === 'keenetic' && <GhostButton size="s" onClick={onPassword}>{t('rt.changePass')}</GhostButton>}<GhostButton size="s" onClick={onGroup}>{t('rt.group')}</GhostButton><GhostButton size="s" onClick={onRename}>{t('rt.rename')}</GhostButton><GhostButton size="s" onClick={onRemove}>{t('rt.remove')}</GhostButton></div>}>
       <div className="space-y-4">
         {act && <ActionDialog act={act} onClose={() => setAct(null)} onDone={onReload} />}
         {fwOpen && <ForwardDialog d={d} onClose={() => setFwOpen(false)} onDone={onReload} />}
@@ -440,9 +442,76 @@ function NewDialog({ onClose, onMade }: { onClose: () => void; onMade: () => voi
   )
 }
 
+const problem = (d: Device) => !d.online || !!d.pull_error || d.view.internet === false || (d.new_forwards?.length ?? 0) > 0
+
+function RouterTile({ d }: { d: Device }) {
+  const v = d.view
+  const memPct = v.mem_total > 0 ? Math.round(((v.mem_total - v.mem_free) * 100) / v.mem_total) : null
+  const kind = d.kind === 'openwrt' ? 'OpenWrt' : d.kind === 'keenetic' ? 'Keenetic' : 'MikroTik'
+  return (
+    <Link to={`/routers/${d.id}`} className="block rounded-card border border-line bg-surface p-3.5 hover:border-cyan/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="truncate text-[15px] font-medium">{d.name}</div>
+          <div className="truncate text-xs text-muted">{[kind, d.group].filter(Boolean).join(' · ')}</div>
+        </div>
+        {d.online ? <Chip tone="green">{t('rt.online')}</Chip> : <Chip tone="red">{t('rt.offline')}</Chip>}
+      </div>
+      <div className="tnum mt-3 grid grid-cols-3 gap-2 text-xs">
+        <div><div className="text-muted">{t('rt.cpu')}</div><div className="text-[15px]">{d.online ? `${Math.round(v.cpu)}%` : '—'}</div></div>
+        <div><div className="text-muted">{t('rt.mem')}</div><div className="text-[15px]">{d.online && memPct !== null ? `${memPct}%` : '—'}</div></div>
+        <div><div className="text-muted">{t('rt.tileClients')}</div><div className="text-[15px]">{v.clients.length}</div></div>
+      </div>
+      {(d.pull_error || v.internet === false || (d.new_forwards?.length ?? 0) > 0) && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {d.pull_error && <Chip tone="red">{t(`rt.pullErr.${d.pull_error}` as MsgKey)}</Chip>}
+          {v.internet === false && <Chip tone="red">{t('rt.noInternet')}</Chip>}
+          {(d.new_forwards?.length ?? 0) > 0 && <Chip tone="red">{t('rt.newFwN', { n: d.new_forwards?.length ?? 0 })}</Chip>}
+        </div>
+      )}
+    </Link>
+  )
+}
+
+function GroupDialog({ d, groups, onClose, onDone }: { d: Device; groups: string[]; onClose: () => void; onDone: () => void }) {
+  const [group, setGroup] = useState(d.group ?? '')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const save = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      await api.patch(`/api/v1/net-devices/${d.id}`, { group: group.trim() })
+      onDone()
+      onClose()
+    } catch (e) {
+      setError(why(e))
+      setBusy(false)
+    }
+  }
+  return (
+    <Modal title={t('rt.groupTitle', { name: d.name })} onClose={onClose} busy={busy}>
+      <label htmlFor="rt-group" className="mb-1.5 block text-[13px] font-medium">{t('rt.group')}</label>
+      <input id="rt-group" list="rt-groups" data-autofocus className={inputCls} value={group} maxLength={40} placeholder={t('rt.groupPh')} onChange={(e) => setGroup(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void save()} />
+      <datalist id="rt-groups">{groups.map((g) => <option key={g} value={g} />)}</datalist>
+      <p className="mt-2 text-xs text-muted">{t('rt.groupHint')}</p>
+      {error && <p role="alert" className="mt-2 text-xs text-red">{error}</p>}
+      <div className="mt-4 flex gap-2">
+        <PrimaryButton size="m" onClick={save} disabled={busy}>{t('rt.save')}</PrimaryButton>
+        <GhostButton size="m" onClick={onClose} disabled={busy}>{t('common.cancel')}</GhostButton>
+      </div>
+    </Modal>
+  )
+}
+
 export default function Routers() {
   const { filters } = useApp()
+  const { id } = useParams()
+  const nav = useNavigate()
   const { data, error, reload } = useLoad((s) => api.get<{ devices: Device[] }>('/api/v1/net-devices', s), [], 30_000)
+  const [groupFilter, setGroupFilter] = useState('')
+  const [only, setOnly] = useState<'all' | 'problems'>('all')
+  const [grouping, setGrouping] = useState<Device | null>(null)
   const [adding, setAdding] = useState(false)
   const [removing, setRemoving] = useState<Device | null>(null)
   const [renaming, setRenaming] = useState<Device | null>(null)
@@ -472,19 +541,52 @@ export default function Routers() {
     try {
       await api.del(`/api/v1/net-devices/${removing.id}`)
       setRemoving(null)
+      if (id) nav('/routers')
       reload()
     } finally {
       setBusy(false)
     }
   }
+  const all = data?.devices ?? []
+  const groups = [...new Set(all.map((d) => d.group).filter((g): g is string => !!g))].sort((a, b) => a.localeCompare(b, 'ru'))
+  const shown = all
+    .filter((d) => (groupFilter === '' ? true : groupFilter === '\u0000' ? !d.group : d.group === groupFilter))
+    .filter((d) => (only === 'problems' ? problem(d) : true))
+    .sort((a, b) => Number(problem(b)) - Number(problem(a)) || a.name.localeCompare(b.name, 'ru'))
+  const one = id ? all.find((d) => d.id === id) : undefined
   return (
     <div className="space-y-5">
       <PageHead title={t('rt.title')} subtitle={t('rt.subtitle')} right={<PrimaryButton size="m" onClick={() => setAdding(true)}><Plus size={14} aria-hidden className="mr-1 inline" />{t('rt.add')}</PrimaryButton>} />
       {error && <p role="alert" className="text-[13px] text-red">{error}</p>}
       {parentError && <p role="alert" className="text-[13px] text-red">{parentError}</p>}
       {!data && !error && <Skeleton className="h-40" />}
-      {data && data.devices.length === 0 && <p className="text-[13px] text-muted">{t('rt.empty')}</p>}
-      {data?.devices.map((d) => <DeviceCard key={d.id} d={d} tz={filters.tz} others={data.devices.filter((o) => o.id !== d.id)} onParent={(p) => void setParent(d.id, p)} onRename={() => setRenaming(d)} onRemove={() => setRemoving(d)} onPassword={() => setPasswording(d)} onConfirmFw={() => void confirmFw(d.id)} onReload={reload} />)}
+      {data && all.length === 0 && <p className="text-[13px] text-muted">{t('rt.empty')}</p>}
+      {id && data && (
+        <div className="space-y-3">
+          <Link to="/routers" className="inline-flex items-center gap-1.5 text-[13px] text-muted hover:text-fg"><ArrowLeft size={14} aria-hidden />{t('rt.back')}</Link>
+          {one ? <DeviceCard d={one} tz={filters.tz} others={all.filter((o) => o.id !== one.id)} onParent={(p) => void setParent(one.id, p)} onRename={() => setRenaming(one)} onRemove={() => setRemoving(one)} onPassword={() => setPasswording(one)} onGroup={() => setGrouping(one)} onConfirmFw={() => void confirmFw(one.id)} onReload={reload} /> : <p className="text-[13px] text-muted">{t('rt.notFound')}</p>}
+        </div>
+      )}
+      {!id && data && all.length > 0 && (
+        <>
+          <div className="flex flex-wrap items-center gap-3">
+            {groups.length > 0 && (
+              <Segmented label={t('rt.groups')} value={groupFilter} onChange={setGroupFilter} options={[
+                { value: '', label: t('rt.f.all') },
+                ...groups.map((g) => ({ value: g, label: g })),
+                { value: '\u0000', label: t('rt.f.noGroup') },
+              ]} />
+            )}
+            <Segmented label={t('rt.state')} value={only} onChange={setOnly} options={[{ value: 'all', label: t('rt.f.all') }, { value: 'problems', label: t('rt.f.problems') }]} />
+          </div>
+          {shown.length === 0 ? <p className="text-[13px] text-muted">{t('rt.emptyFilter')}</p> : (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {shown.map((d) => <RouterTile key={d.id} d={d} />)}
+            </div>
+          )}
+        </>
+      )}
+      {grouping && <GroupDialog d={grouping} groups={groups} onClose={() => setGrouping(null)} onDone={reload} />}
       {passwording && <PasswordDialog d={passwording} onClose={() => setPasswording(null)} onDone={reload} />}
       {renaming && <RenameDialog d={renaming} onClose={() => setRenaming(null)} onDone={reload} />}
       {adding && <NewDialog onClose={() => setAdding(false)} onMade={reload} />}

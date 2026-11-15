@@ -425,6 +425,7 @@ func (s *Server) renameNetDevice(w http.ResponseWriter, r *http.Request, a auth.
 		Name     *string `json:"name"`
 		ParentID *string `json:"parent_id"`
 		Password *string `json:"password"` // a new password, for a router that is asked
+		Group    *string `json:"group"`
 	}
 	if !s.decode(w, r, &in) {
 		return
@@ -453,6 +454,17 @@ func (s *Server) renameNetDevice(w http.ResponseWriter, r *http.Request, a auth.
 	}
 	if in.Password != nil && !s.changeRouterPassword(w, r, a, id, *in.Password) {
 		return
+	}
+	if in.Group != nil {
+		if len(*in.Group) > 40 {
+			s.writeErr(w, r, http.StatusUnprocessableEntity, "invalid_name", "a group name of up to 40 characters")
+			return
+		}
+		if err := s.Store.SetNetGroup(r.Context(), id, strings.TrimSpace(*in.Group)); err != nil {
+			fail(err)
+			return
+		}
+		s.audit(r, a, "", "netdevice.group", "netdevice", id, map[string]any{"group": strings.TrimSpace(*in.Group)})
 	}
 	if in.ParentID != nil {
 		if err := s.Store.SetNetParent(r.Context(), id, *in.ParentID); err != nil {

@@ -56,7 +56,7 @@ func fakeRouter(t *testing.T, login, password string, paths *[]string) *httptest
 		case "/rci/show/ip/hotspot":
 			_, _ = w.Write([]byte(`{"host":[
 				{"mac":"e8:6a:64:7e:0a:b8","ip":"192.168.0.90","hostname":"Desk","name":"Desk - Home","active":true},
-				{"mac":"ac:c5:1b:24:2b:4d","ip":"192.168.0.71","hostname":"","name":"Printer - Home","active":true},
+				{"mac":"ac:c5:1b:24:2b:4d","ip":"192.168.0.71","hostname":"","name":"Printer - Home","active":true,"access":"deny"},
 				{"mac":"00:25:ab:20:34:7c","ip":"192.168.0.95","hostname":"Gone","active":false},
 				{"mac":"zz","ip":"192.168.0.99","hostname":"Broken","active":true}]}`))
 		case "/rci/show/sc/ip/static":
@@ -108,10 +108,10 @@ func TestPollReadsTheRouterWithOnlyShowCommands(t *testing.T) {
 	if !r.HasConn || r.Conn != 16384-15906 || r.ConnMax != 16384 {
 		t.Fatalf("connections: %+v", r)
 	}
-	if !r.ResetClients || len(r.Clients) != 2 {
+	if !r.ResetClients || len(r.Clients) != 1 {
 		t.Fatalf("only active clients with a real address and MAC: %+v", r.Clients)
 	}
-	if r.Clients[0].MAC != "E8:6A:64:7E:0A:B8" || r.Clients[0].Host != "Desk" || r.Clients[1].Host != "Printer - Home" {
+	if r.Clients[0].MAC != "E8:6A:64:7E:0A:B8" || r.Clients[0].Host != "Desk" {
 		t.Fatalf("clients: %+v", r.Clients)
 	}
 	if len(r.Ifaces) != 2 || r.Ifaces[0].Name != "Bridge0" || r.Ifaces[1].Name != "PPPoE0" || r.Ifaces[1].RX != 409890362492 || !r.Ifaces[1].Up {
