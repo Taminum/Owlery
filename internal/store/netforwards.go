@@ -37,7 +37,7 @@ func recordForwards(ctx context.Context, tx pgx.Tx, deviceID uuid.UUID, r netdev
 	}
 	known := base == nil || now.Sub(*base) < fwBaselineWindow
 	for _, n := range r.Nat {
-		if n.Chain != "dstnat" {
+		if n.Chain != "dstnat" || n.Off {
 			continue
 		}
 		raw, err := json.Marshal(n)

@@ -30,6 +30,8 @@ type NetView struct {
 	ConnAt    *time.Time         `json:"conn_at,omitempty"`
 	Top       []netdev.TopSource `json:"top"`
 	Nat       []netdev.NatRule   `json:"nat"`
+	Blocked   []netdev.Blocked   `json:"blocked,omitempty"`  // devices the router refuses
+	Reserved  []netdev.Reserve   `json:"reserved,omitempty"` // addresses the router keeps for a device
 	Internet  *bool              `json:"internet,omitempty"` // the router's own verdict on the way out, when it gives one
 }
 
@@ -259,6 +261,9 @@ func (s *Store) SaveNetReport(ctx context.Context, id string, r netdev.Report, n
 			if v.Top == nil {
 				v.Top = []netdev.TopSource{}
 			}
+		}
+		if r.HasAccess {
+			v.Blocked, v.Reserved = r.Blocked, r.Reserved
 		}
 		if r.Internet != nil {
 			ok := *r.Internet

@@ -17,15 +17,17 @@ const AlertLANNew = "lan_new_device"
 
 // LANDevice is a device some router has listed as a client.
 type LANDevice struct {
-	MAC       string    `json:"mac"`
-	IP        string    `json:"ip"`
-	Host      string    `json:"host,omitempty"`
-	Name      string    `json:"name,omitempty"`
-	Source    string    `json:"source"`
-	FirstSeen time.Time `json:"first_seen"`
-	LastSeen  time.Time `json:"last_seen"`
-	Confirmed bool      `json:"confirmed"`
-	Seen      bool      `json:"seen"` // in the latest list of a router
+	MAC        string    `json:"mac"`
+	IP         string    `json:"ip"`
+	Host       string    `json:"host,omitempty"`
+	Name       string    `json:"name,omitempty"`
+	Source     string    `json:"source"`
+	SourceID   string    `json:"source_id,omitempty"`   // the router that listed it
+	SourceKind string    `json:"source_kind,omitempty"` // and what kind it is, which tells what the panel may do there
+	FirstSeen  time.Time `json:"first_seen"`
+	LastSeen   time.Time `json:"last_seen"`
+	Confirmed  bool      `json:"confirmed"`
+	Seen       bool      `json:"seen"` // in the latest list of a router
 }
 
 // lanSeenWithin is how recently a router must have listed a device for it to count as seen now.
@@ -54,7 +56,7 @@ ON CONFLICT (mac) DO UPDATE SET ip=EXCLUDED.ip, host=CASE WHEN EXCLUDED.host<>''
 
 // ListLANDevices lists every device ever listed, the ones seen most recently first.
 func (s *Store) ListLANDevices(ctx context.Context, now time.Time) ([]LANDevice, error) {
-	rows, err := s.pool.Query(ctx, `SELECT l.mac, l.ip, l.host, l.name, coalesce(n.name, ''), l.first_seen, l.last_seen, l.confirmed
+	rows, err := s.pool.Query(ctx, `SELECT l.mac, l.ip, l.host, l.name, coalesce(n.name, ''), coalesce(n.id::text, ''), coalesce(n.kind, ''), l.first_seen, l.last_seen, l.confirmed
 FROM lan_devices l LEFT JOIN net_devices n ON n.id = l.source_id ORDER BY l.last_seen DESC, l.mac`)
 	if err != nil {
 		return nil, err
@@ -63,7 +65,7 @@ FROM lan_devices l LEFT JOIN net_devices n ON n.id = l.source_id ORDER BY l.last
 	out := []LANDevice{}
 	for rows.Next() {
 		var d LANDevice
-		if err := rows.Scan(&d.MAC, &d.IP, &d.Host, &d.Name, &d.Source, &d.FirstSeen, &d.LastSeen, &d.Confirmed); err != nil {
+		if err := rows.Scan(&d.MAC, &d.IP, &d.Host, &d.Name, &d.Source, &d.SourceID, &d.SourceKind, &d.FirstSeen, &d.LastSeen, &d.Confirmed); err != nil {
 			return nil, err
 		}
 		d.Seen = now.Sub(d.LastSeen) < lanSeenWithin

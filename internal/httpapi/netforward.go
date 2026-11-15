@@ -76,14 +76,14 @@ func (s *Server) routerWriteError(w http.ResponseWriter, r *http.Request, err er
 
 // refreshRouter reads the router again right after a change so the page shows it at once. A forward the owner has just made is
 // theirs, so it is marked as known before the reading is saved and no alert is opened for it.
-func (s *Server) refreshRouter(ctx context.Context, c *keenetic.Client, dev *store.PullDevice, added *keenetic.ForwardSpec) {
+func (s *Server) refreshRouter(ctx context.Context, c *keenetic.Client, dev *store.PullDevice, known func(netdev.NatRule) bool) {
 	rep, err := c.Poll(ctx)
 	if err != nil {
 		return
 	}
-	if added != nil {
+	if known != nil {
 		for _, n := range rep.Nat {
-			if n.Chain == "dstnat" && n.DstPort == strconv.Itoa(added.Port) && strings.HasPrefix(n.Action, "forward "+added.Protocol) {
+			if n.Chain == "dstnat" && !n.Off && known(n) {
 				_ = s.Store.AllowForward(ctx, dev.ID, n)
 			}
 		}
@@ -124,7 +124,9 @@ func (s *Server) addForward(w http.ResponseWriter, r *http.Request, a auth.Actor
 		return
 	}
 	s.audit(r, a, "", "netdevice.forward_add", "netdevice", dev.ID, map[string]any{"port": in.Port, "protocol": in.Protocol, "to": spec.ToIP, "to_port": in.ToPort, "comment": spec.Comment})
-	s.refreshRouter(ctx, c, dev, &spec)
+	s.refreshRouter(ctx, c, dev, func(n netdev.NatRule) bool {
+		return n.DstPort == strconv.Itoa(spec.Port) && strings.HasPrefix(n.Action, "forward "+spec.Protocol)
+	})
 	w.WriteHeader(http.StatusNoContent)
 }
 

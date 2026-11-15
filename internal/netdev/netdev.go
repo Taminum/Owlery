@@ -35,6 +35,18 @@ type Client struct {
 	Host string `json:"host,omitempty"`
 }
 
+// Blocked is a device the router refuses; Reserve is an address the router keeps for a device.
+type Blocked struct {
+	MAC  string `json:"mac"`
+	IP   string `json:"ip,omitempty"`
+	Host string `json:"host,omitempty"`
+}
+
+type Reserve struct {
+	MAC string `json:"mac"`
+	IP  string `json:"ip"`
+}
+
 // TopSource is a client address and how many tracked connections it holds.
 type TopSource struct {
 	IP string `json:"ip"`
@@ -51,6 +63,7 @@ type NatRule struct {
 	ToAddr  string `json:"to_addr,omitempty"`
 	ToPorts string `json:"to_ports,omitempty"`
 	Comment string `json:"comment,omitempty"`
+	Off     bool   `json:"off,omitempty"` // a forward that is switched off (kept, not open)
 	Ref     string `json:"ref,omitempty"` // the router's own number for a forward Owlery may remove (Keenetic)
 }
 
@@ -73,6 +86,9 @@ type Report struct {
 	Top          []TopSource
 	ResetNat     bool // the first piece of the NAT rules: forget the old ones
 	Nat          []NatRule
+	HasAccess    bool // the report carries the router's blocked devices and reserved addresses (a router that is asked)
+	Blocked      []Blocked
+	Reserved     []Reserve
 	Internet     *bool // whether the router itself finds the way out working (a router that is asked says so; nil when unknown)
 }
 

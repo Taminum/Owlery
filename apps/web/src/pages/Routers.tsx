@@ -13,11 +13,14 @@ import { durationText } from '../components/ServerParts'
 
 interface Iface { name: string; rx: number; tx: number; up: boolean; rx_bps: number; tx_bps: number }
 interface TopSrc { ip: string; n: number }
-interface NatRule { chain: string; action: string; packets: number; bytes: number; dst_port?: string; to_addr?: string; to_ports?: string; comment?: string; ref?: string }
+interface NatRule { chain: string; action: string; packets: number; bytes: number; dst_port?: string; to_addr?: string; to_ports?: string; comment?: string; ref?: string; off?: boolean }
 interface Client { ip: string; mac: string; host?: string }
+interface Blocked { mac: string; ip?: string; host?: string }
+interface Reserve { mac: string; ip: string }
+interface Act { title: string; note: string; label: string; danger?: boolean; method: 'post' | 'put' | 'del'; path: string; body?: unknown }
 interface Device {
   id: string; name: string; kind?: string; url?: string; new_forwards?: NatRule[]; pull_error?: string; parent_id?: string | null; online: boolean; last_seen: string | null
-  view: { board: string; version: string; uptime: number; cpu: number; mem_free: number; mem_total: number; temp?: number; stats_at?: string; ifaces: Iface[]; clients: Client[]; conn?: number; conn_max?: number; top?: TopSrc[]; nat?: NatRule[]; internet?: boolean }
+  view: { board: string; version: string; uptime: number; cpu: number; mem_free: number; mem_total: number; temp?: number; stats_at?: string; ifaces: Iface[]; clients: Client[]; conn?: number; conn_max?: number; top?: TopSrc[]; nat?: NatRule[]; internet?: boolean; blocked?: Blocked[]; reserved?: Reserve[] }
 }
 
 function Tile({ label, value, sub }: { label: string; value: string; sub?: string }) {
@@ -188,10 +191,44 @@ function DeleteForwardDialog({ d, rule, onClose, onDone }: { d: Device; rule: Na
   )
 }
 
+function ActionDialog({ act, onClose, onDone }: { act: Act; onClose: () => void; onDone: () => void }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const go = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      if (act.method === 'post') await api.post(act.path, act.body ?? {})
+      else if (act.method === 'put') await api.put(act.path, act.body ?? {})
+      else await api.del(act.path)
+      onDone()
+      onClose()
+    } catch (e) {
+      setError(why(e))
+      setBusy(false)
+    }
+  }
+  const Btn = act.danger ? DangerButton : PrimaryButton
+  return (
+    <Modal title={act.title} onClose={onClose} busy={busy}>
+      <p className="text-[13px] text-muted">{act.note}</p>
+      {busy && <p className="mt-2 text-xs text-muted">{t('rt.fwBusy')}</p>}
+      {error && <p role="alert" className="mt-2 text-xs text-red">{error}</p>}
+      <div className="mt-4 flex gap-2">
+        <Btn size="m" onClick={go} disabled={busy}>{act.label}</Btn>
+        <GhostButton size="m" onClick={onClose} disabled={busy}>{t('common.cancel')}</GhostButton>
+      </div>
+    </Modal>
+  )
+}
+
 function DeviceCard({ d, tz, others, onParent, onRename, onRemove, onPassword, onConfirmFw, onReload }: { d: Device; tz: string; others: Device[]; onParent: (parent: string) => void; onRename: () => void; onRemove: () => void; onPassword: () => void; onConfirmFw: () => void; onReload: () => void }) {
   const v = d.view
   const [fwOpen, setFwOpen] = useState(false)
   const [fwDel, setFwDel] = useState<NatRule | null>(null)
+  const [act, setAct] = useState<Act | null>(null)
+  const reservedBy = new Map((d.view.reserved ?? []).map((x) => [x.mac, x.ip]))
+  const dev = `/api/v1/net-devices/${d.id}`
   const memPct = v.mem_total > 0 ? Math.round(((v.mem_total - v.mem_free) * 100) / v.mem_total) : null
   const [now] = useState(() => Date.now())
   const [showDown, setShowDown] = useState(false)
@@ -202,8 +239,9 @@ function DeviceCard({ d, tz, others, onParent, onRename, onRemove, onPassword, o
   const names = new Map(v.clients.filter((c) => c.host).map((c) => [c.ip, c.host as string]))
   const sub = [v.board, v.version && (d.kind === 'openwrt' ? v.version : d.kind === 'keenetic' ? `KeeneticOS ${v.version}` : `RouterOS ${v.version}`)].filter(Boolean).join(', ')
   return (
-    <Card title={d.name} note={sub} right={<div className="flex gap-2">{d.kind === 'keenetic' && <GhostButton size="s" onClick={onPassword}>{t('rt.changePass')}</GhostButton>}<GhostButton size="s" onClick={onRename}>{t('rt.rename')}</GhostButton><GhostButton size="s" onClick={onRemove}>{t('rt.remove')}</GhostButton></div>}>
+    <Card title={d.name} note={sub} right={<div className="flex gap-2">{d.kind === 'keenetic' && <GhostButton size="s" onClick={() => setAct({ title: t('rt.rebootTitle', { name: d.name }), note: t('rt.rebootNote'), label: t('rt.reboot'), danger: true, method: 'post', path: `${dev}/reboot` })}>{t('rt.reboot')}</GhostButton>}{d.kind === 'keenetic' && <GhostButton size="s" onClick={onPassword}>{t('rt.changePass')}</GhostButton>}<GhostButton size="s" onClick={onRename}>{t('rt.rename')}</GhostButton><GhostButton size="s" onClick={onRemove}>{t('rt.remove')}</GhostButton></div>}>
       <div className="space-y-4">
+        {act && <ActionDialog act={act} onClose={() => setAct(null)} onDone={onReload} />}
         {fwOpen && <ForwardDialog d={d} onClose={() => setFwOpen(false)} onDone={onReload} />}
         {fwDel && <DeleteForwardDialog d={d} rule={fwDel} onClose={() => setFwDel(null)} onDone={onReload} />}
         {(d.new_forwards?.length ?? 0) > 0 && (
@@ -274,12 +312,12 @@ function DeviceCard({ d, tz, others, onParent, onRename, onRemove, onPassword, o
               {d.kind === 'keenetic' && <GhostButton size="s" onClick={() => setFwOpen(true)}>{t('rt.fwOpen')}</GhostButton>}
             </div>
             <DataTable caption={t('rt.nat')} rows={v.nat ?? []} rowKey={(x) => `${x.chain}|${x.action}|${x.dst_port ?? ''}|${x.to_addr ?? ''}|${x.comment ?? ''}`} pageSize={12} columns={[
-              { key: 'rule', title: t('rt.col.rule'), cell: (x) => <span className="font-medium">{x.chain} · {x.action}</span> },
+              { key: 'rule', title: t('rt.col.rule'), cell: (x) => <span className="font-medium">{x.chain} · {x.action}{x.off ? <span className="ml-2 font-normal text-muted">{t('rt.fwIsOff')}</span> : null}</span> },
               { key: 'to', title: t('rt.col.to'), className: 'tnum', cell: (x) => (x.dst_port || x.to_addr || x.to_ports ? `${x.dst_port ? `:${x.dst_port} → ` : ''}${x.to_addr ?? ''}${x.to_ports ? `:${x.to_ports}` : ''}` : '—') },
               { key: 'pk', title: t('rt.col.hits'), align: 'right', className: 'tnum', sort: (x) => x.packets, descFirst: true, cell: (x) => (x.packets < 0 ? '—' : x.packets) },
               { key: 'by', title: t('rt.col.bytes'), align: 'right', className: 'tnum', sort: (x) => x.bytes, descFirst: true, cell: (x) => (x.bytes < 0 ? '—' : formatBytes(x.bytes)) },
               { key: 'cm', title: t('rt.col.note'), cell: (x) => x.comment || '—' },
-              ...(d.kind === 'keenetic' ? [{ key: 'del', title: '', align: 'right' as const, cell: (x: NatRule) => (x.ref ? <GhostButton size="s" onClick={() => setFwDel(x)}>{t('rt.fwDel')}</GhostButton> : null) }] : []),
+              ...(d.kind === 'keenetic' ? [{ key: 'del', title: '', align: 'right' as const, cell: (x: NatRule) => (x.ref ? <span className="flex justify-end gap-2"><GhostButton size="s" onClick={() => setAct({ title: t(x.off ? 'rt.fwOnTitle' : 'rt.fwOffTitle'), note: t(x.off ? 'rt.fwOnNote' : 'rt.fwOffNote'), label: t(x.off ? 'rt.fwOn' : 'rt.fwOff'), method: 'post', path: `${dev}/forwards/${x.ref}/switch`, body: { off: !x.off } })}>{t(x.off ? 'rt.fwOn' : 'rt.fwOff')}</GhostButton><GhostButton size="s" onClick={() => setFwDel(x)}>{t('rt.fwDel')}</GhostButton></span> : null) }] : []),
             ]} />
           </div>
         )}
@@ -290,9 +328,23 @@ function DeviceCard({ d, tz, others, onParent, onRename, onRemove, onPassword, o
               { key: 'name', title: t('rt.col.name'), sort: (c) => c.host ?? '', cell: (c) => c.host || '—' },
               { key: 'ip', title: t('rt.col.ip'), className: 'tnum', sort: (c) => c.ip, cell: (c) => c.ip },
               { key: 'mac', title: t('rt.col.mac'), className: 'font-mono text-xs', cell: (c) => c.mac },
+              ...(d.kind === 'keenetic' ? [{ key: 'act', title: '', align: 'right' as const, cell: (c: Client) => <span className="flex justify-end gap-2">{reservedBy.has(c.mac) && <Chip>{t('rt.kept')}</Chip>}<GhostButton size="s" onClick={() => setAct(reservedBy.has(c.mac) ? { title: t('rt.unkeepTitle'), note: t('rt.unkeepNote'), label: t('rt.unkeep'), method: 'del', path: `${dev}/clients/${c.mac}/reserve` } : { title: t('rt.keepTitle'), note: t('rt.keepNote', { ip: c.ip }), label: t('rt.keep'), method: 'put', path: `${dev}/clients/${c.mac}/reserve` })}>{t(reservedBy.has(c.mac) ? 'rt.unkeep' : 'rt.keep')}</GhostButton><GhostButton size="s" onClick={() => setAct({ title: t('rt.blockTitle', { name: c.host || c.ip }), note: t('rt.blockNote'), label: t('rt.block'), danger: true, method: 'post', path: `${dev}/clients/${c.mac}/block` })}>{t('rt.block')}</GhostButton></span> }] : []),
             ]} />
           )}
         </div>
+        {(v.blocked?.length ?? 0) > 0 && (
+          <div>
+            <h3 className="mb-1.5 text-[13px] font-medium">{t('rt.blocked')}</h3>
+            <ul className="space-y-1 text-[13px]">
+              {v.blocked?.map((b) => (
+                <li key={b.mac} className="flex items-center justify-between gap-2">
+                  <span><span className="font-mono text-xs">{b.mac}</span>{b.host || b.ip ? <span className="ml-2 text-muted">{[b.host, b.ip].filter(Boolean).join(', ')}</span> : null}</span>
+                  <GhostButton size="s" onClick={() => setAct({ title: t('rt.unblockTitle'), note: t('rt.unblockNote'), label: t('rt.unblock'), method: 'del', path: `${dev}/clients/${b.mac}/block` })}>{t('rt.unblock')}</GhostButton>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </Card>
   )

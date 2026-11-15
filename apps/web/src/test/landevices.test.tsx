@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from '../lib/auth'
 import { setCsrf } from '../lib/api'
@@ -43,6 +43,27 @@ describe('Устройства в сети', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Пропавшие' }))
     expect(screen.getByText('Принтер')).toBeInTheDocument()
     expect(screen.queryByText('192.168.88.141')).toBeNull()
+  })
+
+  it('blocks a device that a Keenetic lists, and only that', async () => {
+    let sent = ''
+    const list = [
+      { ...devices[1], source_id: 'k1', source_kind: 'keenetic' },
+      { ...devices[0], source_id: 'm1', source_kind: 'mikrotik' },
+    ]
+    mockApi({
+      me: owner,
+      handler: (r) => {
+        if (r.path === '/api/v1/net-devices/k1/clients/3C%3A22%3AFB%3A11%3A90%3AAB/block' && r.method === 'POST') { sent = 'blocked'; return { status: 204 } }
+        return r.path === '/api/v1/lan-devices' ? { status: 200, body: { devices: list } } : undefined
+      },
+    })
+    renderPage()
+    await screen.findByText('192.168.88.141')
+    expect(screen.getAllByRole('button', { name: 'Заблокировать' })).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Заблокировать' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Заблокировать' }))
+    await vi.waitFor(() => expect(sent).toBe('blocked'))
   })
 
   it('names a new device, which confirms it', async () => {

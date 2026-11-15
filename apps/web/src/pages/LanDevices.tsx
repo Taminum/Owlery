@@ -1,15 +1,15 @@
 import { useState } from 'react'
 import { t } from '../i18n'
-import { api } from '../lib/api'
+import { api, ApiError } from '../lib/api'
 import { formatDateTime } from '../lib/format'
 import { useApp } from '../lib/context'
 import { useLoad } from '../hooks/useLoad'
 import { Chip, Segmented, Skeleton } from '../components/ui'
-import { GhostButton, Modal, PrimaryButton, inputCls } from '../components/Modal'
+import { DangerButton, GhostButton, Modal, PrimaryButton, inputCls } from '../components/Modal'
 import { DataTable } from '../components/DataTable'
 import { PageHead } from '../components/Analyzer'
 
-interface Dev { mac: string; ip: string; host?: string; name?: string; source: string; first_seen: string; last_seen: string; confirmed: boolean; seen: boolean }
+interface Dev { mac: string; ip: string; host?: string; name?: string; source: string; source_id?: string; source_kind?: string; first_seen: string; last_seen: string; confirmed: boolean; seen: boolean }
 type Filter = 'all' | 'seen' | 'new' | 'gone'
 
 const label = (d: Dev) => d.name || d.host || ''
@@ -53,11 +53,40 @@ function NameDialog({ d, onClose, onDone }: { d: Dev; onClose: () => void; onDon
   )
 }
 
+function BlockDialog({ d, onClose, onDone }: { d: Dev; onClose: () => void; onDone: () => void }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const go = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      await api.post(`/api/v1/net-devices/${d.source_id}/clients/${encodeURIComponent(d.mac)}/block`, {})
+      onDone()
+      onClose()
+    } catch (e) {
+      setError(e instanceof ApiError && e.code === 'forbidden' ? t('rt.err.forbidden') : t('lan.err'))
+      setBusy(false)
+    }
+  }
+  return (
+    <Modal title={t('rt.blockTitle', { name: label(d) || d.ip })} onClose={onClose} busy={busy}>
+      <p className="text-[13px] text-muted">{t('rt.blockNote')}</p>
+      {busy && <p className="mt-2 text-xs text-muted">{t('rt.fwBusy')}</p>}
+      {error && <p role="alert" className="mt-2 text-xs text-red">{error}</p>}
+      <div className="mt-4 flex gap-2">
+        <DangerButton size="m" onClick={go} disabled={busy}>{t('rt.block')}</DangerButton>
+        <GhostButton size="m" onClick={onClose} disabled={busy}>{t('common.cancel')}</GhostButton>
+      </div>
+    </Modal>
+  )
+}
+
 export default function LanDevices() {
   const { filters } = useApp()
   const { data, error, reload } = useLoad((s) => api.get<{ devices: Dev[] }>('/api/v1/lan-devices', s), [], 30_000)
   const [filter, setFilter] = useState<Filter>('all')
   const [editing, setEditing] = useState<Dev | null>(null)
+  const [blocking, setBlocking] = useState<Dev | null>(null)
   const [now] = useState(() => Date.now())
   const all = data?.devices ?? []
   const fresh = all.filter((d) => !d.confirmed)
@@ -92,12 +121,13 @@ export default function LanDevices() {
                 { key: 'mac', title: t('lan.col.mac'), className: 'font-mono text-xs', cell: (d) => d.mac },
                 { key: 'src', title: t('lan.col.source'), sort: (d) => d.source, cell: (d) => d.source || '—' },
                 { key: 'state', title: t('lan.col.state'), sort: (d) => d.last_seen, descFirst: true, cell: (d) => (d.seen ? <Chip tone="green">{t('lan.seenNow')}</Chip> : <span className="text-muted">{gone(d)}</span>) },
-                { key: 'act', title: '', align: 'right', cell: (d) => <GhostButton size="s" onClick={() => setEditing(d)}>{d.confirmed ? t('lan.rename') : t('lan.confirm')}</GhostButton> },
+                { key: 'act', title: '', align: 'right', cell: (d) => <span className="flex justify-end gap-2">{d.source_kind === 'keenetic' && d.source_id && d.seen && <GhostButton size="s" onClick={() => setBlocking(d)}>{t('rt.block')}</GhostButton>}<GhostButton size="s" onClick={() => setEditing(d)}>{d.confirmed ? t('lan.rename') : t('lan.confirm')}</GhostButton></span> },
               ]} />
             )}
           <p className="text-xs text-muted">{t('lan.note')}</p>
         </>
       )}
+      {blocking && <BlockDialog d={blocking} onClose={() => setBlocking(null)} onDone={reload} />}
       {editing && <NameDialog d={editing} onClose={() => setEditing(null)} onDone={reload} />}
     </div>
   )
