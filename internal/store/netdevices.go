@@ -337,3 +337,6 @@ const AlertNetConnFull = "net_conn_full"
 
 // AlertNetInternet: the router answers, but says it has no way out to the internet.
 const AlertNetInternet = "net_internet_down"
+
+// AlertNetWAN: the router answers, but its link to the provider is down.
+const AlertNetWAN = "net_wan_down"

@@ -75,6 +75,18 @@ func TestNetConditionsFlagARouterThatAnswersButHasNoWayOut(t *testing.T) {
 		return store.NetDevice{ID: id, Name: id, LastSeen: &at, View: store.NetView{Internet: in, StatsAt: stats}}
 	}
 	devs := []store.NetDevice{mk("fine", &yes, &at), mk("cut", &no, &at), mk("unknown", nil, &at), mk("stale", &no, &old)}
+	linkDown := mk("linkdown", &no, &at)
+	linkDown.View.Ifaces = []netdev.Iface{{Name: "PPPoE0", Wan: true, Up: false}, {Name: "Bridge0", Up: false}}
+	devs = append(devs, linkDown)
+	var wan []string
+	for _, c := range NetConditions(devs, now) {
+		if c.Kind == store.AlertNetWAN {
+			wan = append(wan, c.Subject)
+		}
+	}
+	if len(wan) != 1 || wan[0] != "linkdown|PPPoE0" {
+		t.Fatalf("the provider link that is down, and only that: %v", wan)
+	}
 	var cut []string
 	for _, c := range NetConditions(devs, now) {
 		if c.Kind == store.AlertNetInternet {

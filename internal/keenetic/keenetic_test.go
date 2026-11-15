@@ -114,7 +114,7 @@ func TestPollReadsTheRouterWithOnlyShowCommands(t *testing.T) {
 	if r.Clients[0].MAC != "E8:6A:64:7E:0A:B8" || r.Clients[0].Host != "Desk" {
 		t.Fatalf("clients: %+v", r.Clients)
 	}
-	if len(r.Ifaces) != 2 || r.Ifaces[0].Name != "Bridge0" || r.Ifaces[1].Name != "PPPoE0" || r.Ifaces[1].RX != 409890362492 || !r.Ifaces[1].Up {
+	if len(r.Ifaces) != 2 || r.Ifaces[0].Name != "Bridge0" || r.Ifaces[1].Name != "PPPoE0" || r.Ifaces[1].RX != 409890362492 || !r.Ifaces[1].Up || !r.Ifaces[1].Wan || r.Ifaces[0].Wan {
 		t.Fatalf("interfaces (the lines and the cable ports are left out): %+v", r.Ifaces)
 	}
 	if !r.ResetNat || len(r.Nat) != 4 || !r.Nat[1].Off || r.Nat[0].Off || r.Nat[2].Off {

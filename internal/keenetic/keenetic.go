@@ -485,7 +485,7 @@ func (c *Client) Poll(ctx context.Context) (netdev.Report, error) {
 		}
 		for _, id := range ids {
 			info := all[id]
-			f := netdev.Iface{Name: netdev.Clean(id, 40), Up: info.State == "up" && info.Link == "up"}
+			f := netdev.Iface{Name: netdev.Clean(id, 40), Up: info.State == "up" && info.Link == "up", Wan: wanKinds[info.Type]}
 			var st statResp
 			if get(ctx, h, c.base, "show/interface/stat?name="+url.QueryEscape(id), &st) == nil && st.RX >= 0 && st.TX >= 0 {
 				f.RX, f.TX = int64(st.RX), int64(st.TX)
