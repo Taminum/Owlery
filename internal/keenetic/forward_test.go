@@ -15,10 +15,13 @@ import (
 
 // writableRouter is a router that keeps a list of static forwards and takes the two changes Owlery makes.
 type writableRouter struct {
-	statics []map[string]any
-	saves   int
-	deny    bool
-	bodies  []string
+	access   map[string]string // MAC -> permit or deny
+	reserved map[string]string // MAC -> address kept
+	reboots  int
+	statics  []map[string]any
+	saves    int
+	deny     bool
+	bodies   []string
 }
 
 func (wr *writableRouter) serve(t *testing.T, mayWrite bool) *httptest.Server {
@@ -60,6 +63,31 @@ func (wr *writableRouter) serve(t *testing.T, mayWrite bool) *httptest.Server {
 				_, _ = w.Write([]byte(`{"status":[{"status":"message","message":"saving (http/rci)."}]}`))
 				return
 			}
+			if sys, ok := body["system"].(map[string]any); ok && sys["reboot"] != nil {
+				wr.reboots++
+				_, _ = w.Write([]byte(`{"status":[{"status":"message","message":"rebooting"}]}`))
+				return
+			}
+			if hs, ok := body["ip"].(map[string]any)["hotspot"].(map[string]any); ok {
+				host := hs["host"].(map[string]any)
+				if host["deny"] == true {
+					wr.access[host["mac"].(string)] = "deny"
+				} else {
+					wr.access[host["mac"].(string)] = "permit"
+				}
+				_, _ = w.Write([]byte(`{}`))
+				return
+			}
+			if dh, ok := body["ip"].(map[string]any)["dhcp"].(map[string]any); ok {
+				host := dh["host"].(map[string]any)
+				if host["no"] == true {
+					delete(wr.reserved, host["mac"].(string))
+				} else {
+					wr.reserved[host["mac"].(string)] = host["ip"].(string)
+				}
+				_, _ = w.Write([]byte(`{}`))
+				return
+			}
 			rule, _ := body["ip"].(map[string]any)["static"].(map[string]any)
 			if rule["no"] == true {
 				kept := wr.statics[:0]
@@ -69,6 +97,15 @@ func (wr *writableRouter) serve(t *testing.T, mayWrite bool) *httptest.Server {
 					}
 				}
 				wr.statics = kept
+			} else if rule["index"] != nil {
+				for i, e := range wr.statics {
+					if e["index"] == rule["index"] {
+						if m, isMap := rule["disable"].(map[string]any); isMap && m["no"] == true {
+							delete(rule, "disable")
+						}
+						wr.statics[i] = rule
+					}
+				}
 			} else {
 				delete(rule, "disable") // the router lists a rule that is on without the key
 				rule["index"] = "new" + rule["port"].(string)
@@ -82,6 +119,18 @@ func (wr *writableRouter) serve(t *testing.T, mayWrite bool) *httptest.Server {
 			_ = json.NewEncoder(w).Encode(wr.statics)
 		case "/rci/show/ip/hotspot":
 			_, _ = w.Write([]byte(`{"host":[{"mac":"AA:BB:CC:DD:EE:01","ip":"192.168.1.5","hostname":"pc","active":true}]}`))
+		case "/rci/show/sc/ip/hotspot/host":
+			var out []map[string]any
+			for m, a := range wr.access {
+				out = append(out, map[string]any{"mac": m, "access": a})
+			}
+			_ = json.NewEncoder(w).Encode(out)
+		case "/rci/show/sc/ip/dhcp/host":
+			var out []map[string]any
+			for m, ip := range wr.reserved {
+				out = append(out, map[string]any{"mac": m, "ip": ip})
+			}
+			_ = json.NewEncoder(w).Encode(out)
 		case "/rci/show/ip/route":
 			_, _ = w.Write([]byte(`[{"destination":"10.0.0.0/8","interface":"Bridge0"},{"destination":"0.0.0.0/0","interface":"PPPoE0"}]`))
 		default:
@@ -91,7 +140,7 @@ func (wr *writableRouter) serve(t *testing.T, mayWrite bool) *httptest.Server {
 }
 
 func TestAForwardIsAddedSavedAndTakenAwayAgain(t *testing.T) {
-	wr := &writableRouter{statics: []map[string]any{{"interface": "PPPoE0", "protocol": "tcp", "port": "8001", "to-host": "aa:bb:cc:dd:ee:09", "index": "old1", "comment": "NVR", "disable": true}}}
+	wr := &writableRouter{access: map[string]string{}, reserved: map[string]string{}, statics: []map[string]any{{"interface": "PPPoE0", "protocol": "tcp", "port": "8001", "to-host": "aa:bb:cc:dd:ee:09", "index": "old1", "comment": "NVR", "disable": true}}}
 	srv := wr.serve(t, true)
 	defer srv.Close()
 	c, _ := New(srv.URL, "Test", "pw")
@@ -137,7 +186,7 @@ func TestAForwardIsAddedSavedAndTakenAwayAgain(t *testing.T) {
 }
 
 func TestAUserWithoutTheRightToChangeIsToldSo(t *testing.T) {
-	wr := &writableRouter{}
+	wr := &writableRouter{access: map[string]string{}, reserved: map[string]string{}}
 	srv := wr.serve(t, false)
 	defer srv.Close()
 	c, _ := New(srv.URL, "Test", "pw")
@@ -148,5 +197,58 @@ func TestAUserWithoutTheRightToChangeIsToldSo(t *testing.T) {
 	}
 	if len(wr.statics) != 0 || wr.saves != 0 {
 		t.Fatalf("nothing changed: %d forwards, %d saves", len(wr.statics), wr.saves)
+	}
+}
+
+func TestADeviceIsBlockedAFormerForwardSwitchedOffAnAddressKeptAndTheRouterRestarted(t *testing.T) {
+	wr := &writableRouter{access: map[string]string{}, reserved: map[string]string{}, statics: []map[string]any{{"interface": "PPPoE0", "protocol": "tcp", "port": "8001", "to-host": "aa:bb:cc:dd:ee:09", "index": "ab1", "comment": "NVR"}}}
+	srv := wr.serve(t, true)
+	defer srv.Close()
+	c, _ := New(srv.URL, "Test", "pw")
+	c.HTTP = srv.Client()
+	ctx := context.Background()
+
+	if err := c.SetBlocked(ctx, "AA:BB:CC:DD:EE:01", true); err != nil {
+		t.Fatal(err)
+	}
+	if wr.access["aa:bb:cc:dd:ee:01"] != "deny" {
+		t.Fatalf("blocked: %v", wr.access)
+	}
+	if err := c.SetBlocked(ctx, "AA:BB:CC:DD:EE:01", false); err != nil || wr.access["aa:bb:cc:dd:ee:01"] != "permit" {
+		t.Fatalf("let back: %v %v", err, wr.access)
+	}
+	if err := c.SetBlocked(ctx, "AA:BB:CC:DD:EE:77", true); !errors.Is(err, ErrUnknownHost) {
+		t.Fatalf("a device the router does not know: %v", err)
+	}
+	if err := c.SetBlocked(ctx, "nonsense", true); err == nil {
+		t.Fatal("not an address")
+	}
+
+	if err := c.SetForwardOff(ctx, "ab1", true); err != nil || wr.statics[0]["disable"] != true || len(wr.statics) != 1 {
+		t.Fatalf("switched off: %v %v", err, wr.statics)
+	}
+	if err := c.SetForwardOff(ctx, "ab1", false); err != nil || wr.statics[0]["disable"] != nil || wr.statics[0]["comment"] != "NVR" {
+		t.Fatalf("switched on again, nothing else changed: %v %v", err, wr.statics)
+	}
+	if err := c.SetForwardOff(ctx, "nope", true); !errors.Is(err, ErrMissing) {
+		t.Fatalf("%v", err)
+	}
+
+	if err := c.SetReserved(ctx, "AA:BB:CC:DD:EE:01", true); err != nil || wr.reserved["aa:bb:cc:dd:ee:01"] != "192.168.1.5" {
+		t.Fatalf("kept: %v %v", err, wr.reserved)
+	}
+	wr.reserved["aa:bb:cc:dd:ee:02"] = "192.168.1.5"
+	delete(wr.reserved, "aa:bb:cc:dd:ee:01")
+	if err := c.SetReserved(ctx, "AA:BB:CC:DD:EE:01", true); !errors.Is(err, ErrPortTaken) {
+		t.Fatalf("an address kept for another device: %v", err)
+	}
+	delete(wr.reserved, "aa:bb:cc:dd:ee:02")
+	_ = c.SetReserved(ctx, "AA:BB:CC:DD:EE:01", true)
+	if err := c.SetReserved(ctx, "AA:BB:CC:DD:EE:01", false); err != nil || len(wr.reserved) != 0 {
+		t.Fatalf("let go: %v %v", err, wr.reserved)
+	}
+
+	if err := c.Reboot(ctx); err != nil || wr.reboots != 1 {
+		t.Fatalf("restart: %v %d", err, wr.reboots)
 	}
 }

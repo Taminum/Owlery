@@ -388,7 +388,7 @@ func (c *Client) Poll(ctx context.Context) (netdev.Report, error) {
 	var fw []forwardResp
 	if err := get(ctx, h, c.base, "show/sc/ip/static", &fw); err == nil {
 		for _, f := range fw {
-			if f.Disable || len(r.Nat) >= netdev.MaxNat {
+			if len(r.Nat) >= netdev.MaxNat {
 				continue
 			}
 			to := strings.TrimSpace(f.ToAddress)
@@ -405,10 +405,47 @@ func (c *Client) Poll(ctx context.Context) (netdev.Report, error) {
 				tp = string(f.Port)
 			}
 			r.Nat = append(r.Nat, netdev.NatRule{Chain: "dstnat", Action: "forward " + netdev.Clean(f.Protocol, 8), Packets: -1, Bytes: -1,
-				DstPort: netdev.Clean(string(f.Port), 40), ToAddr: netdev.Clean(to, 60), ToPorts: netdev.Clean(tp, 40), Comment: netdev.Clean(f.Comment, 80), Ref: netdev.Clean(f.Index, 64)})
+				DstPort: netdev.Clean(string(f.Port), 40), ToAddr: netdev.Clean(to, 60), ToPorts: netdev.Clean(tp, 40), Comment: netdev.Clean(f.Comment, 80), Ref: netdev.Clean(f.Index, 64), Off: f.Disable})
 		}
 	} else if errors.Is(err, ErrAuth) {
 		return netdev.Report{}, err
+	}
+	// Who the router refuses and which addresses it keeps: both are lists in its settings, read like the rest.
+	type who struct {
+		ip, name string
+	}
+	byMAC := map[string]who{}
+	for _, x := range hs.Host {
+		if m, err := cleanMAC(x.MAC); err == nil {
+			name := x.Hostname
+			if name == "" {
+				name = x.Name
+			}
+			byMAC[m] = who{ip: strings.TrimSpace(x.IP), name: name}
+		}
+	}
+	var access, keep []hostRow
+	if e1, e2 := get(ctx, h, c.base, "show/sc/ip/hotspot/host", &access), get(ctx, h, c.base, "show/sc/ip/dhcp/host", &keep); e1 == nil && e2 == nil {
+		r.HasAccess = true
+		for _, a := range access {
+			m, err := cleanMAC(a.MAC)
+			if err != nil || a.Access != "deny" || len(r.Blocked) >= netdev.MaxClients {
+				continue
+			}
+			b := netdev.Blocked{MAC: strings.ToUpper(m), Host: netdev.Clean(byMAC[m].name, 60)}
+			if ip := net.ParseIP(byMAC[m].ip); ip != nil {
+				b.IP = ip.String()
+			}
+			r.Blocked = append(r.Blocked, b)
+		}
+		for _, d := range keep {
+			m, err := cleanMAC(d.MAC)
+			if ip := net.ParseIP(strings.TrimSpace(d.IP)); err == nil && ip != nil && len(r.Reserved) < netdev.MaxClients {
+				r.Reserved = append(r.Reserved, netdev.Reserve{MAC: strings.ToUpper(m), IP: ip.String()})
+			}
+		}
+	} else if errors.Is(e1, ErrAuth) || errors.Is(e2, ErrAuth) {
+		return netdev.Report{}, ErrAuth
 	}
 	var up upnpResp
 	if err := get(ctx, h, c.base, "show/upnp/redirect", &up); err == nil {

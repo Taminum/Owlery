@@ -249,6 +249,43 @@ describe('Роутеры: Keenetic', () => {
     await vi.waitFor(() => expect(calls.at(-1)).toBe('DELETE'))
   })
 
+  it('restarts a Keenetic, keeps an address, blocks and lets back a device, and switches a forward off', async () => {
+    const calls: string[] = []
+    const k = device({ id: 'k1', name: 'Рабочий', kind: 'keenetic', url: 'https://p.keenetic.pro' })
+    Object.assign(k.view, {
+      nat: [{ chain: 'dstnat', action: 'forward tcp', packets: -1, bytes: -1, dst_port: '8001', to_addr: '192.168.88.20', to_ports: '8001', comment: 'NVR', ref: 'ab12' }],
+      reserved: [{ mac: 'AA:BB:CC:DD:EE:01', ip: '192.168.88.20' }],
+      blocked: [{ mac: 'DE:AD:BE:EF:00:01', host: 'stranger', ip: '192.168.88.99' }],
+    })
+    mockApi({
+      me: owner,
+      handler: (r) => {
+        if (r.path.startsWith('/api/v1/net-devices/k1/') && r.method !== 'GET') { calls.push(`${r.method} ${r.path.replace('/api/v1/net-devices/k1', '')} ${r.body ? JSON.stringify(r.body) : ''}`.trim()); return { status: 204 } }
+        if (r.path === '/api/v1/net-devices') return { status: 200, body: { devices: [k] } }
+        return undefined
+      },
+    })
+    renderPage()
+    await screen.findByText('Рабочий')
+    const confirm = async (open: string, go: string) => {
+      fireEvent.click(screen.getByRole('button', { name: open }))
+      fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: go }))
+      await vi.waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    }
+    await confirm('Перезагрузить', 'Перезагрузить')
+    await confirm('Снять закрепление', 'Снять закрепление')
+    await confirm('Заблокировать', 'Заблокировать')
+    await confirm('Разблокировать', 'Разблокировать')
+    await confirm('Выключить', 'Выключить')
+    expect(calls).toEqual([
+      'POST /reboot {}',
+      'DELETE /clients/AA:BB:CC:DD:EE:01/reserve {}',
+      'POST /clients/AA:BB:CC:DD:EE:01/block {}',
+      'DELETE /clients/DE:AD:BE:EF:00:01/block {}',
+      'POST /forwards/ab12/switch {"off":true}',
+    ])
+  })
+
   it('offers a password change only for a router that is asked', async () => {
     mockApi({ me: owner, handler: (r) => (r.path === '/api/v1/net-devices' ? { status: 200, body: { devices: [device()] } } : undefined) })
     renderPage()

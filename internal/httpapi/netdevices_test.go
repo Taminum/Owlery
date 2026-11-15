@@ -228,6 +228,7 @@ func fakeKeenetic(t *testing.T) *httptest.Server {
 	t.Helper()
 	const realm, challenge = "Keenetic Sprinter", "CH"
 	var statics []map[string]any
+	access, reserved := map[string]string{}, map[string]string{}
 	return httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/auth" {
 			if r.Method == http.MethodGet {
@@ -254,9 +255,29 @@ func fakeKeenetic(t *testing.T) *httptest.Server {
 		if r.Method == http.MethodPost {
 			var body map[string]any
 			_ = json.NewDecoder(r.Body).Decode(&body)
+			if sys, ok := body["system"].(map[string]any); ok && sys["reboot"] != nil {
+				w.Header().Set("X-Rebooted", "1")
+			}
 			if ip, ok := body["ip"].(map[string]any); ok {
+				if hs, ok := ip["hotspot"].(map[string]any); ok {
+					host := hs["host"].(map[string]any)
+					access[host["mac"].(string)] = map[bool]string{true: "deny", false: "permit"}[host["deny"] == true]
+				}
+				if dh, ok := ip["dhcp"].(map[string]any); ok {
+					host := dh["host"].(map[string]any)
+					if host["no"] == true {
+						delete(reserved, host["mac"].(string))
+					} else {
+						reserved[host["mac"].(string)] = host["ip"].(string)
+					}
+				}
 				rule, _ := ip["static"].(map[string]any)
-				if rule["no"] == true {
+				if rule == nil {
+					rule = map[string]any{}
+				}
+				if len(rule) == 0 {
+					// not a forward
+				} else if rule["no"] == true {
 					kept := statics[:0]
 					for _, e := range statics {
 						if e["index"] != rule["index"] {
@@ -264,6 +285,15 @@ func fakeKeenetic(t *testing.T) *httptest.Server {
 						}
 					}
 					statics = kept
+				} else if rule["index"] != nil {
+					for i, e := range statics {
+						if e["index"] == rule["index"] {
+							if m, isMap := rule["disable"].(map[string]any); isMap && m["no"] == true {
+								delete(rule, "disable")
+							}
+							statics[i] = rule
+						}
+					}
 				} else {
 					delete(rule, "disable") // the router lists a rule that is on without the key
 					rule["index"] = "f" + rule["port"].(string)
@@ -278,6 +308,18 @@ func fakeKeenetic(t *testing.T) *httptest.Server {
 			_ = json.NewEncoder(w).Encode(statics)
 		case "/rci/show/ip/route":
 			_, _ = w.Write([]byte(`[{"destination":"0.0.0.0/0","interface":"PPPoE0"}]`))
+		case "/rci/show/sc/ip/hotspot/host":
+			out := []map[string]any{}
+			for m, a := range access {
+				out = append(out, map[string]any{"mac": m, "access": a})
+			}
+			_ = json.NewEncoder(w).Encode(out)
+		case "/rci/show/sc/ip/dhcp/host":
+			out := []map[string]any{}
+			for m, ip := range reserved {
+				out = append(out, map[string]any{"mac": m, "ip": ip})
+			}
+			_ = json.NewEncoder(w).Encode(out)
 		case "/rci/show/version":
 			_, _ = w.Write([]byte(`{"title":"4.3.6.3","model":"Sprinter (KN-3710)"}`))
 		case "/rci/show/system":
@@ -451,5 +493,81 @@ func TestForwardsAreOpenedAndRemovedFromThePanelByTheOwnerOnly(t *testing.T) {
 	_, b = w.owner.get("/api/v1/net-devices")
 	if strings.Contains(string(b), `"dst_port":"8080"`) {
 		t.Fatalf("the removed forward still shows: %s", b)
+	}
+}
+
+func TestADeviceIsBlockedAnAddressKeptAForwardSwitchedAndTheRouterRestartedByTheOwnerOnly(t *testing.T) {
+	w := newWorld(t)
+	router := fakeKeenetic(t)
+	defer router.Close()
+	w.h.srv.KeeneticClient = func(base, login, password string) (*keenetic.Client, error) {
+		c, err := keenetic.New(base, login, password)
+		if c != nil {
+			c.HTTP = router.Client()
+		}
+		return c, err
+	}
+	st, b := w.owner.do("POST", "/api/v1/net-devices", map[string]any{"name": "Рабочий", "kind": "keenetic", "url": router.URL, "login": "Test", "password": "pw"})
+	if st != 201 {
+		t.Fatalf("%d %s", st, b)
+	}
+	var made struct {
+		Device struct {
+			ID string `json:"id"`
+		} `json:"device"`
+	}
+	_ = json.Unmarshal(b, &made)
+	base := "/api/v1/net-devices/" + made.Device.ID
+	mac := "/clients/E8:6A:64:7E:0A:B8"
+	for _, c := range []struct{ m, p string }{{"POST", "/reboot"}, {"POST", mac + "/block"}, {"DELETE", mac + "/block"}, {"PUT", mac + "/reserve"}, {"DELETE", mac + "/reserve"}, {"POST", "/forwards/f1/switch"}} {
+		if st, _ := w.viewer.do(c.m, base+c.p, map[string]any{}); st != 403 {
+			t.Errorf("a viewer must not %s %s: %d", c.m, c.p, st)
+		}
+	}
+	if st, _ := w.owner.do("POST", base+"/clients/nonsense/block", nil); st != 422 {
+		t.Fatalf("not a device address: %d", st)
+	}
+	if st, b := w.owner.do("POST", base+mac+"/block", nil); st != 204 {
+		t.Fatalf("%d %s", st, b)
+	}
+	_, b = w.owner.get("/api/v1/net-devices")
+	if !strings.Contains(string(b), `"blocked":[{"mac":"E8:6A:64:7E:0A:B8"`) {
+		t.Fatalf("the blocked device shows at once: %s", b)
+	}
+	if st, _ := w.owner.do("DELETE", base+mac+"/block", nil); st != 204 {
+		t.Fatalf("unblock: %d", st)
+	}
+	if st, b := w.owner.do("PUT", base+mac+"/reserve", nil); st != 204 {
+		t.Fatalf("%d %s", st, b)
+	}
+	_, b = w.owner.get("/api/v1/net-devices")
+	if !strings.Contains(string(b), `"reserved":[{"mac":"E8:6A:64:7E:0A:B8","ip":"192.168.0.90"}]`) || strings.Contains(string(b), `"blocked"`) {
+		t.Fatalf("the kept address shows and the block is gone: %s", b)
+	}
+	if st, _ := w.owner.do("DELETE", base+mac+"/reserve", nil); st != 204 {
+		t.Fatalf("let go: %d", st)
+	}
+	if st, b := w.owner.do("POST", base+"/forwards", map[string]any{"protocol": "tcp", "port": 8080, "to_addr": "192.168.0.90"}); st != 204 {
+		t.Fatalf("%d %s", st, b)
+	}
+	if st, b := w.owner.do("POST", base+"/forwards/f8080/switch", map[string]any{"off": true}); st != 204 {
+		t.Fatalf("%d %s", st, b)
+	}
+	_, b = w.owner.get("/api/v1/net-devices")
+	if !strings.Contains(string(b), `"off":true`) || strings.Contains(string(b), "new_forwards") {
+		t.Fatalf("a forward that is off stays in the list and is no news: %s", b)
+	}
+	if st, b := w.owner.do("POST", base+"/forwards/f8080/switch", map[string]any{"off": false}); st != 204 {
+		t.Fatalf("%d %s", st, b)
+	}
+	_, b = w.owner.get("/api/v1/net-devices")
+	if strings.Contains(string(b), `"off":true`) || strings.Contains(string(b), "new_forwards") {
+		t.Fatalf("on again, and the owner's own, so no alert: %s", b)
+	}
+	if st, _ := w.owner.do("POST", base+"/forwards/zz/switch", map[string]any{"off": true}); st != 404 {
+		t.Fatalf("a reference that is not one: %d", st)
+	}
+	if st, _ := w.owner.do("POST", base+"/reboot", nil); st != 204 {
+		t.Fatalf("restart: %d", st)
 	}
 }
