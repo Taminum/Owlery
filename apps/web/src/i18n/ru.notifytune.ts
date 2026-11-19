@@ -7,6 +7,7 @@ export const notifyTuneText = {
   'ntf.g.agents': 'Агенты и проверка каналов (пропала связь)',
   'ntf.g.panels': 'Панели Remnawave (не синхронизируются)',
   'ntf.g.security': 'Безопасность (агент молчит, сертификаты, порты)',
+  'ntf.g.lan_clients': 'Новые клиенты роутеров',
   'ntf.g.resources': 'Ресурсы серверов (диск, процессор, память)',
   'ntf.g.flood': 'Похоже на DDoS',
   'ntf.g.awg': 'AmneziaWG (контейнер не работает, версии)',
